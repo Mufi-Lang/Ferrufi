@@ -6,12 +6,49 @@
 //
 
 import SwiftUI
+import AppKit
+
+// Compact layout constants used across the settings UI
+private let settingsLabelWidth: CGFloat = 140
+private let settingsCompactPadding: CGFloat = 10
+
+// A small helper that ensures consistent label alignment for rows in the settings UI.
+// Usage:
+// SettingsRow("Label:") {
+//     // controls go here (TextField, Toggle, Button, etc.)
+// }
+fileprivate struct SettingsRow<Content: View>: View {
+    let label: String
+    let content: Content
+
+    init(_ label: String, @ViewBuilder content: () -> Content) {
+        self.label = label
+        self.content = content()
+    }
+
+    var body: some View {
+        HStack(alignment: .center) {
+            Text(label)
+                .frame(width: settingsLabelWidth, alignment: .leading)
+            Spacer()
+            content
+        }
+        .padding(.vertical, settingsCompactPadding / 2)
+    }
+}
 
 public struct SettingsView: View {
     @EnvironmentObject var ironApp: IronApp
-    @State private var selectedTab: SettingsTab = .general
+    @EnvironmentObject var themeManager: ThemeManager
+    @State private var selectedTab: SettingsTab
 
-    public init() {}
+    public init() {
+        self._selectedTab = State(initialValue: .general)
+    }
+
+    init(initialTab: SettingsTab? = nil) {
+        self._selectedTab = State(initialValue: initialTab ?? .general)
+    }
 
     public var body: some View {
         TabView(selection: $selectedTab) {
@@ -29,26 +66,15 @@ public struct SettingsView: View {
                 }
                 .tag(SettingsTab.editor)
 
-            SearchSettingsView()
-                .environmentObject(ironApp)
-                .tabItem {
-                    Label("Search", systemImage: "magnifyingglass")
-                }
-                .tag(SettingsTab.search)
+            // Graph settings removed (feature deprecated)
+            // Appearance tab removed per product direction — theme-related controls remain available via theme selector UI
 
-            AppearanceSettingsView()
+            ShortcutsSettingsView()
                 .environmentObject(ironApp)
                 .tabItem {
-                    Label("Appearance", systemImage: "paintbrush")
+                    Label("Shortcuts", systemImage: "keyboard")
                 }
-                .tag(SettingsTab.appearance)
-
-            GraphSettingsView()
-                .environmentObject(ironApp)
-                .tabItem {
-                    Label("Graph", systemImage: "circle.hexagongrid")
-                }
-                .tag(SettingsTab.graph)
+                .tag(SettingsTab.shortcuts)
 
             AboutSettingsView()
                 .tabItem {
@@ -56,7 +82,13 @@ public struct SettingsView: View {
                 }
                 .tag(SettingsTab.about)
         }
-        .frame(width: 600, height: 500)
+        .frame(minWidth: 740, minHeight: 520)
+        // Use a slightly more compact control size by default for settings
+        .environment(\.controlSize, .small)
+        .themedAccent(themeManager)
+        .themedBackground(themeManager)
+        .themedForeground(themeManager)
+        .preferredColorScheme(themeManager.currentTheme.isDark ? .dark : .light)
     }
 }
 
@@ -64,135 +96,408 @@ public struct SettingsView: View {
 
 struct GeneralSettingsView: View {
     @EnvironmentObject var ironApp: IronApp
+    @EnvironmentObject var themeManager: ThemeManager
+    @State private var showingStartupNotePicker: Bool = false
+    @State private var showResetConfirm: Bool = false
+    @State private var showErrorAlert: Bool = false
+    @State private var errorMessage: String = ""
+    @State private var lastBackupAt: Date? = nil
+    @State private var isBackingUpNow: Bool = false
+
+    public init() {}
 
     var body: some View {
-        Form {
-            Section("Vault") {
-                HStack {
-                    Text("Vault Location:")
-                    Spacer()
-                    Text(ironApp.configuration.vault.defaultVaultPath)
-                        .foregroundColor(.secondary)
-                        .truncationMode(.middle)
-                    Button("Change") {
-                        // TODO: Implement vault location picker
+        VStack(alignment: .leading) {
+            // Header with reset action (styled consistently with Shortcuts tab)
+            HStack {
+                Text("General")
+                    .font(.title3)
+                    .bold()
+                Spacer()
+                Button("Reset to Defaults") {
+                    // Reset configuration and ensure services reflect defaults
+                    ironApp.configuration.resetToDefaults()
+
+                    if ironApp.configuration.general.autoUpdateEnabled {
+                        UpdateManager.shared.startAutoCheck()
+                    } else {
+                        UpdateManager.shared.stopAutoCheck()
+                    }
+
+                    Task { @MainActor in
+                        do {
+                            try await LaunchAtLoginManager.shared.setEnabled(ironApp.configuration.general.launchAtLogin)
+                        } catch {
+                            errorMessage = error.localizedDescription
+                            showErrorAlert = true
+                        }
                     }
                 }
-
-                Toggle(
-                    "Watch for external changes",
-                    isOn: Binding(
-                        get: { ironApp.configuration.vault.fileWatchingEnabled },
-                        set: { newValue in
-                            ironApp.configuration.updateConfiguration { config in
-                                config.vault.fileWatchingEnabled = newValue
-                            }
-                        }
-                    ))
-
-                HStack {
-                    Text("Auto-save interval:")
-                    Spacer()
-                    TextField(
-                        "Seconds",
-                        value: Binding(
-                            get: { ironApp.configuration.vault.autoSaveInterval },
-                            set: { newValue in
-                                ironApp.configuration.updateConfiguration { config in
-                                    config.vault.autoSaveInterval = newValue
-                                }
-                            }
-                        ), format: .number
-                    )
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 80)
-                    Text("seconds")
-                        .foregroundColor(.secondary)
-                }
+                .help("Reset all preferences to their defaults")
+                .controlSize(.small)
             }
+            .padding(.bottom, 6)
 
-            Section("Backup") {
-                Toggle(
-                    "Enable backups",
-                    isOn: Binding(
-                        get: { ironApp.configuration.vault.backupEnabled },
-                        set: { newValue in
-                            ironApp.configuration.updateConfiguration { config in
-                                config.vault.backupEnabled = newValue
-                            }
-                        }
-                    ))
+            // Debug banner to confirm General tab is visible
+            Text("DEBUG: General tab is visible")
+                .font(.caption)
+                .padding(8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.red.opacity(0.12))
+                .foregroundColor(.red)
+                .cornerRadius(6)
 
-                if ironApp.configuration.vault.backupEnabled {
-                    HStack {
-                        Text("Backup interval:")
-                        Spacer()
-                        TextField(
-                            "Hours",
-                            value: Binding(
-                                get: { ironApp.configuration.vault.backupInterval / 3600 },
-                                set: { newValue in
-                                    ironApp.configuration.updateConfiguration { config in
-                                        config.vault.backupInterval = newValue * 3600
+            ScrollView(.vertical) {
+                VStack(alignment: .leading, spacing: 14) {
+                    GroupBox(label: Label("Application", systemImage: "gearshape")) {
+                        VStack(spacing: 12) {
+                            Toggle(
+                                "Launch at login",
+                                isOn: Binding(
+                                    get: { ironApp.configuration.general.launchAtLogin },
+                                    set: { newValue in
+                                        ironApp.configuration.updateConfiguration { config in
+                                            config.general.launchAtLogin = newValue
+                                        }
+                                        // Perform the main-actor operation asynchronously and handle failures by reverting
+                                        Task { @MainActor in
+                                            do {
+                                                try await LaunchAtLoginManager.shared.setEnabled(newValue)
+                                            } catch {
+                                                ironApp.configuration.updateConfiguration { config in
+                                                    config.general.launchAtLogin = !newValue
+                                                }
+                                                errorMessage = error.localizedDescription
+                                                showErrorAlert = true
+                                            }
+                                        }
+                                    }
+                                )
+                            )
+                            .controlSize(.small)
+
+                            Toggle(
+                                "Confirm before quit",
+                                isOn: Binding(
+                                    get: { ironApp.configuration.general.confirmBeforeQuit },
+                                    set: { newValue in
+                                        ironApp.configuration.updateConfiguration { config in
+                                            config.general.confirmBeforeQuit = newValue
+                                        }
+                                    }
+                                )
+                            )
+                            .controlSize(.small)
+
+                            HStack(alignment: .center) {
+                                Text("Startup behavior:")
+                                    .frame(width: settingsLabelWidth, alignment: .leading)
+
+                                Picker(
+                                    "",
+                                    selection: Binding(
+                                        get: { ironApp.configuration.general.startupBehavior },
+                                        set: { newValue in
+                                            ironApp.configuration.updateConfiguration { config in
+                                                config.general.startupBehavior = newValue
+                                            }
+                                        }
+                                    )
+                                ) {
+                                    ForEach(StartupBehavior.allCases, id: \.self) { behavior in
+                                        Text(behavior.displayName).tag(behavior)
                                     }
                                 }
-                            ), format: .number
-                        )
-                        .textFieldStyle(.roundedBorder)
-                        .frame(width: 60)
-                        Text("hours")
-                            .foregroundColor(.secondary)
-                    }
+                                .pickerStyle(.menu)
 
-                    HStack {
-                        Text("Keep backups:")
-                        Spacer()
-                        TextField(
-                            "Count",
-                            value: Binding(
-                                get: { ironApp.configuration.vault.maxBackups },
-                                set: { newValue in
-                                    ironApp.configuration.updateConfiguration { config in
-                                        config.vault.maxBackups = newValue
+                                if ironApp.configuration.general.startupBehavior == .specific {
+                                    Spacer()
+                                    HStack(spacing: 8) {
+                                        if let id = ironApp.configuration.general.startupNoteId,
+                                           let note = ironApp.notes.first(where: { $0.id == id }) {
+                                            Text(note.title)
+                                                .foregroundColor(.secondary)
+                                                .truncationMode(.tail)
+                                        } else {
+                                            Text("No note selected")
+                                                .foregroundColor(.secondary)
+                                        }
+
+                                        Button("Choose…") {
+                                            showingStartupNotePicker = true
+                                        }
+                                        .controlSize(.small)
                                     }
                                 }
-                            ), format: .number
-                        )
-                        .textFieldStyle(.roundedBorder)
-                        .frame(width: 60)
-                        Text("files")
-                            .foregroundColor(.secondary)
+                            }
+                        }
+                        .padding(8)
+                    }
+
+                    GroupBox(label: Label("Updates", systemImage: "arrow.triangle.2.circlepath")) {
+                        VStack(spacing: 10) {
+                            Toggle(
+                                "Check for updates automatically",
+                                isOn: Binding(
+                                    get: { ironApp.configuration.general.autoUpdateEnabled },
+                                    set: { newValue in
+                                        ironApp.configuration.updateConfiguration { config in
+                                            config.general.autoUpdateEnabled = newValue
+                                        }
+                                        if newValue {
+                                            UpdateManager.shared.startAutoCheck()
+                                        } else {
+                                            UpdateManager.shared.stopAutoCheck()
+                                        }
+                                    }
+                                )
+                            )
+                            .controlSize(.small)
+
+                            HStack {
+                                Spacer()
+                                Button("Check now") {
+                                    UpdateManager.shared.checkForUpdatesAndNotify()
+                                }
+                                .controlSize(.small)
+                            }
+                        }
+                        .padding(8)
+                    }
+
+                    GroupBox(label: Label("Vault", systemImage: "folder")) {
+                        VStack(spacing: 12) {
+                            SettingsRow("Vault Location:") {
+                                HStack(spacing: 8) {
+                                    Text(ironApp.configuration.vault.defaultVaultPath)
+                                        .foregroundColor(.secondary)
+                                        .truncationMode(.middle)
+                                    Button("Change") {
+                                        // TODO: Implement vault location picker
+                                    }
+                                }
+                            }
+
+                            Toggle(
+                                "Watch for external changes",
+                                isOn: Binding(
+                                    get: { ironApp.configuration.vault.fileWatchingEnabled },
+                                    set: { newValue in
+                                        ironApp.configuration.updateConfiguration { config in
+                                            config.vault.fileWatchingEnabled = newValue
+                                        }
+                                    }
+                                ))
+                            .controlSize(.small)
+
+                            SettingsRow("Auto-save interval:") {
+                                HStack {
+                                    TextField(
+                                        "Seconds",
+                                        value: Binding(
+                                            get: { ironApp.configuration.vault.autoSaveInterval },
+                                            set: { newValue in
+                                                ironApp.configuration.updateConfiguration { config in
+                                                    config.vault.autoSaveInterval = newValue
+                                                }
+                                            }
+                                        ), format: .number
+                                    )
+                                    .textFieldStyle(.roundedBorder)
+                                    .frame(width: 80)
+                                    .controlSize(.small)
+                                    Text("seconds").foregroundColor(.secondary)
+                                }
+                            }
+                        }
+                        .padding(8)
+                    }
+
+                    GroupBox(label: Label("Backup", systemImage: "archivebox")) {
+                        VStack(spacing: 12) {
+                            Toggle(
+                                "Enable backups",
+                                isOn: Binding(
+                                    get: { ironApp.configuration.vault.backupEnabled },
+                                    set: { newValue in
+                                        ironApp.configuration.updateConfiguration { config in
+                                            config.vault.backupEnabled = newValue
+                                        }
+                                    }
+                                )
+                            )
+                            .controlSize(.small)
+                            .controlSize(.small)
+
+                            if ironApp.configuration.vault.backupEnabled {
+                                SettingsRow("Backup interval:") {
+                                    HStack {
+                                        TextField(
+                                            "Hours",
+                                            value: Binding(
+                                                get: { ironApp.configuration.vault.backupInterval / 3600 },
+                                                set: { newValue in
+                                                    ironApp.configuration.updateConfiguration { config in
+                                                        config.vault.backupInterval = newValue * 3600
+                                                    }
+                                                }
+                                            ), format: .number
+                                        )
+                                        .textFieldStyle(.roundedBorder)
+                                        .frame(width: 80)
+                                        .controlSize(.small)
+                                        Text("hours").foregroundColor(.secondary)
+                                    }
+                                }
+
+                                SettingsRow("Keep backups:") {
+                                    HStack {
+                                        TextField(
+                                            "Count",
+                                            value: Binding(
+                                                get: { ironApp.configuration.vault.maxBackups },
+                                                set: { newValue in
+                                                    ironApp.configuration.updateConfiguration { config in
+                                                        config.vault.maxBackups = newValue
+                                                    }
+                                                }
+                                            ), format: .number
+                                        )
+                                        .textFieldStyle(.roundedBorder)
+                                        .frame(width: 80)
+                                        .controlSize(.small)
+                                        Text("files").foregroundColor(.secondary)
+                                    }
+                                }
+
+                                SettingsRow("Last backup:") {
+                                    if let last = lastBackupAt {
+                                        Text(DateFormatter.localizedString(from: last, dateStyle: .medium, timeStyle: .short))
+                                            .foregroundColor(.secondary)
+                                    } else {
+                                        Text("Never").foregroundColor(.secondary)
+                                    }
+                                }
+
+                                SettingsRow("") {
+                                    Button(action: {
+                                        isBackingUpNow = true
+                                        Task { @MainActor in
+                                            await BackupManager.shared.performPeriodicBackup()
+                                            if let recs = try? BackupManager.shared.listBackups(forNoteId: nil), let rec = recs.first {
+                                                lastBackupAt = rec.createdAt
+                                            } else {
+                                                lastBackupAt = nil
+                                            }
+                                            isBackingUpNow = false
+                                        }
+                                    }) {
+                                        HStack(spacing: 8) {
+                                            if isBackingUpNow {
+                                                ProgressView()
+                                                    .scaleEffect(0.75, anchor: .center)
+                                            }
+                                            Text(isBackingUpNow ? "Running..." : "Run backup now")
+                                        }
+                                    }
+                                    .controlSize(.small)
+                                }
+                                .task {
+                                    Task { @MainActor in
+                                        if let recs = try? BackupManager.shared.listBackups(forNoteId: nil), let rec = recs.first {
+                                            lastBackupAt = rec.createdAt
+                                        } else {
+                                            lastBackupAt = nil
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Explanatory footnote to inform the user about backups and how the interval works
+                            Text("Backups are stored under `~/.iron/backups` and tracked in `iron.db`. The interval above is specified in hours; the manager will back up notes that have changed since their last backup. 'Keep backups' limits how many backups are retained per note.")
+                                .font(.footnote)
+                                .foregroundColor(.secondary)
+                                .padding(.top, 6)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .padding(8)
+                    }
+
+                    GroupBox(label: Label("Performance", systemImage: "speedometer")) {
+                        VStack(spacing: 12) {
+                            Toggle(
+                                "Enable Metal acceleration",
+                                isOn: Binding(
+                                    get: { ironApp.configuration.ui.metalAccelerationEnabled },
+                                    set: { newValue in
+                                        ironApp.configuration.updateConfiguration { config in
+                                            config.ui.metalAccelerationEnabled = newValue
+                                        }
+                                    }
+                                )
+                            )
+                            .controlSize(.small)
+                            .help("Use Metal graphics acceleration for better performance")
+
+                            Toggle(
+                                "Enable animations",
+                                isOn: Binding(
+                                    get: { ironApp.configuration.ui.animationsEnabled },
+                                    set: { newValue in
+                                        ironApp.configuration.updateConfiguration { config in
+                                            config.ui.animationsEnabled = newValue
+                                        }
+                                    }
+                                )
+                            )
+                            .controlSize(.small)
+                        }
+                        .padding(8)
                     }
                 }
+                .padding()
             }
-
-            Section("Performance") {
-                Toggle(
-                    "Enable Metal acceleration",
-                    isOn: Binding(
-                        get: { ironApp.configuration.ui.metalAccelerationEnabled },
-                        set: { newValue in
-                            ironApp.configuration.updateConfiguration { config in
-                                config.ui.metalAccelerationEnabled = newValue
-                            }
-                        }
-                    )
-                )
-                .help("Use Metal graphics acceleration for better performance")
-
-                Toggle(
-                    "Enable animations",
-                    isOn: Binding(
-                        get: { ironApp.configuration.ui.animationsEnabled },
-                        set: { newValue in
-                            ironApp.configuration.updateConfiguration { config in
-                                config.ui.animationsEnabled = newValue
-                            }
-                        }
-                    ))
-            }
+            .scrollIndicators(.visible)
         }
-        .padding()
+        .sheet(isPresented: $showingStartupNotePicker) {
+            NotePickerView(onNoteSelected: { note in
+                ironApp.configuration.updateConfiguration { config in
+                    config.general.startupNoteId = note.id
+                }
+                showingStartupNotePicker = false
+            })
+            .environmentObject(ironApp)
+            .environmentObject(themeManager)
+        }
+        .alert("Reset all settings?", isPresented: $showResetConfirm) {
+            Button("Reset", role: .destructive) {
+                // Perform the global reset when the user confirms
+                ironApp.configuration.resetToDefaults()
+
+                // Apply auto-update preference immediately
+                if ironApp.configuration.general.autoUpdateEnabled {
+                    UpdateManager.shared.startAutoCheck()
+                } else {
+                    UpdateManager.shared.stopAutoCheck()
+                }
+
+                // Apply launch-at-login state; handle errors gracefully
+                Task { @MainActor in
+                    do {
+                        try await LaunchAtLoginManager.shared.setEnabled(ironApp.configuration.general.launchAtLogin)
+                    } catch {
+                        errorMessage = error.localizedDescription
+                        showErrorAlert = true
+                    }
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This will restore all preferences to their default values and cannot be undone.")
+        }
+        .alert(isPresented: $showErrorAlert) {
+            Alert(title: Text("Error"), message: Text(errorMessage), dismissButton: .default(Text("OK")))
+        }
     }
 }
 
@@ -202,163 +507,160 @@ struct EditorSettingsView: View {
     @EnvironmentObject var ironApp: IronApp
 
     var body: some View {
-        Form {
-            Section("Text Editing") {
-                HStack {
-                    Text("Font size:")
-                    Spacer()
-                    Slider(
-                        value: Binding(
-                            get: { ironApp.configuration.editor.fontSize },
-                            set: { newValue in
-                                ironApp.configuration.updateConfiguration { config in
-                                    config.editor.fontSize = newValue
+        ScrollView(.vertical) {
+            Form {
+                Section("Text Editing") {
+                    HStack(spacing: 12) {
+                        Text("Font size:")
+                            .frame(width: settingsLabelWidth, alignment: .leading)
+
+                        Slider(
+                            value: Binding(
+                                get: { ironApp.configuration.editor.fontSize },
+                                set: { newValue in
+                                    ironApp.configuration.updateConfiguration { config in
+                                        config.editor.fontSize = newValue
+                                    }
                                 }
-                            }
-                        ),
-                        in: 10...24,
-                        step: 1
-                    )
-                    .frame(width: 150)
-                    Text("\(Int(ironApp.configuration.editor.fontSize))pt")
-                        .frame(width: 30)
-                        .foregroundColor(.secondary)
+                            ),
+                            in: 10...24,
+                            step: 1
+                        )
+                        .frame(width: 150)
+
+                        Text("\(Int(ironApp.configuration.editor.fontSize))pt")
+                            .foregroundColor(.secondary)
+                            .frame(width: 40)
+                    }
+                    .padding(.vertical, settingsCompactPadding)
+
+                    HStack(spacing: 12) {
+                        Text("Font family:")
+                            .frame(width: settingsLabelWidth, alignment: .leading)
+
+                        Picker(
+                            "Font",
+                            selection: Binding(
+                                get: { ironApp.configuration.editor.fontFamily },
+                                set: { newValue in
+                                    ironApp.configuration.updateConfiguration { config in
+                                        config.editor.fontFamily = newValue
+                                    }
+                                }
+                            )
+                        ) {
+                            Text("SF Mono").tag("SF Mono")
+                            Text("Menlo").tag("Menlo")
+                            Text("Monaco").tag("Monaco")
+                            Text("Courier New").tag("Courier New")
+                        }
+                        .pickerStyle(.menu)
+                        .frame(width: 140)
+                    }
+                    .padding(.vertical, settingsCompactPadding)
+
+                    HStack(spacing: 12) {
+                        Text("Line height:")
+                            .frame(width: settingsLabelWidth, alignment: .leading)
+
+                        Slider(
+                            value: Binding(
+                                get: { ironApp.configuration.editor.lineHeight },
+                                set: { newValue in
+                                    ironApp.configuration.updateConfiguration { config in
+                                        config.editor.lineHeight = newValue
+                                    }
+                                }
+                            ),
+                            in: 1...2.5,
+                            step: 0.1
+                        )
+                        .frame(width: 150)
+
+                        Text(String(format: "%.1f", ironApp.configuration.editor.lineHeight))
+                            .foregroundColor(.secondary)
+                            .frame(width: 40)
+                    }
+                    .padding(.vertical, settingsCompactPadding)
                 }
 
-                HStack {
-                    Text("Font family:")
-                    Spacer()
-                    Picker(
-                        "Font",
-                        selection: Binding(
-                            get: { ironApp.configuration.editor.fontFamily },
+                Section("Features") {
+                    Toggle(
+                        "Word wrap",
+                        isOn: Binding(
+                            get: { ironApp.configuration.editor.wordWrap },
                             set: { newValue in
                                 ironApp.configuration.updateConfiguration { config in
-                                    config.editor.fontFamily = newValue
+                                    config.editor.wordWrap = newValue
                                 }
                             }
                         )
-                    ) {
-                        Text("SF Mono").tag("SF Mono")
-                        Text("Menlo").tag("Menlo")
-                        Text("Monaco").tag("Monaco")
-                        Text("Courier New").tag("Courier New")
-                    }
-                    .pickerStyle(.menu)
-                    .frame(width: 120)
-                }
+                    )
 
-                HStack {
-                    Text("Line height:")
-                    Spacer()
-                    Slider(
-                        value: Binding(
-                            get: { ironApp.configuration.editor.lineHeight },
+                    Toggle(
+                        "Show line numbers",
+                        isOn: Binding(
+                            get: { ironApp.configuration.editor.showLineNumbers },
                             set: { newValue in
                                 ironApp.configuration.updateConfiguration { config in
-                                    config.editor.lineHeight = newValue
+                                    config.editor.showLineNumbers = newValue
                                 }
                             }
-                        ),
-                        in: 1.0...2.0,
-                        step: 0.1
+                        )
                     )
-                    .frame(width: 150)
-                    Text(String(format: "%.1f", ironApp.configuration.editor.lineHeight))
-                        .frame(width: 30)
-                        .foregroundColor(.secondary)
-                }
 
-                HStack {
-                    Text("Tab size:")
-                    Spacer()
-                    TextField(
-                        "Tab size",
-                        value: Binding(
-                            get: { ironApp.configuration.editor.tabSize },
+                    Toggle(
+                        "Syntax highlighting",
+                        isOn: Binding(
+                            get: { ironApp.configuration.editor.syntaxHighlighting },
                             set: { newValue in
                                 ironApp.configuration.updateConfiguration { config in
-                                    config.editor.tabSize = newValue
+                                    config.editor.syntaxHighlighting = newValue
                                 }
                             }
-                        ), format: .number
+                        )
                     )
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 60)
-                    Text("spaces")
-                        .foregroundColor(.secondary)
+
+                    Toggle(
+                        "Auto-complete",
+                        isOn: Binding(
+                            get: { ironApp.configuration.editor.autoComplete },
+                            set: { newValue in
+                                ironApp.configuration.updateConfiguration { config in
+                                    config.editor.autoComplete = newValue
+                                }
+                            }
+                        )
+                    )
+
+                    Toggle(
+                        "Live preview",
+                        isOn: Binding(
+                            get: { ironApp.configuration.editor.livePreview },
+                            set: { newValue in
+                                ironApp.configuration.updateConfiguration { config in
+                                    config.editor.livePreview = newValue
+                                }
+                            }
+                        )
+                    )
+
+                    Toggle(
+                        "Spell check",
+                        isOn: Binding(
+                            get: { ironApp.configuration.editor.spellCheck },
+                            set: { newValue in
+                                ironApp.configuration.updateConfiguration { config in
+                                    config.editor.spellCheck = newValue
+                                }
+                            }
+                        )
+                    )
                 }
             }
-
-            Section("Features") {
-                Toggle(
-                    "Word wrap",
-                    isOn: Binding(
-                        get: { ironApp.configuration.editor.wordWrap },
-                        set: { newValue in
-                            ironApp.configuration.updateConfiguration { config in
-                                config.editor.wordWrap = newValue
-                            }
-                        }
-                    ))
-
-                Toggle(
-                    "Show line numbers",
-                    isOn: Binding(
-                        get: { ironApp.configuration.editor.showLineNumbers },
-                        set: { newValue in
-                            ironApp.configuration.updateConfiguration { config in
-                                config.editor.showLineNumbers = newValue
-                            }
-                        }
-                    ))
-
-                Toggle(
-                    "Syntax highlighting",
-                    isOn: Binding(
-                        get: { ironApp.configuration.editor.syntaxHighlighting },
-                        set: { newValue in
-                            ironApp.configuration.updateConfiguration { config in
-                                config.editor.syntaxHighlighting = newValue
-                            }
-                        }
-                    ))
-
-                Toggle(
-                    "Auto-complete",
-                    isOn: Binding(
-                        get: { ironApp.configuration.editor.autoComplete },
-                        set: { newValue in
-                            ironApp.configuration.updateConfiguration { config in
-                                config.editor.autoComplete = newValue
-                            }
-                        }
-                    ))
-
-                Toggle(
-                    "Live preview",
-                    isOn: Binding(
-                        get: { ironApp.configuration.editor.livePreview },
-                        set: { newValue in
-                            ironApp.configuration.updateConfiguration { config in
-                                config.editor.livePreview = newValue
-                            }
-                        }
-                    ))
-
-                Toggle(
-                    "Spell check",
-                    isOn: Binding(
-                        get: { ironApp.configuration.editor.spellCheck },
-                        set: { newValue in
-                            ironApp.configuration.updateConfiguration { config in
-                                config.editor.spellCheck = newValue
-                            }
-                        }
-                    ))
-            }
+            .padding(settingsCompactPadding)
         }
-        .padding()
+        .scrollIndicators(.visible)
     }
 }
 
@@ -368,461 +670,198 @@ struct SearchSettingsView: View {
     @EnvironmentObject var ironApp: IronApp
 
     var body: some View {
-        Form {
-            Section("Search Behavior") {
-                Toggle(
-                    "Enable search indexing",
-                    isOn: Binding(
-                        get: { ironApp.configuration.search.indexingEnabled },
-                        set: { newValue in
-                            ironApp.configuration.updateConfiguration { config in
-                                config.search.indexingEnabled = newValue
-                            }
-                        }
-                    )
-                )
-                .help("Enables fast search across all notes")
-
-                HStack {
-                    Text("Fuzzy search threshold:")
-                    Spacer()
-                    Slider(
-                        value: Binding(
-                            get: { ironApp.configuration.search.fuzzySearchThreshold },
+        ScrollView(.vertical) {
+            Form {
+                Section("Search Behavior") {
+                    Toggle(
+                        "Enable search indexing",
+                        isOn: Binding(
+                            get: { ironApp.configuration.search.indexingEnabled },
                             set: { newValue in
                                 ironApp.configuration.updateConfiguration { config in
-                                    config.search.fuzzySearchThreshold = newValue
+                                    config.search.indexingEnabled = newValue
                                 }
                             }
-                        ),
-                        in: 0.1...1.0,
-                        step: 0.1
+                        )
                     )
-                    .frame(width: 150)
-                    Text(String(format: "%.1f", ironApp.configuration.search.fuzzySearchThreshold))
-                        .frame(width: 30)
-                        .foregroundColor(.secondary)
-                }
-                .help("Lower values allow more fuzzy matching")
+                    .help("Enables fast search across all notes")
 
-                HStack {
-                    Text("Max search results:")
-                    Spacer()
-                    TextField(
-                        "Results",
-                        value: Binding(
-                            get: { ironApp.configuration.search.maxSearchResults },
-                            set: { newValue in
-                                ironApp.configuration.updateConfiguration { config in
-                                    config.search.maxSearchResults = newValue
+                    HStack {
+                        Text("Fuzzy search threshold:")
+                            .frame(width: 160, alignment: .leading)
+                        Spacer()
+                        Slider(
+                            value: Binding(
+                                get: { ironApp.configuration.search.fuzzySearchThreshold },
+                                set: { newValue in
+                                    ironApp.configuration.updateConfiguration { config in
+                                        config.search.fuzzySearchThreshold = newValue
+                                    }
                                 }
-                            }
-                        ), format: .number
-                    )
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 80)
-                }
-            }
-
-            Section("Search Scope") {
-                Toggle(
-                    "Search in content",
-                    isOn: Binding(
-                        get: { ironApp.configuration.search.searchInContent },
-                        set: { newValue in
-                            ironApp.configuration.updateConfiguration { config in
-                                config.search.searchInContent = newValue
-                            }
-                        }
-                    ))
-
-                Toggle(
-                    "Search in titles",
-                    isOn: Binding(
-                        get: { ironApp.configuration.search.searchInTitles },
-                        set: { newValue in
-                            ironApp.configuration.updateConfiguration { config in
-                                config.search.searchInTitles = newValue
-                            }
-                        }
-                    ))
-
-                Toggle(
-                    "Search in tags",
-                    isOn: Binding(
-                        get: { ironApp.configuration.search.searchInTags },
-                        set: { newValue in
-                            ironApp.configuration.updateConfiguration { config in
-                                config.search.searchInTags = newValue
-                            }
-                        }
-                    ))
-            }
-
-            Section("Advanced") {
-                Toggle(
-                    "Case sensitive",
-                    isOn: Binding(
-                        get: { ironApp.configuration.search.caseSensitive },
-                        set: { newValue in
-                            ironApp.configuration.updateConfiguration { config in
-                                config.search.caseSensitive = newValue
-                            }
-                        }
-                    ))
-
-                Toggle(
-                    "Whole words only",
-                    isOn: Binding(
-                        get: { ironApp.configuration.search.wholeWordOnly },
-                        set: { newValue in
-                            ironApp.configuration.updateConfiguration { config in
-                                config.search.wholeWordOnly = newValue
-                            }
-                        }
-                    ))
-
-                Button("Rebuild Search Index") {
-                    Task {
-                        try await ironApp.rebuildSearchIndex()
-                    }
-                }
-                .help("Recreates the search index from scratch")
-            }
-        }
-        .padding()
-    }
-}
-
-// MARK: - Appearance Settings
-
-struct AppearanceSettingsView: View {
-    @EnvironmentObject var ironApp: IronApp
-
-    var body: some View {
-        Form {
-            Section("Theme") {
-                Picker(
-                    "Appearance:",
-                    selection: Binding(
-                        get: { ironApp.configuration.ui.theme },
-                        set: { newValue in
-                            ironApp.configuration.updateConfiguration { config in
-                                config.ui.theme = newValue
-                            }
-                        }
-                    )
-                ) {
-                    ForEach(Theme.allCases, id: \.self) { theme in
-                        Text(theme.displayName).tag(theme)
-                    }
-                }
-                .pickerStyle(.radioGroup)
-            }
-
-            Section("Layout") {
-                Toggle(
-                    "Show sidebar",
-                    isOn: Binding(
-                        get: { ironApp.configuration.ui.showSidebar },
-                        set: { newValue in
-                            ironApp.configuration.updateConfiguration { config in
-                                config.ui.showSidebar = newValue
-                            }
-                        }
-                    ))
-
-                Toggle(
-                    "Show preview",
-                    isOn: Binding(
-                        get: { ironApp.configuration.ui.showPreview },
-                        set: { newValue in
-                            ironApp.configuration.updateConfiguration { config in
-                                config.ui.showPreview = newValue
-                            }
-                        }
-                    ))
-
-                Picker(
-                    "Preview position:",
-                    selection: Binding(
-                        get: { ironApp.configuration.ui.previewPosition },
-                        set: { newValue in
-                            ironApp.configuration.updateConfiguration { config in
-                                config.ui.previewPosition = newValue
-                            }
-                        }
-                    )
-                ) {
-                    ForEach(PreviewPosition.allCases, id: \.self) { position in
-                        Text(position.displayName).tag(position)
-                    }
-                }
-                .pickerStyle(.radioGroup)
-
-                HStack {
-                    Text("Sidebar width:")
-                    Spacer()
-                    Slider(
-                        value: Binding(
-                            get: { ironApp.configuration.ui.sidebarWidth },
-                            set: { newValue in
-                                ironApp.configuration.updateConfiguration { config in
-                                    config.ui.sidebarWidth = newValue
-                                }
-                            }
-                        ),
-                        in: 200...400,
-                        step: 10
-                    )
-                    .frame(width: 150)
-                    Text("\(Int(ironApp.configuration.ui.sidebarWidth))pt")
+                            ),
+                            in: 0.1...1.0,
+                            step: 0.1
+                        )
+                        .frame(width: 150)
+                        Text(
+                            String(
+                                format: "%.1f", ironApp.configuration.search.fuzzySearchThreshold)
+                        )
                         .frame(width: 40)
                         .foregroundColor(.secondary)
+                    }
+                    .help("Lower values allow more fuzzy matching")
+
+                    HStack {
+                        Text("Max search results:")
+                            .frame(width: 160, alignment: .leading)
+                        Spacer()
+                        TextField(
+                            "Results",
+                            value: Binding(
+                                get: { ironApp.configuration.search.maxSearchResults },
+                                set: { newValue in
+                                    ironApp.configuration.updateConfiguration { config in
+                                        config.search.maxSearchResults = newValue
+                                    }
+                                }
+                            ), format: .number
+                        )
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 80)
+                    }
                 }
+
+                Section("Search Scope") {
+                    Toggle(
+                        "Search in content",
+                        isOn: Binding(
+                            get: { ironApp.configuration.search.searchInContent },
+                            set: { newValue in
+                                ironApp.configuration.updateConfiguration { config in
+                                    config.search.searchInContent = newValue
+                                }
+                            }
+                        ))
+
+                    Toggle(
+                        "Search in titles",
+                        isOn: Binding(
+                            get: { ironApp.configuration.search.searchInTitles },
+                            set: { newValue in
+                                ironApp.configuration.updateConfiguration { config in
+                                    config.search.searchInTitles = newValue
+                                }
+                            }
+                        ))
+
+                    Toggle(
+                        "Search in tags",
+                        isOn: Binding(
+                            get: { ironApp.configuration.search.searchInTags },
+                            set: { newValue in
+                                ironApp.configuration.updateConfiguration { config in
+                                    config.search.searchInTags = newValue
+                                }
+                            }
+                        ))
+                }
+
+                Section("Advanced") {
+                    Toggle(
+                        "Case sensitive",
+                        isOn: Binding(
+                            get: { ironApp.configuration.search.caseSensitive },
+                            set: { newValue in
+                                ironApp.configuration.updateConfiguration { config in
+                                    config.search.caseSensitive = newValue
+                                }
+                            }
+                        ))
+
+                    Toggle(
+                        "Whole words only",
+                        isOn: Binding(
+                            get: { ironApp.configuration.search.wholeWordOnly },
+                            set: { newValue in
+                                ironApp.configuration.updateConfiguration { config in
+                                    config.search.wholeWordOnly = newValue
+                                }
+                            }
+                        ))
+
+                    Button("Rebuild Search Index") {
+                        Task {
+                            try await ironApp.rebuildSearchIndex()
+                        }
+                    }
+                    .help("Recreates the search index from scratch")
+                }
+
             }
+            .padding(settingsCompactPadding)
         }
-        .padding()
+        .scrollIndicators(.visible)
     }
 }
+
+    // Appearance settings removed from the Preferences window per product direction.
+    // Theme and appearance are adjustable via the theme selector elsewhere in the UI.
 
 // MARK: - Graph Settings
 
-struct GraphSettingsView: View {
-    @EnvironmentObject var ironApp: IronApp
-
-    var body: some View {
-        Form {
-            Section("Layout") {
-                Picker(
-                    "Algorithm:",
-                    selection: Binding(
-                        get: { ironApp.configuration.graph.layoutAlgorithm },
-                        set: { newValue in
-                            ironApp.configuration.updateConfiguration { config in
-                                config.graph.layoutAlgorithm = newValue
-                            }
-                        }
-                    )
-                ) {
-                    ForEach(GraphLayoutAlgorithm.allCases, id: \.self) { algorithm in
-                        Text(algorithm.displayName).tag(algorithm)
-                    }
-                }
-                .pickerStyle(.radioGroup)
-
-                HStack {
-                    Text("Node size:")
-                    Spacer()
-                    Slider(
-                        value: Binding(
-                            get: { ironApp.configuration.graph.nodeSize },
-                            set: { newValue in
-                                ironApp.configuration.updateConfiguration { config in
-                                    config.graph.nodeSize = newValue
-                                }
-                            }
-                        ),
-                        in: 4...20,
-                        step: 1
-                    )
-                    .frame(width: 150)
-                    Text("\(Int(ironApp.configuration.graph.nodeSize))pt")
-                        .frame(width: 30)
-                        .foregroundColor(.secondary)
-                }
-
-                HStack {
-                    Text("Max nodes:")
-                    Spacer()
-                    TextField(
-                        "Max nodes",
-                        value: Binding(
-                            get: { ironApp.configuration.graph.maxNodes },
-                            set: { newValue in
-                                ironApp.configuration.updateConfiguration { config in
-                                    config.graph.maxNodes = newValue
-                                }
-                            }
-                        ), format: .number
-                    )
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 80)
-                }
-            }
-
-            Section("Physics") {
-                HStack {
-                    Text("Link strength:")
-                    Spacer()
-                    Slider(
-                        value: Binding(
-                            get: { ironApp.configuration.graph.linkStrength },
-                            set: { newValue in
-                                ironApp.configuration.updateConfiguration { config in
-                                    config.graph.linkStrength = newValue
-                                }
-                            }
-                        ),
-                        in: 0.1...2.0,
-                        step: 0.1
-                    )
-                    .frame(width: 150)
-                    Text(String(format: "%.1f", ironApp.configuration.graph.linkStrength))
-                        .frame(width: 30)
-                        .foregroundColor(.secondary)
-                }
-
-                HStack {
-                    Text("Repulsion force:")
-                    Spacer()
-                    Slider(
-                        value: Binding(
-                            get: { ironApp.configuration.graph.repulsionForce },
-                            set: { newValue in
-                                ironApp.configuration.updateConfiguration { config in
-                                    config.graph.repulsionForce = newValue
-                                }
-                            }
-                        ),
-                        in: 10...100,
-                        step: 5
-                    )
-                    .frame(width: 150)
-                    Text("\(Int(ironApp.configuration.graph.repulsionForce))")
-                        .frame(width: 30)
-                        .foregroundColor(.secondary)
-                }
-
-                HStack {
-                    Text("Centering force:")
-                    Spacer()
-                    Slider(
-                        value: Binding(
-                            get: { ironApp.configuration.graph.centeringForce },
-                            set: { newValue in
-                                ironApp.configuration.updateConfiguration { config in
-                                    config.graph.centeringForce = newValue
-                                }
-                            }
-                        ),
-                        in: 0.01...0.5,
-                        step: 0.01
-                    )
-                    .frame(width: 150)
-                    Text(String(format: "%.2f", ironApp.configuration.graph.centeringForce))
-                        .frame(width: 30)
-                        .foregroundColor(.secondary)
-                }
-            }
-
-            Section("Appearance") {
-                Picker(
-                    "Color scheme:",
-                    selection: Binding(
-                        get: { ironApp.configuration.graph.colorScheme },
-                        set: { newValue in
-                            ironApp.configuration.updateConfiguration { config in
-                                config.graph.colorScheme = newValue
-                            }
-                        }
-                    )
-                ) {
-                    ForEach(GraphColorScheme.allCases, id: \.self) { scheme in
-                        Text(scheme.displayName).tag(scheme)
-                    }
-                }
-                .pickerStyle(.radioGroup)
-
-                Toggle(
-                    "Show orphaned nodes",
-                    isOn: Binding(
-                        get: { ironApp.configuration.graph.showOrphanedNodes },
-                        set: { newValue in
-                            ironApp.configuration.updateConfiguration { config in
-                                config.graph.showOrphanedNodes = newValue
-                            }
-                        }
-                    )
-                )
-                .help("Show notes with no connections")
-
-                HStack {
-                    Text("Animation duration:")
-                    Spacer()
-                    Slider(
-                        value: Binding(
-                            get: { ironApp.configuration.graph.animationDuration },
-                            set: { newValue in
-                                ironApp.configuration.updateConfiguration { config in
-                                    config.graph.animationDuration = newValue
-                                }
-                            }
-                        ),
-                        in: 0.1...1.0,
-                        step: 0.1
-                    )
-                    .frame(width: 150)
-                    Text(String(format: "%.1fs", ironApp.configuration.graph.animationDuration))
-                        .frame(width: 40)
-                        .foregroundColor(.secondary)
-                }
-            }
-        }
-        .padding()
-    }
-}
+// Graph settings removed - feature deprecated. If graph functionality is reintroduced in the future, add a dedicated settings UI back with a focused, minimal configuration set.
 
 // MARK: - About Settings
 
 struct AboutSettingsView: View {
     var body: some View {
-        VStack(spacing: 20) {
-            Image(systemName: "brain")
-                .font(.system(size: 64))
-                .foregroundColor(.accentColor)
+        ScrollView(.vertical) {
+            VStack(spacing: 12) {
+                Image(systemName: "brain")
+                    .font(.system(size: 56))
+                    .foregroundColor(.accentColor)
 
-            Text("Iron")
-                .font(.largeTitle)
-                .fontWeight(.bold)
+                Text("Iron")
+                    .font(.title)
+                    .fontWeight(.bold)
 
-            Text("Knowledge Management System")
-                .font(.title3)
-                .foregroundColor(.secondary)
+                Text("Knowledge Management System")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
 
-            Text("Version 1.0.0")
-                .font(.body)
-                .foregroundColor(.secondary)
+                Text("Version 1.0.0")
+                    .font(.body)
+                    .foregroundColor(.secondary)
 
-            Divider()
+                Divider()
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Built with:")
-                    .font(.headline)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Built with:")
+                        .font(.headline)
 
-                Text("• SwiftUI for native macOS experience")
-                Text("• Metal for hardware-accelerated graphics")
-                Text("• Swift 6.2 with modern concurrency")
+                    Text("• SwiftUI for native macOS experience")
+                    Text("• Metal for hardware-accelerated graphics")
+                    Text("• Swift 6.2 with modern concurrency")
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                Spacer(minLength: 12)
+
+                HStack(spacing: 12) {
+                    Button("GitHub") {
+                        // TODO: Open GitHub repository
+                    }
+
+                    Button("Documentation") {
+                        // TODO: Open documentation
+                    }
+                }
             }
+            .padding(settingsCompactPadding)
             .frame(maxWidth: .infinity, alignment: .leading)
-
-            Spacer()
-
-            HStack(spacing: 16) {
-                Button("GitHub") {
-                    // TODO: Open GitHub repository
-                }
-
-                Button("Documentation") {
-                    // TODO: Open documentation
-                }
-
-                Button("Report Bug") {
-                    // TODO: Open issue tracker
-                }
-            }
         }
-        .padding()
+        .scrollIndicators(.visible)
     }
 }
 
@@ -832,8 +871,7 @@ enum SettingsTab: String, CaseIterable {
     case general = "general"
     case editor = "editor"
     case search = "search"
-    case appearance = "appearance"
-    case graph = "graph"
+    case shortcuts = "shortcuts"
     case about = "about"
 }
 

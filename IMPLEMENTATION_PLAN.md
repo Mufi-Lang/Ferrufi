@@ -80,39 +80,115 @@ Iron is a note-taking and knowledge management tool similar to Obsidian and Logs
 
 ---
 
-## Phase 4: Advanced Features (Weeks 7-8)
+## Phase 4: Advanced Features (Revised)
 
-### 4.1 Enhanced UI with Metal
-- [ ] Smooth scrolling and zooming
-- [ ] Animated transitions between views
-- [ ] High-performance text rendering with Metal
-- [ ] Custom Metal-based UI components
-- [ ] Performance profiling and optimization
+Objective: finish the highest-impact advanced UI and search work, and stabilize app-level UX improvements (Shortcuts & Settings) that have been started during earlier phases. This revision records completed work, marks remaining work as planned, and adds concrete priorities and acceptance criteria.
+
+### 4.1 Enhanced UI & Metal
+- [x] Smooth scrolling (momentum, bounce) implemented
+- [ ] Pinch-to-zoom support (touchpad gesture + UI integration)
+- [ ] Animated transitions between views (Metal-backed or CoreAnimation-driven)
+- [x] High-performance text rendering with Metal (SDF / texture-based renderer implemented)
+- [x] Custom Metal-based UI components (e.g. `MetalView`, `SmoothScrollView`, `MetalTextRenderer`)
+- [~] Performance profiling integrated (MetalPerformanceMonitor added; active profiling & targeted optimizations in progress)
+- [ ] Integrate Metal components consistently across editor and list flows (UI plumbing)
+
+Notes:
+- Graph rendering work remains in Phase 3 deliverables; Phase 4 focuses on integrating and optimizing Metal UI primitives across the app.
+- Success criteria: visible UX improvements (smooth scroll, no jank at 60fps for common flows) and measurable profiling results (targeted hot paths identified and fixed).
 
 ### 4.2 Search & Discovery
-- [ ] Full-text search implementation
-- [ ] Fuzzy matching for note discovery
-- [ ] Search result highlighting
-- [ ] Recently accessed notes tracking
-- [ ] Advanced search filters and operators
+- [x] Full-text search foundation implemented (`SearchIndex`)
+- [x] Fuzzy matching implemented and configurable (`SearchConfiguration.fuzzySearchThreshold`)
+- [ ] Search result highlighting (UI integration for inline highlight spans)
+- [ ] Recently accessed notes tracking for UI ordering and "Recent" lists
+- [ ] Advanced search filters and operators (multi-field filters, tag queries, date ranges)
+- [ ] Search UI polish (grouping, result previews, and accessible keyboard navigation)
+
+Acceptance criteria:
+- Search should return useful results within user-noticeable latency (target: sub-100ms for typical vault sizes) and provide clear highlighting and filtering affordances in the UI.
+
+### 4.3 App-level UX: Settings, Shortcuts & Consistency (new focus)
+- [x] App-wide keyboard shortcuts implemented and registered (`IronCommands`)
+- [x] `ShortcutsManager` and `ShortcutsConfiguration` implemented (bindings persisted via `ConfigurationManager`)
+- [x] Shortcuts remapping UI (`Settings -> Shortcuts`) implemented, including direct-capture mode (press a key combo to bind)
+- [x] Duplicate detection with an override option implemented in `ShortcutsManager`
+- [x] Single shared Settings window helper implemented; menu and sidebar both open the same settings window
+- [x] Graph tab removed from Preferences (per current product direction)
+- [x] Settings UI layout and scrollability: initial pass completed (General, Editor, Search, Appearance, About, Shortcuts made scrollable and compact); follow-up polish on spacing & accessibility pending
+- [ ] Shortcuts table enhancements: searchable list, columns (Action | Current | Default), per-action reset, and improved conflict visuals (inline icons + hover tooltips)
+- [ ] Direct-capture improvements: larger live preview, support for function/special keys (F1–F12, arrows, etc.), optional auto-save on capture
+- [ ] Settings UX improvements: remember window size & position, keyboard focus & accessibility labels, consistent label/control alignment
+- [ ] Shortcuts import/export (JSON profiles), and a printable quick-reference view
+
+Phase 4 priorities (revised):
+1. Finish consistent Settings layout & scrolling across all tabs (HIGH) — initial pass completed
+2. Shortcuts table polish (search, per-action reset, conflict UI) (HIGH)
+3. Improve direct-capture UX and support function/non-character keys (MED)
+4. Continue performance profiling and address top 2-3 hot paths (MED)
+5. Replace deprecated API usage (e.g., `NSOpenPanel.allowedFileTypes` → `allowedContentTypes`) (LOW)
+
+Immediate next steps:
+- (Initial pass done) Refine spacing, compact control density, and accessibility across all Settings tabs; ensure small-window usability and consistent label widths (target: 2–4 days).
+- Add a searchable Shortcuts list and inline conflict indicators (target: 1 week).
+- Add function-key and special-key support to `KeyCaptureView` and refine the capture preview UX. Note: confirmation-required capture has been implemented (target: 1 week).
+- Add unit tests for `ShortcutsManager` (binding update, duplicate detection, reset) and basic UI tests for remapping flows.
 
 ---
 
-## Phase 5: Polish & Extensions (Weeks 9-10)
+## Phase 5: Polish & Extensions (Revised)
 
-### 5.1 User Experience
-- [ ] Themes and customization system
-- [ ] Comprehensive keyboard shortcuts
-- [ ] Export functionality (PDF, HTML, etc.)
-- [ ] Import functionality (Markdown, Obsidian, etc.)
-- [ ] Performance optimization and profiling
+Objective: polish the product for a production-quality experience, add higher-level features and extensibility (exporters/importers, block editing prototypes, plugin foundations), and finalize accessibility and performance work.
 
-### 5.2 Advanced Knowledge Management
-- [ ] Block-based editing (Logseq-style)
-- [ ] Daily notes functionality
-- [ ] Query system for notes
-- [ ] Plugin architecture foundation
-- [ ] Collaborative features planning
+### 5.1 User Experience & Polish
+- [x] Themes and customization system (foundational)
+- [x] Comprehensive keyboard shortcuts implemented and remappable via Settings
+- [~] Settings final polish: need to complete consistent layouts, add per-action and global resets, and make window remember size/position
+- [ ] Export functionality (PDF, HTML, etc.) — vault export implemented as a basic command; robust PDF/HTML export with styling and per-note export: TODO
+- [ ] Import functionality (Obsidian, advanced Markdown import): basic Markdown import is implemented; Obsidian importer and richer import heuristics: TODO
+- [ ] Accessibility and localization coverage for Settings and Shortcuts UI (labels, roles, VoiceOver)
+- [ ] Final performance tuning and verification across platforms
+
+### 5.2 Advanced Knowledge Management & Extensibility
+- [ ] Block-based editing (Logseq-style) — plan & prototype: block data model, block editor UI, keyboard-driven block ops, persistence & CRDT considerations
+- [ ] Daily notes & templates (configurable daily template generation)
+- [ ] Query system for notes and block-level queries
+- [ ] Plugin architecture foundation — design plugin API, isolation model, sample plugin & packaging
+- [ ] Collaboration features (design & prototype phase; not committed for initial releases)
+
+### 5.3 Phase 5 - Current Progress & Roadmap
+- [x] Keyboard shortcuts & remapping (done)
+- [x] Basic import and basic vault export (done)
+- [x] Shortcuts persistence and `ShortcutsManager` (done)
+- [~] Settings window & tabs: stable, but cross-tab layout and scroll consistency remain to be finalized
+- [ ] Next major milestones:
+  - Finish Settings polish and Shortcuts experience (search, reset, conflict visuals)
+  - Create robust PDF/HTML export and Obsidian importer (export/import round-trips)
+  - Prototype block-based editor and a minimal plugin API
+
+Acceptance criteria & success metrics for Phase 5:
+- Settings experience: all tabs scrollable at compact sizes, consistent control alignment, per-action and global reset behavior verified.
+- Shortcuts: searchable table, persistent changes, conflict detection with override, and profile import/export works.
+- Export/import: round-trip tests (exported HTML/PDF or exported/imported vault content retains content and metadata).
+- Performance: no regressions from Phase 4 optimizations; measurable improvements from profiling passes.
+
+Risks & mitigations:
+- Feature creep on plugins and collaboration — mitigate by shipping a small, well-documented plugin API and iterating on user demand.
+- Export/import edge cases — mitigate with thorough round-trip tests and sample vaults.
+
+---
+
+## Recommended immediate plan of work (what I will do next)
+1. Polish Settings UI across all tabs (layout, scrolling, remember size) — high priority and highest user-impact.
+2. Shortcuts experience improvements (searchable list, per-action reset, conflict visuals, import/export profile) — next priority.
+3. Direct-capture UX and function-key support.
+4. Triage and fix remaining deprecation warnings (e.g., `NSOpenPanel`) and finish profiling hotspots.
+
+What I need from you:
+- Confirm priority order (do we start with Settings polish or Shortcuts table next?), and any UX preferences (compact vs. spacious control density; should direct-capture auto-save immediately or require explicit confirm).
+- If you have any product constraints or timeline guidance (e.g., a date for a demo), tell me so I can time deliverables.
+
+This revision preserves Phase 3 achievements while clarifying what’s done vs. what remains, and it lays out concrete next steps and acceptance criteria so we can close Phase 4 and move cleanly into Phase 5.
 
 ---
 

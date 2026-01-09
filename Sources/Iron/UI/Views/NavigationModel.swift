@@ -109,6 +109,18 @@ public class NavigationModel: ObservableObject {
         selectedNote = note
         selectedFolder = ironApp.folderManager.folder(for: note)
 
+        // Persist recently selected notes (most-recent-first, capped to 50 entries)
+        ironApp.configuration.updateConfiguration { config in
+            var ids = config.recentNoteIds ?? []
+            // De-duplicate and place the current note ID at the front
+            ids.removeAll(where: { $0 == note.id })
+            ids.insert(note.id, at: 0)
+            if ids.count > 50 {
+                ids = Array(ids.prefix(50))
+            }
+            config.recentNoteIds = ids
+        }
+
         // Clear search when selecting a note
         if isSearching {
             clearSearch()

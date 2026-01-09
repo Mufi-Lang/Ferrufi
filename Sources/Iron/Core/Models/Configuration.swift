@@ -14,7 +14,20 @@ public struct IronConfiguration: Codable, Sendable {
     public var search: SearchConfiguration
     public var ui: UIConfiguration
     public var graph: GraphConfiguration
+    public var shortcuts: ShortcutsConfiguration
+    public var general: GeneralConfiguration
     public var additionalSettings: [String: String]
+
+    enum CodingKeys: String, CodingKey {
+        case vault
+        case editor
+        case search
+        case ui
+        case graph
+        case shortcuts
+        case general
+        case additionalSettings
+    }
 
     /// Currently selected vault URL
     public var vaultURL: URL? {
@@ -67,6 +80,8 @@ public struct IronConfiguration: Codable, Sendable {
         search: SearchConfiguration = SearchConfiguration(),
         ui: UIConfiguration = UIConfiguration(),
         graph: GraphConfiguration = GraphConfiguration(),
+        shortcuts: ShortcutsConfiguration = ShortcutsConfiguration(),
+        general: GeneralConfiguration = GeneralConfiguration(),
         additionalSettings: [String: String] = [:]
     ) {
         self.vault = vault
@@ -74,7 +89,34 @@ public struct IronConfiguration: Codable, Sendable {
         self.search = search
         self.ui = ui
         self.graph = graph
+        self.shortcuts = shortcuts
+        self.general = general
         self.additionalSettings = additionalSettings
+    }
+
+    // Codable conformance that tolerates older config files which may not contain `general`
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.vault = try container.decodeIfPresent(VaultConfiguration.self, forKey: .vault) ?? VaultConfiguration()
+        self.editor = try container.decodeIfPresent(EditorConfiguration.self, forKey: .editor) ?? EditorConfiguration()
+        self.search = try container.decodeIfPresent(SearchConfiguration.self, forKey: .search) ?? SearchConfiguration()
+        self.ui = try container.decodeIfPresent(UIConfiguration.self, forKey: .ui) ?? UIConfiguration()
+        self.graph = try container.decodeIfPresent(GraphConfiguration.self, forKey: .graph) ?? GraphConfiguration()
+        self.shortcuts = try container.decodeIfPresent(ShortcutsConfiguration.self, forKey: .shortcuts) ?? ShortcutsConfiguration()
+        self.general = try container.decodeIfPresent(GeneralConfiguration.self, forKey: .general) ?? GeneralConfiguration()
+        self.additionalSettings = try container.decodeIfPresent([String: String].self, forKey: .additionalSettings) ?? [:]
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(vault, forKey: .vault)
+        try container.encode(editor, forKey: .editor)
+        try container.encode(search, forKey: .search)
+        try container.encode(ui, forKey: .ui)
+        try container.encode(graph, forKey: .graph)
+        try container.encode(shortcuts, forKey: .shortcuts)
+        try container.encode(general, forKey: .general)
+        try container.encode(additionalSettings, forKey: .additionalSettings)
     }
 }
 
@@ -203,6 +245,43 @@ public struct UIConfiguration: Codable, Sendable {
     }
 }
 
+/// Configuration for general application behavior
+public struct GeneralConfiguration: Codable, Sendable {
+    public var launchAtLogin: Bool
+    public var confirmBeforeQuit: Bool
+    public var autoUpdateEnabled: Bool
+    public var startupBehavior: StartupBehavior
+    public var startupNoteId: UUID?
+
+    public init(
+        launchAtLogin: Bool = false,
+        confirmBeforeQuit: Bool = true,
+        autoUpdateEnabled: Bool = true,
+        startupBehavior: StartupBehavior = .restore,
+        startupNoteId: UUID? = nil
+    ) {
+        self.launchAtLogin = launchAtLogin
+        self.confirmBeforeQuit = confirmBeforeQuit
+        self.autoUpdateEnabled = autoUpdateEnabled
+        self.startupBehavior = startupBehavior
+        self.startupNoteId = startupNoteId
+    }
+}
+
+public enum StartupBehavior: String, Codable, CaseIterable, Sendable {
+    case restore = "restore"
+    case welcome = "welcome"
+    case specific = "specific"
+
+    public var displayName: String {
+        switch self {
+        case .restore: return "Restore last session"
+        case .welcome: return "Open welcome page"
+        case .specific: return "Open specific note"
+        }
+    }
+}
+
 /// Configuration for graph visualization
 public struct GraphConfiguration: Codable, Sendable {
     public var layoutAlgorithm: GraphLayoutAlgorithm
@@ -235,6 +314,51 @@ public struct GraphConfiguration: Codable, Sendable {
         self.showOrphanedNodes = showOrphanedNodes
         self.colorScheme = colorScheme
         self.animationDuration = animationDuration
+    }
+}
+
+/// Represents a single keyboard shortcut key binding
+public struct KeyBinding: Codable, Hashable, Sendable {
+    public var key: String
+    public var modifiers: [String]
+
+    public init(key: String, modifiers: [String] = []) {
+        self.key = key
+        self.modifiers = modifiers
+    }
+
+    /// Human-friendly display string (e.g. "cmd+shift+n")
+    public var displayString: String {
+        let mods = modifiers.joined(separator: "+")
+        return mods.isEmpty ? key : "\(mods)+\(key)"
+    }
+}
+
+/// Configuration for customizable keyboard shortcuts
+public struct ShortcutsConfiguration: Codable, Sendable {
+    public var bindings: [String: KeyBinding]
+
+    public init(bindings: [String: KeyBinding] = ShortcutsConfiguration.defaultBindings) {
+        self.bindings = bindings
+    }
+
+    /// Default application bindings (can be overridden by user settings)
+    public static var defaultBindings: [String: KeyBinding] {
+        return [
+            "newNote": KeyBinding(key: "n", modifiers: ["cmd"]),
+            "newFolder": KeyBinding(key: "n", modifiers: ["cmd", "shift"]),
+            "importNotes": KeyBinding(key: "i", modifiers: ["cmd"]),
+            "exportVault": KeyBinding(key: "e", modifiers: ["cmd", "shift"]),
+            "find": KeyBinding(key: "f", modifiers: ["cmd"]),
+            "quickOpen": KeyBinding(key: "p", modifiers: ["cmd"]),
+            "toggleSidebar": KeyBinding(key: "s", modifiers: ["ctrl", "cmd"]),
+            "togglePreview": KeyBinding(key: "p", modifiers: ["ctrl", "cmd"]),
+            "zoomIn": KeyBinding(key: "+", modifiers: ["cmd"]),
+            "zoomOut": KeyBinding(key: "-", modifiers: ["cmd"]),
+            "resetZoom": KeyBinding(key: "0", modifiers: ["cmd"]),
+            "randomNote": KeyBinding(key: "r", modifiers: ["cmd", "shift"]),
+            "shortcutsReference": KeyBinding(key: "/", modifiers: ["cmd"])
+        ]
     }
 }
 
@@ -425,6 +549,42 @@ extension ConfigurationManager {
         get { configuration.graph }
         set {
             configuration.graph = newValue
+            saveConfiguration()
+        }
+    }
+
+    /// Quick access to shortcuts configuration
+    public var shortcuts: ShortcutsConfiguration {
+        get { configuration.shortcuts }
+        set {
+            configuration.shortcuts = newValue
+            saveConfiguration()
+        }
+    }
+
+    /// Quick access to additional settings dictionary
+    public var additionalSettings: [String: String] {
+        get { configuration.additionalSettings }
+        set {
+            configuration.additionalSettings = newValue
+            saveConfiguration()
+        }
+    }
+
+    /// Quick access to recently-opened note IDs
+    public var recentNoteIds: [UUID]? {
+        get { configuration.recentNoteIds }
+        set {
+            configuration.recentNoteIds = newValue
+            saveConfiguration()
+        }
+    }
+
+    /// Quick access to general configuration
+    public var general: GeneralConfiguration {
+        get { configuration.general }
+        set {
+            configuration.general = newValue
             saveConfiguration()
         }
     }

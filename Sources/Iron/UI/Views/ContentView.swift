@@ -4,7 +4,7 @@ import SwiftUI
 public struct ContentView: View {
     @EnvironmentObject var ironApp: IronApp
     @StateObject private var navigationModel = NavigationModel()
-    @StateObject private var themeManager = ThemeManager()
+    @EnvironmentObject private var themeManager: ThemeManager
 
     public init() {}
 
@@ -24,6 +24,7 @@ public struct ContentView: View {
         .preferredColorScheme(themeManager.currentTheme.isDark ? .dark : .light)
         .onAppear {
             navigationModel.ironApp = ironApp
+            IronApp.registerNavigationModel(navigationModel)
             Task {
                 await initializeApp()
             }
@@ -74,6 +75,13 @@ public struct ContentView: View {
                     .environmentObject(themeManager)
             }
         }
+        .sheet(isPresented: $navigationModel.showingSettings) {
+            // Open the app settings and default to the General tab when requested
+            SettingsView(initialTab: .general)
+                .environmentObject(ironApp)
+                .environmentObject(navigationModel)
+                .environmentObject(themeManager)
+        }
         .onChange(of: navigationModel.showingFolderCreation) { _, newValue in
             print("ContentView: showingFolderCreation changed to: \(newValue)")
         }
@@ -107,6 +115,50 @@ public struct ContentView: View {
 
             // Initialize Iron with the notes directory
             try await ironApp.initialize(vaultPath: notesDirectory.path)
+
+            // Apply configured startup behavior (restore last session, open welcome, or open a specific note)
+            await MainActor.run {
+                switch ironApp.configuration.general.startupBehavior {
+                case .restore:
+                    if let ids = ironApp.configuration.recentNoteIds,
+                       let first = ids.first,
+                       let note = ironApp.notes.first(where: { $0.id == first }) {
+                        navigationModel.selectNote(note, ironApp: ironApp)
+                    } else if let welcome = ironApp.notes.first(where: { $0.title == "Welcome" }) {
+                        navigationModel.selectNote(welcome, ironApp: ironApp)
+                    }
+                case .welcome:
+                    if let welcome = ironApp.notes.first(where: { $0.title == "Welcome" }) {
+                        navigationModel.selectNote(welcome, ironApp: ironApp)
+                    }
+                case .specific:
+                    if let id = ironApp.configuration.general.startupNoteId,
+                       let note = ironApp.notes.first(where: { $0.id == id }) {
+                        navigationModel.selectNote(note, ironApp: ironApp)
+                    } else if let ids = ironApp.configuration.recentNoteIds,
+                              let first = ids.first,
+                              let note = ironApp.notes.first(where: { $0.id == first }) {
+                        navigationModel.selectNote(note, ironApp: ironApp)
+                    }
+                }
+
+                // Start/stop auto-update checks according to saved preference
+                if ironApp.configuration.general.autoUpdateEnabled {
+                    UpdateManager.shared.startAutoCheck()
+                } else {
+                    UpdateManager.shared.stopAutoCheck()
+                }
+            }
+
+            // Ensure launch-at-login state is applied (non-blocking) on the MainActor
+            Task { @MainActor in
+                do {
+                    try await LaunchAtLoginManager.shared.setEnabled(ironApp.configuration.general.launchAtLogin)
+                } catch {
+                    // Non-fatal: log for diagnostics but don't block startup
+                    print("Failed to apply launch-at-login: \(error)")
+                }
+            }
 
         } catch {
             await MainActor.run {

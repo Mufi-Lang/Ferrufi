@@ -108,7 +108,8 @@ struct SidebarView: View {
                 .buttonStyle(.plain)
 
                 Button {
-                    navigationModel.showingSettings = true
+                    // Open the settings window directly (Shortcuts tab)
+                    SettingsWindow.shared.show(tab: .shortcuts)
                 } label: {
                     Image(systemName: "gearshape")
                         .font(.system(size: 12, weight: .medium))

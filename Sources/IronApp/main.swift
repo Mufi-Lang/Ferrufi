@@ -21,6 +21,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         return true
     }
 
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        // If user opted into a confirm-before-quit flow, prompt them here.
+        if let confirm = IronApp.shared?.configuration.general.confirmBeforeQuit, confirm {
+            let alert = NSAlert()
+            alert.messageText = "Quit Iron?"
+            alert.informativeText = "Are you sure you want to quit? Any unsaved changes may be lost."
+            alert.alertStyle = .warning
+            alert.addButton(withTitle: "Quit")
+            alert.addButton(withTitle: "Cancel")
+            let response = alert.runModal()
+            return response == .alertFirstButtonReturn ? .terminateNow : .terminateCancel
+        }
+        return .terminateNow
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         // Perform cleanup before termination
     }
@@ -35,8 +50,12 @@ struct IronApplication: App {
         WindowGroup("") {
             ContentView()
                 .environmentObject(ironApp)
+                .environmentObject(ironApp.themeManager)
                 .onAppear {
-                    // Make sure window can receive key events
+                    // Register the shared IronApp instance and make sure window can receive key events
+                    IronApp.shared = ironApp
+                    // Ensure shortcuts are loaded from persisted configuration now that IronApp.shared is set
+                    ShortcutsManager.shared.reload()
                     DispatchQueue.main.async {
                         if let window = NSApp.windows.first {
                             window.makeKeyAndOrderFront(nil)
@@ -48,7 +67,16 @@ struct IronApplication: App {
                     }
                 }
         }
+        .commands {
+            IronCommands()
+        }
         .windowResizability(.contentSize)
         .defaultSize(width: 1200, height: 800)
+
+        Settings {
+            SettingsView()
+                .environmentObject(ironApp)
+                .environmentObject(ironApp.themeManager)
+        }
     }
 }

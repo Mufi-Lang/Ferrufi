@@ -1,6 +1,10 @@
-import Testing
+import XCTest
+
 @testable import Iron
 
-@Test func example() async throws {
-    // Write your test here and use APIs like `#expect(...)` to check expected conditions.
+final class IronTests: XCTestCase {
+    func testExample() throws {
+        // Placeholder test — add concrete assertions here.
+        XCTAssertTrue(true)
+    }
 }

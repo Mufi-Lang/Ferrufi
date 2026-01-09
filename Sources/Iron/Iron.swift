@@ -12,12 +12,23 @@ import Foundation
 @MainActor
 public class IronApp: ObservableObject {
 
+    // MARK: - Shared Accessors
+
+    /// Global shared instance of the Iron app. Automatically set when an instance initializes.
+    public static var shared: IronApp?
+
+    /// Convenience global reference to the primary NavigationModel (set from ContentView).
+    /// Use `IronApp.registerNavigationModel(_:)` from ContentView to set this.
+    public static var sharedNavigationModel: NavigationModel?
+
     // MARK: - Core Components
     @Published public private(set) var configuration: ConfigurationManager
     @Published public private(set) var fileStorage: FileStorage?
     @Published public private(set) var searchIndex: SearchIndex
     @Published public private(set) var folderManager: FolderManager
     @Published public private(set) var errorHandler: ErrorHandler
+    /// Theme manager for coordinating UI themes across the app
+    public let themeManager: ThemeManager
 
     // MARK: - State
     @Published public private(set) var isInitialized = false
@@ -34,8 +45,17 @@ public class IronApp: ObservableObject {
         self.searchIndex = SearchIndex()
         self.folderManager = FolderManager()
         self.errorHandler = DefaultErrorHandler()
+        self.themeManager = ThemeManager()
 
         setupSubscriptions()
+
+        // Register this instance as the global shared app instance
+        IronApp.shared = self
+    }
+
+    /// Registers the shared navigation model (for use by global commands)
+    public static func registerNavigationModel(_ model: NavigationModel?) {
+        sharedNavigationModel = model
     }
 
     /// Initializes the Iron app with a vault path
@@ -314,12 +334,14 @@ public class IronApp: ObservableObject {
     private func setupSubscriptions() {
         // Listen for configuration changes
         configuration.$configuration
-            .dropFirst()
             .sink { [weak self] _ in
                 // Configuration changed, might need to refresh some components
                 self?.handleConfigurationChange()
             }
             .store(in: &cancellables)
+
+        // Apply current configuration immediately so services are synchronized at startup.
+        handleConfigurationChange()
     }
 
     private func setupFileWatching() {
@@ -335,8 +357,26 @@ public class IronApp: ObservableObject {
 
     private func handleConfigurationChange() {
         // Handle configuration changes that might affect the app state
-        Task {
-            // Might need to restart file watching, update search settings, etc.
+        // (backups, auto-update scheduling, launch-at-login state, etc.)
+        Task { @MainActor in
+            // Ensure backup scheduler matches the current vault configuration
+            BackupManager.shared.rescheduleFromCurrentConfig()
+
+            // Apply auto-update preference immediately
+            if configuration.general.autoUpdateEnabled {
+                UpdateManager.shared.startAutoCheck()
+            } else {
+                UpdateManager.shared.stopAutoCheck()
+            }
+
+            // Apply launch-at-login preference (fire-and-forget but log failures)
+            do {
+                try await LaunchAtLoginManager.shared.setEnabled(configuration.general.launchAtLogin)
+            } catch {
+                print("handleConfigurationChange: failed to apply launch-at-login: \(error)")
+            }
+
+            // Additional configuration-driven actions can be added here in the future.
         }
     }
 
