@@ -6,7 +6,7 @@ import PackageDescription
 let package = Package(
     name: "Ferrufi",
     platforms: [
-        .macOS(.v14)
+        .macOS(.v26)
     ],
     products: [
         .library(
@@ -31,16 +31,36 @@ let package = Package(
             dependencies: ["CMufi"],
             resources: [
                 .process("UI/Metal/Shaders.metal")
+            ],
+            linkerSettings: [
+                .unsafeFlags(["-L", "Sources/CMufi"]),
+                .linkedLibrary("mufiz"),
             ]
         ),
         .executableTarget(
             name: "FerrufiApp",
             dependencies: ["Ferrufi"],
+            linkerSettings: [
+                .unsafeFlags(["-L", "Sources/CMufi"]),
+                .unsafeFlags([
+                    "-Xlinker", "-rpath", "-Xlinker", "@loader_path/../../../Sources/CMufi",
+                    "-Xlinker", "-rpath", "-Xlinker", "@executable_path/../../../Sources/CMufi",
+                ]),
+                .linkedLibrary("mufiz"),
+            ]
         ),
 
         .testTarget(
             name: "FerrufiTests",
-            dependencies: ["Ferrufi"]
+            dependencies: ["Ferrufi"],
+            linkerSettings: [
+                .unsafeFlags(["-L", "Sources/CMufi"]),
+                .unsafeFlags([
+                    "-Xlinker", "-rpath", "-Xlinker", "@loader_path/../../../Sources/CMufi",
+                    "-Xlinker", "-rpath", "-Xlinker", "@executable_path/../../../Sources/CMufi",
+                ]),
+                .linkedLibrary("mufiz"),
+            ]
         ),
     ]
 )

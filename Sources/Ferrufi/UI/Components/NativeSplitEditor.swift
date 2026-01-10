@@ -579,22 +579,32 @@ struct NativeMarkdownPreview: View {
         if parts.count == 1 && parts[0].type == .plain {
             Text(parts[0].content)
         } else {
-            parts.reduce(Text("")) { result, part in
-                switch part.type {
-                case .plain:
-                    result + Text(part.content)
-                case .bold:
-                    result + Text(part.content).bold()
-                case .italic:
-                    result + Text(part.content).italic()
-                case .code:
-                    result
-                        + Text(part.content)
-                        .font(.system(size: 13, design: .monospaced))
-                        .foregroundColor(themeManager.currentTheme.colors.accent)
-                }
-            }
+            Text(buildAttributedString(from: parts))
         }
+    }
+
+    private func buildAttributedString(from parts: [FormattedTextPart]) -> AttributedString {
+        var attributedString = AttributedString()
+
+        for part in parts {
+            var partString = AttributedString(part.content)
+
+            switch part.type {
+            case .plain:
+                break
+            case .bold:
+                partString.font = .body.bold()
+            case .italic:
+                partString.font = .body.italic()
+            case .code:
+                partString.font = .system(size: 13, design: .monospaced)
+                partString.foregroundColor = themeManager.currentTheme.colors.accent
+            }
+
+            attributedString.append(partString)
+        }
+
+        return attributedString
     }
 
     private func parseInlineFormatting(_ text: String) -> [FormattedTextPart] {

@@ -1,0 +1,267 @@
+name: Experimental Release - Build DMG
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  workflow_dispatch:
+    inputs:
+      version_override:
+        description: 'Version override (e.g., 0.1.0-beta1, leave empty for auto)'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build-dmg:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Read Swift tools version from Package.swift
+        id: swift-version
+        run: |
+          SWIFT_VERSION=$(awk '/^\/\/ swift-tools-version:/ { print $3; exit }' Package.swift)
+          echo "version=$SWIFT_VERSION" >> "$GITHUB_OUTPUT"
+          echo "Detected Swift version: $SWIFT_VERSION"
+
+      - name: Set up Swift toolchain
+        uses: swift-actions/setup-swift@v3
+        with:
+          swift-version: ${{ steps.swift-version.outputs.version }}
+
+      - name: Get version from Version.swift
+        id: app-version
+        run: |
+          MAJOR=$(grep -E '^\s*public static let major = ' Sources/Ferrufi/Version.swift | sed 's/.*= //' | tr -d ' ')
+          MINOR=$(grep -E '^\s*public static let minor = ' Sources/Ferrufi/Version.swift | sed 's/.*= //' | tr -d ' ')
+          PATCH=$(grep -E '^\s*public static let patch = ' Sources/Ferrufi/Version.swift | sed 's/.*= //' | tr -d ' ')
+          VERSION="${MAJOR}.${MINOR}.${PATCH}"
+
+          # Create experimental version suffix
+          EXP_VERSION="${VERSION}-exp.${{ github.run_number }}.$(git rev-parse --short HEAD)"
+
+          echo "base_version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "exp_version=$EXP_VERSION" >> "$GITHUB_OUTPUT"
+          echo "Base version: $VERSION"
+          echo "Experimental version: $EXP_VERSION"
+
+      - name: Determine final version
+        id: final-version
+        run: |
+          if [ -n "${{ inputs.version_override }}" ]; then
+            VERSION="${{ inputs.version_override }}"
+            echo "Using manual override version: $VERSION"
+          else
+            VERSION="${{ steps.app-version.outputs.exp_version }}"
+            echo "Using auto-generated version: $VERSION"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Make scripts executable
+        run: |
+          chmod +x scripts/build_dmg_local.sh
+          chmod +x scripts/set_version.sh
+          chmod +x scripts/test_linking.sh
+
+      - name: Verify libmufiz.dylib
+        run: |
+          if [ ! -f "Sources/CMufi/libmufiz.dylib" ]; then
+            echo "ERROR: libmufiz.dylib not found!"
+            exit 1
+          fi
+          echo "✓ libmufiz.dylib found"
+          lipo -info Sources/CMufi/libmufiz.dylib
+
+      - name: Run linking tests
+        run: |
+          ./scripts/test_linking.sh
+
+      - name: Build DMG
+        run: |
+          ./scripts/build_dmg_local.sh \
+            --version "${{ steps.final-version.outputs.version }}" \
+            --no-codesign
+
+      - name: Verify DMG created
+        id: verify-dmg
+        run: |
+          DMG_FILE="Ferrufi-${{ steps.final-version.outputs.version }}-macos.dmg"
+          if [ ! -f "$DMG_FILE" ]; then
+            echo "ERROR: DMG file not created!"
+            exit 1
+          fi
+
+          DMG_SIZE=$(du -h "$DMG_FILE" | cut -f1)
+          echo "✓ DMG created: $DMG_FILE ($DMG_SIZE)"
+          echo "dmg_path=$DMG_FILE" >> "$GITHUB_OUTPUT"
+          echo "dmg_name=$(basename $DMG_FILE)" >> "$GITHUB_OUTPUT"
+
+      - name: Upload DMG as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ferrufi-experimental-dmg
+          path: ${{ steps.verify-dmg.outputs.dmg_path }}
+          retention-days: 30
+
+      - name: Check if experimental release exists
+        id: check-release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view experimental >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Experimental release exists"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "Experimental release does not exist"
+          fi
+
+      - name: Create or update experimental release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          RELEASE_TAG="experimental"
+          DMG_FILE="${{ steps.verify-dmg.outputs.dmg_path }}"
+          VERSION="${{ steps.final-version.outputs.version }}"
+
+          # Create release notes
+          cat > release_notes.md <<EOF
+          # Ferrufi Experimental Build
+
+          **Version:** $VERSION
+          **Build:** #${{ github.run_number }}
+          **Commit:** \`${{ github.sha }}\`
+          **Branch:** ${{ github.ref_name }}
+          **Built:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')
+
+          ## ⚠️ Experimental Build Warning
+
+          This is an **experimental/development build** and may contain bugs or incomplete features.
+          - Not code-signed
+          - For testing purposes only
+          - May be unstable
+
+          ## Installation
+
+          1. Download \`${{ steps.verify-dmg.outputs.dmg_name }}\`
+          2. Open the DMG file
+          3. Drag Ferrufi.app to Applications
+          4. Right-click the app and select "Open" (first time only)
+          5. Allow the app in System Settings → Privacy & Security
+
+          ## What's Included
+
+          - ✓ Ferrufi application
+          - ✓ Mufi runtime (libmufiz.dylib) bundled
+          - ✓ All features from commit ${{ github.sha }}
+
+          ## Build Information
+
+          - **Swift Version:** ${{ steps.swift-version.outputs.version }}
+          - **Platform:** macOS 14.0+
+          - **Architecture:** arm64 (Apple Silicon)
+          - **Build Configuration:** Release
+
+          ## Links
+
+          - [Source Code](${{ github.server_url }}/${{ github.repository }}/tree/${{ github.sha }})
+          - [Commit](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }})
+          - [Workflow Run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+
+          ---
+
+          **Auto-generated experimental build** - Updated on every push to main/develop
+          EOF
+
+          # Delete existing release assets if release exists
+          if [ "${{ steps.check-release.outputs.exists }}" = "true" ]; then
+            echo "Updating existing experimental release..."
+
+            # Delete old DMG assets
+            gh release view experimental --json assets -q '.assets[].name' | \
+              grep -E '\.dmg$' | \
+              xargs -I {} gh release delete-asset experimental {} --yes 2>/dev/null || true
+
+            # Update release
+            gh release edit experimental \
+              --notes-file release_notes.md \
+              --title "Experimental Build #${{ github.run_number }}"
+          else
+            echo "Creating new experimental release..."
+            gh release create experimental \
+              --title "Experimental Build #${{ github.run_number }}" \
+              --notes-file release_notes.md \
+              --prerelease \
+              --target ${{ github.sha }}
+          fi
+
+          # Upload new DMG
+          echo "Uploading DMG to experimental release..."
+          gh release upload experimental "$DMG_FILE" --clobber
+
+          echo "✓ Experimental release updated successfully!"
+
+      - name: Comment on commit (if push event)
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          RELEASE_URL="${{ github.server_url }}/${{ github.repository }}/releases/tag/experimental"
+
+          cat > comment.md <<EOF
+          ## 🚀 Experimental Build Ready
+
+          A new experimental build has been created from this commit!
+
+          **Download:** [${{ steps.verify-dmg.outputs.dmg_name }}]($RELEASE_URL)
+          **Version:** ${{ steps.final-version.outputs.version }}
+          **Build:** #${{ github.run_number }}
+
+          ### Quick Install
+          \`\`\`bash
+          # Download and open
+          open $RELEASE_URL
+          \`\`\`
+
+          ⚠️ **Note:** This is an unsigned experimental build for testing only.
+          EOF
+
+          # Try to comment on the commit (might fail if too many commits)
+          gh api \
+            --method POST \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/${{ github.repository }}/commits/${{ github.sha }}/comments" \
+            -f body="$(cat comment.md)" \
+            2>/dev/null || echo "Could not add commit comment (this is non-critical)"
+
+      - name: Summary
+        run: |
+          cat >> $GITHUB_STEP_SUMMARY <<EOF
+          # ✅ Experimental DMG Build Complete
+
+          ## Build Information
+          - **Version:** ${{ steps.final-version.outputs.version }}
+          - **DMG File:** ${{ steps.verify-dmg.outputs.dmg_name }}
+          - **Swift Version:** ${{ steps.swift-version.outputs.version }}
+          - **Build Number:** #${{ github.run_number }}
+          - **Commit:** \`${{ github.sha }}\`
+
+          ## Download
+          - [Experimental Release](${{ github.server_url }}/${{ github.repository }}/releases/tag/experimental)
+          - [Workflow Artifacts](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+
+          ## Next Steps
+          1. Download the DMG from the experimental release
+          2. Test the application
+          3. Report any issues
+
+          ---
+
+          🎉 Build completed successfully!
+          EOF
