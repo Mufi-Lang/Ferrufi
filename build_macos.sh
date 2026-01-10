@@ -102,7 +102,28 @@ info "Configuration: ${BUILD_CONFIGURATION}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd -P)"
 cd "$SCRIPT_DIR"
 
-# Generate Xcode project (if needed)
+# Generate Xcode project (if needed) and verify Swift toolchain compatibility
+REQUIRED_SWIFT_VERSION="$(awk '/^\/\/ swift-tools-version:/ { print $3; exit }' Package.swift 2>/dev/null || true)"
+if [ -n "$REQUIRED_SWIFT_VERSION" ]; then
+  info "Package requires swift-tools-version: $REQUIRED_SWIFT_VERSION"
+  if command -v swift >/dev/null 2>&1; then
+    INSTALLED_SWIFT_VERSION="$(swift --version 2>/dev/null | awk '/Swift version/{print $3; exit}' || true)"
+    # Extract numeric major/minor for comparison (ignore patch)
+    req_major="$(printf '%s' "$REQUIRED_SWIFT_VERSION" | cut -d. -f1)"
+    req_minor="$(printf '%s' "$REQUIRED_SWIFT_VERSION" | cut -d. -f2 || echo 0)"
+    inst_major="$(printf '%s' "$INSTALLED_SWIFT_VERSION" | cut -d. -f1 || echo 0)"
+    inst_minor="$(printf '%s' "$INSTALLED_SWIFT_VERSION" | cut -d. -f2 || echo 0)"
+    if [ "$inst_major" -lt "$req_major" ] || { [ "$inst_major" -eq "$req_major" ] && [ "$inst_minor" -lt "$req_minor" ]; }; then
+      error "Installed Swift ($INSTALLED_SWIFT_VERSION) is older than the package's required swift-tools-version ($REQUIRED_SWIFT_VERSION)."
+      error "Please upgrade your Swift toolchain (install newer Xcode or Swift toolchain) or run on a runner with Swift $REQUIRED_SWIFT_VERSION+."
+      error "Example: on GitHub Actions use an Xcode image that includes Swift $REQUIRED_SWIFT_VERSION or add a step to install the matching toolchain."
+      exit 1
+    fi
+  else
+    warn "swift not found in PATH; cannot check swift-tools-version. Proceeding hoping an .xcodeproj already exists."
+  fi
+fi
+
 if command -v swift >/dev/null 2>&1; then
   info "Generating Xcode project from Package.swift (swift package generate-xcodeproj)"
   swift package generate-xcodeproj || info "swift package generate-xcodeproj failed (non-fatal) — if an .xcodeproj already exists this may be fine"
