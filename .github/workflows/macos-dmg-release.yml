@@ -27,32 +27,16 @@ jobs:
             echo "gh already installed"
           fi
 
-      - name: Install Swift toolchain matching Package.swift (swiftenv)
-        # Installs swiftenv and the required swift version from Package.swift (e.g. 6.2)
+      - name: Read swift-tools-version
+        id: read-version
         run: |
-          set -euo pipefail
-          echo "Ensuring swiftenv is installed..."
-          if ! command -v swiftenv >/dev/null 2>&1; then
-            brew update
-            brew install swiftenv || true
-          else
-            echo "swiftenv already installed"
-          fi
-
-          SWIFT_REQ=$(awk '/^\/\/ swift-tools-version:/ { print $3; exit }' Package.swift || true)
-          if [ -n "$SWIFT_REQ" ]; then
-            # Ensure we have a patch component (e.g. turn 6.2 into 6.2.0)
-            if [[ "$SWIFT_REQ" != *.*.* ]]; then
-              SWIFT_REQ="${SWIFT_REQ}.0"
-            fi
-            echo "Requested Swift: $SWIFT_REQ"
-            swiftenv install "$SWIFT_REQ" || echo "swiftenv install failed (may already be installed)"
-            swiftenv local "$SWIFT_REQ" || true
-            export PATH="$(swiftenv root)/shims:$PATH"
-            swift --version
-          else
-            echo "No swift-tools-version found in Package.swift; skipping swiftenv install"
-          fi
+          SWIFT_LINE=$(awk '/^\/\/ swift-tools-version:/ { print $3; exit }' Package.swift)
+          echo "raw=$SWIFT_LINE" >> "$GITHUB_OUTPUT"
+          echo "swift-version=$SWIFT_LINE" >> "$GITHUB_OUTPUT"
+      - name: Set up Swift via swift-actions/setup-swift
+        uses: swift-actions/setup-swift@v3
+        with:
+          swift-version: ${{ steps.read-version.outputs.swift-version }}
 
       - name: Build DMG and publish 'experimental' release
         # The script will:
