@@ -112,11 +112,13 @@ fi
 
 # Detect the Xcode project (use first .xcodeproj)
 PROJECT_XCODEPROJ="$(ls -1 *.xcodeproj 2>/dev/null | head -n 1 || true)"
-if [ -z "$PROJECT_XCODEPROJ" ]; then
-  error "No .xcodeproj found. If your project is SwiftPM-only, make sure 'swift package generate-xcodeproj' created one."
-  exit 1
+if [ -n "$PROJECT_XCODEPROJ" ]; then
+  info "Using project: $PROJECT_XCODEPROJ"
+  BUILD_METHOD="xcode"
+else
+  warn "No .xcodeproj found. Falling back to 'swift build' if available and creating a minimal .app bundle for product '$SCHEME'."
+  BUILD_METHOD="swift"
 fi
-info "Using project: $PROJECT_XCODEPROJ"
 
 # xcodebuild flags: avoid requiring signing when no identity provided
 XCODE_FLAGS=()
@@ -124,17 +126,87 @@ if [ -z "${CODESIGN_IDENTITY:-}" ]; then
   XCODE_FLAGS+=(CODE_SIGNING_ALLOWED=NO)
 fi
 
-# Build
-info "Building Xcode project..."
-set -o pipefail
-xcodebuild -project "$PROJECT_XCODEPROJ" \
-  -scheme "$SCHEME" \
-  -configuration "$BUILD_CONFIGURATION" \
-  -derivedDataPath "$DERIVED_DATA_PATH" \
-  clean build "${XCODE_FLAGS[@]}" 2>&1 | sed -u 's/^/[xcodebuild] /' || {
-    error "xcodebuild failed; aborting"
+# Build (either via xcodebuild or swift build fallback)
+if [ "$BUILD_METHOD" = "xcode" ]; then
+  info "Building Xcode project..."
+  set -o pipefail
+  xcodebuild -project "$PROJECT_XCODEPROJ" \
+    -scheme "$SCHEME" \
+    -configuration "$BUILD_CONFIGURATION" \
+    -derivedDataPath "$DERIVED_DATA_PATH" \
+    clean build "${XCODE_FLAGS[@]}" 2>&1 | sed -u 's/^/[xcodebuild] /' || {
+      error "xcodebuild failed; aborting"
+      exit 2
+    }
+else
+  if command -v swift >/dev/null 2>&1; then
+    # Map the Xcode-style configuration to Swift build config
+    if [ "${BUILD_CONFIGURATION}" = "Release" ]; then
+      SWIFT_CFG=release
+    else
+      SWIFT_CFG=debug
+    fi
+
+    info "Running 'swift build' for product '$SCHEME' (configuration: $SWIFT_CFG)"
+    swift build -c "$SWIFT_CFG" --product "$SCHEME" || {
+      error "swift build failed; aborting"
+      exit 2
+    }
+
+    # Attempt to locate the built executable under .build
+    SWIFT_EXECUTABLE="$(find .build -type f -name "$SCHEME" -print -quit 2>/dev/null || true)"
+    if [ -z "$SWIFT_EXECUTABLE" ]; then
+      SWIFT_EXECUTABLE="$(find .build -type f -name "$SCHEME*" -print -quit 2>/dev/null || true)"
+    fi
+
+    if [ -z "$SWIFT_EXECUTABLE" ]; then
+      error "Could not find built executable for product '$SCHEME' under .build; aborting"
+      exit 2
+    fi
+
+    info "Found Swift-built executable: $SWIFT_EXECUTABLE"
+
+    # Prepare a minimal .app bundle so packaging steps can continue the same way as xcodebuild
+    # Use the same RELEASE_DIR layout the rest of the script expects
+    RELEASE_DIR="${DERIVED_DATA_PATH}/Build/Products/${BUILD_CONFIGURATION}"
+    mkdir -p "$RELEASE_DIR"
+
+    APP_NAME="$SCHEME"
+    APP_BUNDLE="$RELEASE_DIR/$APP_NAME.app"
+
+    info "Creating minimal app bundle at $APP_BUNDLE"
+    mkdir -p "$APP_BUNDLE/Contents/MacOS" "$APP_BUNDLE/Contents/Resources"
+
+    cat > "$APP_BUNDLE/Contents/Info.plist" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "https://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleExecutable</key>
+  <string>$APP_NAME</string>
+  <key>CFBundleIdentifier</key>
+  <string>org.ferrufi.$APP_NAME</string>
+  <key>CFBundleName</key>
+  <string>$APP_NAME</string>
+  <key>CFBundleVersion</key>
+  <string>$VERSION</string>
+  <key>CFBundleShortVersionString</key>
+  <string>$VERSION</string>
+  <key>LSMinimumSystemVersion</key>
+  <string>14.0</string>
+</dict>
+</plist>
+EOF
+
+    cp -f "$SWIFT_EXECUTABLE" "$APP_BUNDLE/Contents/MacOS/$APP_NAME"
+    chmod +x "$APP_BUNDLE/Contents/MacOS/$APP_NAME"
+
+    info "Minimal app bundle created at $APP_BUNDLE"
+  else
+    error "swift not available; cannot perform fallback build; aborting"
     exit 2
-  }
+  fi
+fi
 
 # Copy Mufi dynamic library into .build/* so swift-run and run-time testing works
 if [ -x "./scripts/copy_mufiz_dylib.sh" ]; then
