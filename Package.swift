@@ -4,38 +4,43 @@
 import PackageDescription
 
 let package = Package(
-    name: "Iron",
+    name: "Ferrufi",
     platforms: [
         .macOS(.v14)
     ],
     products: [
         .library(
-            name: "Iron",
-            targets: ["Iron"]
+            name: "Ferrufi",
+            targets: ["Ferrufi"]
         ),
         .executable(
-            name: "IronApp",
-            targets: ["IronApp"]
+            name: "FerrufiApp",
+            targets: ["FerrufiApp"]
         ),
     ],
     dependencies: [
         // No external dependencies - using only system frameworks
     ],
     targets: [
+        .systemLibrary(
+            name: "CMufi",
+            path: "Sources/CMufi"
+        ),
         .target(
-            name: "Iron",
-            dependencies: [],
+            name: "Ferrufi",
+            dependencies: ["CMufi"],
             resources: [
                 .process("UI/Metal/Shaders.metal")
             ]
         ),
         .executableTarget(
-            name: "IronApp",
-            dependencies: ["Iron"]
+            name: "FerrufiApp",
+            dependencies: ["Ferrufi"],
         ),
+
         .testTarget(
-            name: "IronTests",
-            dependencies: ["Iron"]
+            name: "FerrufiTests",
+            dependencies: ["Ferrufi"]
         ),
     ]
 )

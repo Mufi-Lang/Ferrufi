@@ -1,6 +1,6 @@
 import XCTest
 
-@testable import Iron
+@testable import Ferrufi
 
 final class IronTests: XCTestCase {
     func testExample() throws {

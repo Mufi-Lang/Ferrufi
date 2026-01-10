@@ -6,7 +6,7 @@
 */
 
 import XCTest
-@testable import Iron
+@testable import Ferrufi
 
 @MainActor
 final class SettingsTests: XCTestCase {

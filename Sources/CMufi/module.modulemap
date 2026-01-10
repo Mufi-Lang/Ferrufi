@@ -1,0 +1,5 @@
+module CMufi [system] {
+    header "mufiz.h"
+    export *
+    link "mufiz"
+}
