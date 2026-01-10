@@ -48,10 +48,10 @@ jobs:
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
-          chmod +x build_macos.sh
+          chmod +x Ferrufi/build_macos.sh
           # Provide a clear, incremental version for the DMG. You can override VERSION if you prefer.
           export VERSION="exp-${{ github.run_number }}-$(git rev-parse --short HEAD)"
-          ./build_macos.sh
+          ./Ferrufi/build_macos.sh
 
       - name: Upload DMG as workflow artifact
         uses: actions/upload-artifact@v4
