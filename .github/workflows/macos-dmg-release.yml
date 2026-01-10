@@ -1,0 +1,53 @@
+name: Build macOS DMG (experimental)
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+# Require write permission to repository contents so the workflow can create/update releases.
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Ensure gh CLI is available
+        # macOS runners usually have gh preinstalled; this step installs it if missing.
+        run: |
+          if ! command -v gh >/dev/null 2>&1; then
+            brew update
+            brew install gh
+          else
+            echo "gh already installed"
+          fi
+
+      - name: Build DMG and publish 'experimental' release
+        # The script will:
+        # - build the app,
+        # - create a DMG named Ferrufi-<VERSION>-macos.dmg,
+        # - and (if GITHUB_TOKEN is present and gh is available) create/update the 'experimental' release and upload the DMG using `gh` (clobbers the existing asset).
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          chmod +x Ferrufi/build_macos.sh
+          # Provide a clear, incremental version for the DMG. You can override VERSION if you prefer.
+          export VERSION="exp-${{ github.run_number }}-$(git rev-parse --short HEAD)"
+          ./Ferrufi/build_macos.sh
+
+      - name: Upload DMG as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ferrufi-macos-dmg
+          path: ${{ env.DMG_PATH }}
+
+      - name: Show DMG path
+        run: |
+          echo "DMG generated at: $DMG_PATH"
