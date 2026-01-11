@@ -56,6 +56,78 @@ swift build -c release
 - Should be run manually for local development builds
 - Safe to run multiple times (idempotent)
 
+### `build_app.sh`
+
+**Purpose**: Build Ferrufi as a standalone macOS .app bundle (no DMG) for direct distribution.
+
+**Usage**:
+```bash
+# Basic build (creates Ferrufi.app in current directory)
+./scripts/build_app.sh
+
+# Build with specific version
+./scripts/build_app.sh --version 1.0.0
+
+# Build and create a zip archive
+./scripts/build_app.sh --zip
+
+# Build to specific location
+./scripts/build_app.sh --output ~/Desktop
+
+# Build debug version
+./scripts/build_app.sh --debug
+
+# Combine options
+./scripts/build_app.sh --version 1.0.0 --zip --output ~/Desktop
+```
+
+**What it does**:
+1. ✓ Detects version from git or Version.swift
+2. ✓ Verifies libmufiz.dylib exists and checks architecture
+3. ✓ Builds the app using Swift Package Manager (release by default)
+3. ✓ Runs linking validation tests
+4. ✓ Creates a proper .app bundle structure
+5. ✓ Bundles libmufiz.dylib into Contents/Frameworks/
+6. ✓ Fixes dylib install names and rpaths
+7. ✓ Creates Info.plist with proper bundle information
+8. ✓ Outputs: `Ferrufi.app` (ready to use or distribute)
+9. ✓ Optionally creates a zip archive for easy sharing
+
+**Options**:
+- `--version <ver>` - Set explicit version (default: auto-detect)
+- `--debug` - Build debug configuration instead of release
+- `--output <path>` - Output directory for .app (default: current directory)
+- `--zip` - Create a .zip archive of the .app bundle
+- `-h, --help` - Show help message
+
+**When to run**:
+- When you want a standalone .app without DMG packaging
+- For quick builds and testing
+- When distributing via zip or direct download
+- For integration with custom distribution workflows
+
+**Output**:
+- `.app` bundle in output directory (default: project root)
+- Optional zip archive: `Ferrufi-<VERSION>-macos.zip`
+- Typical size: ~3-4 MB for .app, ~2-3 MB for zip
+
+**Example workflow**:
+```bash
+# Quick build for testing
+./scripts/build_app.sh
+
+# Build and zip for distribution
+./scripts/build_app.sh --version 1.0.0 --zip
+
+# Copy to Applications
+cp -R Ferrufi.app /Applications/
+
+# Or share the zip file
+./scripts/build_app.sh --zip --output ~/Desktop
+```
+
+**Note**: This is the recommended way to create distributable builds. Use `build_dmg_local.sh` only if you specifically need a DMG file.
+
 ### `build_dmg_local.sh`
 
 **Purpose**: Build Ferrufi as a macOS .app bundle and package it in a DMG file for local distribution.
@@ -71,9 +143,6 @@ swift build -c release
 # Build debug version
 ./scripts/build_dmg_local.sh --debug
 
-# Skip code signing
-./scripts/build_dmg_local.sh --no-codesign
-
 # Keep staging directory for inspection
 ./scripts/build_dmg_local.sh --keep-staging
 ```
@@ -86,19 +155,14 @@ swift build -c release
 5. ✓ Bundles libmufiz.dylib into Contents/Frameworks/
 6. ✓ Fixes dylib install names and rpaths
 7. ✓ Creates Info.plist with proper bundle information
-8. ✓ Optionally code signs the app and dylib
-9. ✓ Creates a compressed DMG with Applications symlink
-10. ✓ Outputs: `Ferrufi-<VERSION>-macos.dmg`
+8. ✓ Creates a compressed DMG with Applications symlink
+9. ✓ Outputs: `Ferrufi-<VERSION>-macos.dmg`
 
 **Options**:
 - `--version <ver>` - Set explicit version (default: auto-detect)
 - `--debug` - Build debug configuration instead of release
-- `--no-codesign` - Skip code signing
 - `--keep-staging` - Keep temporary DMG staging directory
 - `-h, --help` - Show help message
-
-**Environment variables**:
-- `CODESIGN_IDENTITY` - Code signing identity (e.g. "Developer ID Application: Your Name")
 
 **When to run**:
 - To create a distributable DMG for local testing
@@ -283,20 +347,42 @@ chmod +x scripts/copy_mufiz_dylib.sh
 chmod +x scripts/build_dmg_local.sh
 ```
 
-## Building a DMG
+## Building for Distribution
 
-To create a distributable DMG file:
+### Standalone .app (Recommended)
+
+To create a distributable .app bundle:
 
 ```bash
-# Quick build (no code signing)
-./scripts/build_dmg_local.sh --no-codesign
+# Quick build
+./scripts/build_app.sh
+
+# Build with version and zip for easy sharing
+./scripts/build_app.sh --version 1.0.0 --zip
+
+# Build to specific location
+./scripts/build_app.sh --zip --output ~/Desktop
+```
+
+The .app and optional zip will be created in the project root directory (or specified output directory).
+
+**Why use .app instead of DMG?**
+- Simpler distribution (users can directly copy to Applications)
+- Smaller file size when zipped
+- Easier to update and redistribute
+- No need for DMG mounting/unmounting
+- Can be shared via zip, direct download, or cloud storage
+
+### DMG (Alternative)
+
+If you specifically need a DMG file:
+
+```bash
+# Quick build
+./scripts/build_dmg_local.sh
 
 # Build with specific version
 ./scripts/build_dmg_local.sh --version 1.0.0
-
-# Build with code signing (if you have a Developer ID)
-export CODESIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)"
-./scripts/build_dmg_local.sh
 ```
 
 The DMG will be created in the project root directory.

@@ -118,7 +118,7 @@ git add Sources/Ferrufi/Version.swift
 git commit -m "Bump version to 1.1.0"
 
 # 4. Build and test DMG
-./scripts/build_dmg_local.sh --no-codesign
+./scripts/build_dmg_local.sh 
 open Ferrufi-1.1.0-macos.dmg
 
 # 5. Tag the release
@@ -136,11 +136,11 @@ For beta/alpha releases, use git branch names or add suffix in commit message:
 ```bash
 # Build from develop branch
 git checkout develop
-./scripts/build_dmg_local.sh --no-codesign
+./scripts/build_dmg_local.sh 
 # Creates: Ferrufi-1.1.0-macos.dmg (from Version.swift)
 
 # Or specify custom version
-./scripts/build_dmg_local.sh --version 1.1.0-beta1 --no-codesign
+./scripts/build_dmg_local.sh --version 1.1.0-beta1 
 ```
 
 ## Using Version in Code
@@ -273,7 +273,7 @@ Example workflow snippet:
     echo "version=$VERSION" >> $GITHUB_OUTPUT
 
 - name: Build DMG
-  run: ./scripts/build_dmg_local.sh --no-codesign
+  run: ./scripts/build_dmg_local.sh 
 ```
 
 ### Version in Release Notes
@@ -363,7 +363,7 @@ swift package clean
 ./scripts/set_version.sh 1.2.0
 
 # Build fresh DMG
-./scripts/build_dmg_local.sh --no-codesign
+./scripts/build_dmg_local.sh 
 ```
 
 ### Git tag mismatch

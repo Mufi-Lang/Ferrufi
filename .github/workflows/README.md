@@ -19,12 +19,12 @@ Creates experimental/development builds for testing new features and changes.
 3. ✓ Reads version from `Sources/Ferrufi/Version.swift`
 4. ✓ Generates experimental version: `0.0.0-exp.123.abc1234`
 5. ✓ Runs linking validation tests
-6. ✓ Builds unsigned DMG
+6. ✓ Builds unsigned .app with zip archive
 7. ✓ Creates/updates `experimental` GitHub release
-8. ✓ Uploads DMG as workflow artifact (30 days retention)
+8. ✓ Uploads zip as workflow artifact (30 days retention)
 
 **Output:**
-- DMG: `Ferrufi-0.0.0-exp.{run_number}.{commit}-macos.dmg`
+- Zip: `Ferrufi-0.0.0-exp.{run_number}.{commit}-macos.zip`
 - Release: https://github.com/{owner}/{repo}/releases/tag/experimental
 - Artifact: Available in workflow run
 
@@ -39,7 +39,8 @@ gh workflow run experimental-release.yml -f version_override=0.1.0-beta1
 
 **Usage:**
 - Automatically builds on every push to main/develop
-- Download from experimental release for testing
+- Download zip from experimental release for testing
+- Extract and drag to Applications folder
 - Not code-signed (users need to right-click → Open)
 - Automatically overwrites previous experimental release
 
@@ -58,13 +59,14 @@ Creates official release builds with proper versioning and GitHub releases.
 1. ✓ Detects version from git tag or manual input
 2. ✓ Sets up correct Swift toolchain
 3. ✓ Runs linking validation tests
-4. ✓ Builds DMG (optionally code-signed)
+4. ✓ Builds .app with zip archive (optionally code-signed)
 5. ✓ Creates GitHub release with release notes
-6. ✓ Uploads DMG to release
-7. ✓ Uploads DMG as workflow artifact (90 days retention)
+6. ✓ Uploads zip to release
+7. ✓ Uploads zip as workflow artifact (90 days retention)
 
 **Output:**
-- DMG: `Ferrufi-{version}-macos.dmg`
+- Zip: `Ferrufi-{version}-macos.zip`
+- App: `Ferrufi.app` (inside zip)
 - Release: https://github.com/{owner}/{repo}/releases/tag/v{version}
 - Artifact: Available in workflow run
 
@@ -141,7 +143,7 @@ git push origin v1.0.0
 
 **Official releases:**
 - ✓ Semantic versioning: `1.0.0`
-- ✓ Optionally code-signed
+- ✓ Unsigned (users need to right-click → Open first time)
 - ✓ Creates permanent GitHub release
 - ✓ Includes release notes
 - ✓ For distribution

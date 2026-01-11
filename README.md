@@ -12,6 +12,31 @@ to be able to run scripts, REPL mode and the IDE will allow for documentation to
 
 This project is currently in the early stages of development. Contributions and suggestions are welcome!
 
+## Quick Start - Building for Distribution
+
+### Build Standalone App (Recommended)
+
+Create a distributable `.app` bundle with optional zip archive:
+
+```bash
+# Quick build
+./scripts/build_app.sh --zip
+
+# This creates:
+# - Ferrufi.app (ready to use)
+# - Ferrufi-X.Y.Z-macos.zip (for sharing)
+```
+
+### Build DMG (Alternative)
+
+Create a traditional DMG installer:
+
+```bash
+./scripts/build_dmg_local.sh
+```
+
+**See [DISTRIBUTION_QUICKSTART.md](DISTRIBUTION_QUICKSTART.md) for more options and [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md) for complete guide.**
+
 Mufi Integration
 - The project now includes native integration with the Mufi runtime via a system library.
   - Place the runtime artifacts into `include/`:
@@ -28,18 +53,7 @@ Mufi Integration
     - Run `./scripts/fix_mufiz_deployment_target.sh` to update the dylib's deployment target to macOS 14.0 (matching the Swift package requirement). This fixes linker warnings about version mismatches.
   - After building, ensure the dynamic library is placed where the runtime loader can find it. A helper script is included for this:
     - `./scripts/copy_mufiz_dylib.sh` — copies `include/libmufiz.dylib` into `.build/*/(debug|release)/` directories so `swift run` or locally-built executables can locate it at runtime. `build_macos.sh` invokes this script automatically.
-  - Codesigning (optional, recommended for distribution)
-    - `build_macos.sh` can also codesign the bundled `libmufiz.dylib` and the final `.app` if you set the `CODESIGN_IDENTITY` environment variable prior to building. For example:
-      ```
-      export CODESIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)"
-      ./build_macos.sh
-      ```
-    - If `CODESIGN_IDENTITY` is not set, the bundling step still copies the dylib into the app bundle but will skip signing. For quick local ad-hoc signing you can set:
-      ```
-      export CODESIGN_IDENTITY='-'
-      ./build_macos.sh
-      ```
-    - The build script will attempt to sign the library and the bundle and will print warnings if signing fails. Adjust the signing identity and options as required by your distribution pipeline or CI workflow.
+
 
 ## Using the Mufi-Lang REPL in the Editor
 

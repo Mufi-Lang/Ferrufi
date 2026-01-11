@@ -1,4 +1,4 @@
-name: Experimental Release - Build DMG
+name: Experimental Release - Build App
 
 on:
   push:
@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       version_override:
-        description: 'Version override (e.g., 0.1.0-beta1, leave empty for auto)'
+        description: "Version override (e.g., 0.1.0-beta1, leave empty for auto)"
         required: false
         type: string
 
@@ -16,7 +16,7 @@ permissions:
   contents: write
 
 jobs:
-  build-dmg:
+  build-app:
     runs-on: macos-latest
 
     steps:
@@ -65,7 +65,7 @@ jobs:
 
       - name: Make scripts executable
         run: |
-          chmod +x scripts/build_dmg_local.sh
+          chmod +x scripts/build_app.sh
           chmod +x scripts/set_version.sh
           chmod +x scripts/test_linking.sh
 
@@ -82,31 +82,44 @@ jobs:
         run: |
           ./scripts/test_linking.sh
 
-      - name: Build DMG
+      - name: Build App with Zip
         run: |
-          ./scripts/build_dmg_local.sh \
+          ./scripts/build_app.sh \
             --version "${{ steps.final-version.outputs.version }}" \
-            --no-codesign
+            --zip
 
-      - name: Verify DMG created
-        id: verify-dmg
+      - name: Verify Build Artifacts
+        id: verify-build
         run: |
-          DMG_FILE="Ferrufi-${{ steps.final-version.outputs.version }}-macos.dmg"
-          if [ ! -f "$DMG_FILE" ]; then
-            echo "ERROR: DMG file not created!"
+          ZIP_FILE="Ferrufi-${{ steps.final-version.outputs.version }}-macos.zip"
+          APP_BUNDLE="Ferrufi.app"
+
+          if [ ! -f "$ZIP_FILE" ]; then
+            echo "ERROR: Zip file not created!"
             exit 1
           fi
 
-          DMG_SIZE=$(du -h "$DMG_FILE" | cut -f1)
-          echo "✓ DMG created: $DMG_FILE ($DMG_SIZE)"
-          echo "dmg_path=$DMG_FILE" >> "$GITHUB_OUTPUT"
-          echo "dmg_name=$(basename $DMG_FILE)" >> "$GITHUB_OUTPUT"
+          if [ ! -d "$APP_BUNDLE" ]; then
+            echo "ERROR: App bundle not created!"
+            exit 1
+          fi
 
-      - name: Upload DMG as artifact
+          ZIP_SIZE=$(du -h "$ZIP_FILE" | cut -f1)
+          APP_SIZE=$(du -sh "$APP_BUNDLE" | cut -f1)
+
+          echo "✓ App created: $APP_BUNDLE ($APP_SIZE)"
+          echo "✓ Zip created: $ZIP_FILE ($ZIP_SIZE)"
+
+          echo "zip_path=$ZIP_FILE" >> "$GITHUB_OUTPUT"
+          echo "zip_name=$(basename $ZIP_FILE)" >> "$GITHUB_OUTPUT"
+          echo "zip_size=$ZIP_SIZE" >> "$GITHUB_OUTPUT"
+          echo "app_size=$APP_SIZE" >> "$GITHUB_OUTPUT"
+
+      - name: Upload Zip as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ferrufi-experimental-dmg
-          path: ${{ steps.verify-dmg.outputs.dmg_path }}
+          name: ferrufi-experimental-zip
+          path: ${{ steps.verify-build.outputs.zip_path }}
           retention-days: 30
 
       - name: Check if experimental release exists
@@ -127,7 +140,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           RELEASE_TAG="experimental"
-          DMG_FILE="${{ steps.verify-dmg.outputs.dmg_path }}"
+          ZIP_FILE="${{ steps.verify-build.outputs.zip_path }}"
           VERSION="${{ steps.final-version.outputs.version }}"
 
           # Create release notes
@@ -149,15 +162,28 @@ jobs:
 
           ## Installation
 
-          1. Download \`${{ steps.verify-dmg.outputs.dmg_name }}\`
-          2. Open the DMG file
-          3. Drag Ferrufi.app to Applications
-          4. Right-click the app and select "Open" (first time only)
-          5. Allow the app in System Settings → Privacy & Security
+          1. Download \`${{ steps.verify-build.outputs.zip_name }}\`
+          2. Double-click to extract \`Ferrufi.app\`
+          3. Drag \`Ferrufi.app\` to Applications folder
+          4. **Right-click the app and select "Open"** (first time only)
+          5. Click "Open" in the security dialog
+
+          **Quick install via terminal:**
+          \`\`\`bash
+          # Download and extract
+          unzip ${{ steps.verify-build.outputs.zip_name }}
+
+          # Copy to Applications
+          cp -R Ferrufi.app /Applications/
+
+          # Remove quarantine and launch
+          xattr -cr /Applications/Ferrufi.app
+          open /Applications/Ferrufi.app
+          \`\`\`
 
           ## What's Included
 
-          - ✓ Ferrufi application
+          - ✓ Ferrufi application (${{ steps.verify-build.outputs.app_size }})
           - ✓ Mufi runtime (libmufiz.dylib) bundled
           - ✓ All features from commit ${{ github.sha }}
 
@@ -167,12 +193,14 @@ jobs:
           - **Platform:** macOS 14.0+
           - **Architecture:** arm64 (Apple Silicon)
           - **Build Configuration:** Release
+          - **Zip Size:** ${{ steps.verify-build.outputs.zip_size }}
 
           ## Links
 
           - [Source Code](${{ github.server_url }}/${{ github.repository }}/tree/${{ github.sha }})
           - [Commit](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }})
           - [Workflow Run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+          - [Documentation](${{ github.server_url }}/${{ github.repository }}/blob/${{ github.sha }}/DISTRIBUTION_QUICKSTART.md)
 
           ---
 
@@ -183,9 +211,9 @@ jobs:
           if [ "${{ steps.check-release.outputs.exists }}" = "true" ]; then
             echo "Updating existing experimental release..."
 
-            # Delete old DMG assets
+            # Delete old zip assets
             gh release view experimental --json assets -q '.assets[].name' | \
-              grep -E '\.dmg$' | \
+              grep -E '\.(zip|dmg)$' | \
               xargs -I {} gh release delete-asset experimental {} --yes 2>/dev/null || true
 
             # Update release
@@ -201,9 +229,9 @@ jobs:
               --target ${{ github.sha }}
           fi
 
-          # Upload new DMG
-          echo "Uploading DMG to experimental release..."
-          gh release upload experimental "$DMG_FILE" --clobber
+          # Upload new zip
+          echo "Uploading zip to experimental release..."
+          gh release upload experimental "$ZIP_FILE" --clobber
 
           echo "✓ Experimental release updated successfully!"
 
@@ -219,14 +247,18 @@ jobs:
 
           A new experimental build has been created from this commit!
 
-          **Download:** [${{ steps.verify-dmg.outputs.dmg_name }}]($RELEASE_URL)
+          **Download:** [${{ steps.verify-build.outputs.zip_name }}]($RELEASE_URL)
           **Version:** ${{ steps.final-version.outputs.version }}
           **Build:** #${{ github.run_number }}
+          **Size:** ${{ steps.verify-build.outputs.zip_size }}
 
           ### Quick Install
           \`\`\`bash
-          # Download and open
-          open $RELEASE_URL
+          # Download the zip from releases, then:
+          unzip ${{ steps.verify-build.outputs.zip_name }}
+          cp -R Ferrufi.app /Applications/
+          xattr -cr /Applications/Ferrufi.app
+          open /Applications/Ferrufi.app
           \`\`\`
 
           ⚠️ **Note:** This is an unsigned experimental build for testing only.
@@ -243,11 +275,13 @@ jobs:
       - name: Summary
         run: |
           cat >> $GITHUB_STEP_SUMMARY <<EOF
-          # ✅ Experimental DMG Build Complete
+          # ✅ Experimental App Build Complete
 
           ## Build Information
           - **Version:** ${{ steps.final-version.outputs.version }}
-          - **DMG File:** ${{ steps.verify-dmg.outputs.dmg_name }}
+          - **Zip File:** ${{ steps.verify-build.outputs.zip_name }}
+          - **Zip Size:** ${{ steps.verify-build.outputs.zip_size }}
+          - **App Size:** ${{ steps.verify-build.outputs.app_size }}
           - **Swift Version:** ${{ steps.swift-version.outputs.version }}
           - **Build Number:** #${{ github.run_number }}
           - **Commit:** \`${{ github.sha }}\`
@@ -256,9 +290,18 @@ jobs:
           - [Experimental Release](${{ github.server_url }}/${{ github.repository }}/releases/tag/experimental)
           - [Workflow Artifacts](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
 
+          ## Installation
+          \`\`\`bash
+          # Download from releases, then:
+          unzip ${{ steps.verify-build.outputs.zip_name }}
+          cp -R Ferrufi.app /Applications/
+          xattr -cr /Applications/Ferrufi.app
+          open /Applications/Ferrufi.app
+          \`\`\`
+
           ## Next Steps
-          1. Download the DMG from the experimental release
-          2. Test the application
+          1. Download the zip from the experimental release
+          2. Extract and test the application
           3. Report any issues
 
           ---

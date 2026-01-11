@@ -1,23 +1,23 @@
 #!/bin/zsh
 #
-# build_dmg_local.sh — Build Ferrufi macOS .app and package as a DMG (local builds only)
+# build_app.sh — Build Ferrufi macOS .app bundle (standalone, no DMG)
 #
-# This is a simplified version of the build script specifically for local development.
-# No GitHub upload, no CI/CD complexity - just builds a DMG for local distribution.
+# This script builds a standalone .app bundle that can be distributed directly
+# or zipped for easier sharing. No DMG creation - just a ready-to-use app.
 #
 # Usage:
-#   ./scripts/build_dmg_local.sh [options]
+#   ./scripts/build_app.sh [options]
 #
 # Options:
 #   --version <ver>       Set explicit version (default: auto-detect from git)
 #   --debug               Build debug configuration instead of release
-#   --keep-staging        Keep temporary DMG staging directory after build
+#   --output <path>       Output directory for .app (default: current directory)
+#   --zip                 Create a .zip archive of the .app bundle
 #   -h, --help            Show this help message
 #
 # Requirements:
 #   - macOS 14.0 or later
 #   - Swift 6.2 or later
-#   - Xcode command line tools (hdiutil)
 #
 set -euo pipefail
 IFS=$'\n\t'
@@ -40,28 +40,33 @@ section() { printf "\n${BOLD}━━━ %s ━━━${NC}\n" "$*"; }
 # Defaults
 SCHEME="FerrufiApp"
 BUILD_CONFIGURATION="Release"
-KEEP_STAGING=0
 VERSION=""
+OUTPUT_DIR=""
+CREATE_ZIP=0
 
 # Parse arguments
 print_usage() {
   cat <<USAGE
 Usage: $0 [options]
 
-Build Ferrufi as a macOS .app and package it in a DMG for distribution.
+Build Ferrufi as a standalone macOS .app bundle for distribution.
 
 Options:
   --version <ver>       Set explicit version (default: auto-detect from git)
   --debug               Build debug configuration instead of release
-  --keep-staging        Keep temporary DMG staging directory
+  --output <path>       Output directory for .app (default: current directory)
+  --zip                 Create a .zip archive of the .app bundle
   -h, --help            Show this help message
 
 Examples:
-  # Basic build
+  # Basic build (creates Ferrufi.app in current directory)
   $0
 
-  # Build with specific version
-  $0 --version 1.0.0
+  # Build with specific version and create zip
+  $0 --version 1.0.0 --zip
+
+  # Build to specific location
+  $0 --output ~/Desktop
 
   # Build debug version
   $0 --debug
@@ -84,8 +89,13 @@ while [ "$#" -gt 0 ]; do
       BUILD_CONFIGURATION="Debug"
       shift
       ;;
-    --keep-staging)
-      KEEP_STAGING=1
+    --output)
+      shift
+      OUTPUT_DIR="${1:-}"
+      shift
+      ;;
+    --zip)
+      CREATE_ZIP=1
       shift
       ;;
     *)
@@ -101,7 +111,7 @@ cat <<BANNER
 ${BOLD}
 ╔═══════════════════════════════════════════════════════╗
 ║                                                       ║
-║           Ferrufi DMG Builder (Local)                ║
+║           Ferrufi App Builder (Standalone)           ║
 ║                                                       ║
 ╚═══════════════════════════════════════════════════════╝
 ${NC}
@@ -113,6 +123,19 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd -P)"
 cd "$REPO_ROOT"
 
 info "Working directory: $REPO_ROOT"
+
+# Set output directory if not specified
+if [ -z "$OUTPUT_DIR" ]; then
+  OUTPUT_DIR="$REPO_ROOT"
+else
+  # Expand and normalize path
+  OUTPUT_DIR="$(cd "$OUTPUT_DIR" 2>/dev/null && pwd -P || echo "$OUTPUT_DIR")"
+  if [ ! -d "$OUTPUT_DIR" ]; then
+    error "Output directory does not exist: $OUTPUT_DIR"
+    exit 1
+  fi
+fi
+info "Output directory: $OUTPUT_DIR"
 
 # Determine version if not provided
 section "Version Detection"
@@ -178,15 +201,6 @@ else
   error "Swift not found in PATH"
   exit 1
 fi
-
-# Check required tools
-REQUIRED_TOOLS=("hdiutil")
-for tool in "${REQUIRED_TOOLS[@]}"; do
-  if ! command -v "$tool" >/dev/null 2>&1; then
-    error "Required tool not found: $tool"
-    exit 1
-  fi
-done
 success "Build environment ready"
 
 # Build the app
@@ -221,15 +235,15 @@ info "Built executable: $EXECUTABLE"
 # Create .app bundle
 section "Creating App Bundle"
 APP_NAME="Ferrufi"
-BUNDLE_DIR="$BUILD_DIR/$APP_NAME.app"
+BUNDLE_DIR="$BUILD_DIR/${APP_NAME}.app"
 CONTENTS_DIR="$BUNDLE_DIR/Contents"
 MACOS_DIR="$CONTENTS_DIR/MacOS"
 FRAMEWORKS_DIR="$CONTENTS_DIR/Frameworks"
 RESOURCES_DIR="$CONTENTS_DIR/Resources"
 
-# Clean up any existing bundle
+# Clean up any existing bundle in build dir
 if [ -d "$BUNDLE_DIR" ]; then
-  info "Removing existing app bundle"
+  info "Removing existing app bundle from build directory"
   rm -rf "$BUNDLE_DIR"
 fi
 
@@ -291,119 +305,94 @@ cat > "$CONTENTS_DIR/Info.plist" <<EOF
 </plist>
 EOF
 
-success "App bundle created: $BUNDLE_DIR"
+success "App bundle created in build directory"
 
-# Create DMG
-section "Creating DMG"
-DMG_NAME="Ferrufi-${VERSION}-macos.dmg"
-DMG_PATH="$REPO_ROOT/$DMG_NAME"
-DMG_STAGING="$BUILD_DIR/dmg_staging"
-DMG_VOLUME_NAME="Ferrufi $VERSION"
+# Copy to output directory
+section "Finalizing"
+FINAL_APP_PATH="$OUTPUT_DIR/${APP_NAME}.app"
 
-# Clean up staging and old DMG
-if [ -d "$DMG_STAGING" ]; then
-  rm -rf "$DMG_STAGING"
-fi
-if [ -f "$DMG_PATH" ]; then
-  info "Removing existing DMG: $DMG_NAME"
-  rm -f "$DMG_PATH"
+if [ -d "$FINAL_APP_PATH" ]; then
+  info "Removing existing app at output location"
+  rm -rf "$FINAL_APP_PATH"
 fi
 
-# Create staging directory
-info "Creating DMG staging directory"
-mkdir -p "$DMG_STAGING"
+info "Copying app bundle to: $OUTPUT_DIR"
+cp -R "$BUNDLE_DIR" "$OUTPUT_DIR/"
 
-# Copy app bundle to staging
-info "Copying app bundle to staging"
-cp -R "$BUNDLE_DIR" "$DMG_STAGING/"
-
-# Create Applications symlink
-info "Creating Applications symlink"
-ln -s /Applications "$DMG_STAGING/Applications"
-
-# Create temporary DMG
-info "Creating temporary DMG"
-TEMP_DMG="$BUILD_DIR/temp.dmg"
-if [ -f "$TEMP_DMG" ]; then
-  rm -f "$TEMP_DMG"
-fi
-
-hdiutil create -volname "$DMG_VOLUME_NAME" \
-  -srcfolder "$DMG_STAGING" \
-  -ov -format UDRW \
-  "$TEMP_DMG"
-
-# Mount temporary DMG (optional customization step - skip for now to avoid hanging)
-# If you want to customize icon positions, uncomment this section
-# info "Mounting DMG for customization"
-# MOUNT_DIR="/Volumes/$DMG_VOLUME_NAME"
-# hdiutil attach "$TEMP_DMG" -mountpoint "$MOUNT_DIR" >/dev/null 2>&1
-# sleep 2
-# # Set custom icon positions with osascript here
-# hdiutil detach "$MOUNT_DIR" >/dev/null 2>&1 || true
-
-info "Skipping DMG customization (use default layout)"
-
-# Convert to compressed DMG
-info "Compressing DMG (UDZO format)"
-hdiutil convert "$TEMP_DMG" \
-  -format UDZO \
-  -o "$DMG_PATH" \
-  -ov
-
-# Clean up
-info "Cleaning up temporary files"
-rm -f "$TEMP_DMG"
-
-if [ $KEEP_STAGING -eq 0 ]; then
-  rm -rf "$DMG_STAGING"
+if [ -d "$FINAL_APP_PATH" ]; then
+  success "App bundle copied successfully"
 else
-  info "Keeping staging directory: $DMG_STAGING"
-fi
-
-# Verify DMG
-if [ -f "$DMG_PATH" ]; then
-  DMG_SIZE=$(du -h "$DMG_PATH" | cut -f1)
-  success "DMG created successfully!"
-  echo ""
-  info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  info "${BOLD}DMG Location:${NC} $DMG_PATH"
-  info "${BOLD}DMG Size:${NC}     $DMG_SIZE"
-  info "${BOLD}Version:${NC}      $VERSION"
-  info "${BOLD}Config:${NC}       $BUILD_CONFIGURATION"
-  info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  echo ""
-  success "You can now distribute this DMG!"
-  info "To test: open $DMG_NAME"
-  warn "Note: DMG is unsigned - users need to right-click → Open"
-else
-  error "DMG creation failed"
+  error "Failed to copy app bundle to output directory"
   exit 1
 fi
 
-# Final summary
-section "Build Complete"
-cat <<SUMMARY
-${GREEN}✓${NC} Application built successfully
-${GREEN}✓${NC} libmufiz.dylib bundled
-${GREEN}✓${NC} DMG packaged and ready
+# Create zip if requested
+ZIP_PATH=""
+if [ $CREATE_ZIP -eq 1 ]; then
+  section "Creating Zip Archive"
+  ZIP_NAME="Ferrufi-${VERSION}-macos.zip"
+  ZIP_PATH="$OUTPUT_DIR/$ZIP_NAME"
 
+  if [ -f "$ZIP_PATH" ]; then
+    info "Removing existing zip: $ZIP_NAME"
+    rm -f "$ZIP_PATH"
+  fi
+
+  info "Creating zip archive"
+  cd "$OUTPUT_DIR"
+  if zip -r -q "$ZIP_NAME" "${APP_NAME}.app"; then
+    ZIP_SIZE=$(du -h "$ZIP_PATH" | cut -f1)
+    success "Zip created: $ZIP_NAME ($ZIP_SIZE)"
+  else
+    warn "Failed to create zip archive"
+  fi
+  cd "$REPO_ROOT"
+fi
+
+# Get app size
+APP_SIZE=$(du -sh "$FINAL_APP_PATH" | cut -f1)
+
+# Success summary
+section "Build Complete"
+echo ""
+success "✓ Application built successfully!"
+echo ""
+info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+info "${BOLD}App Location:${NC}    $FINAL_APP_PATH"
+info "${BOLD}App Size:${NC}        $APP_SIZE"
+info "${BOLD}Version:${NC}         $VERSION"
+info "${BOLD}Configuration:${NC}   $BUILD_CONFIGURATION"
+info "${BOLD}Architecture:${NC}    $DYLIB_ARCH"
+
+if [ -n "$ZIP_PATH" ] && [ -f "$ZIP_PATH" ]; then
+  ZIP_SIZE=$(du -h "$ZIP_PATH" | cut -f1)
+  info "${BOLD}Zip Archive:${NC}     $ZIP_NAME"
+  info "${BOLD}Zip Size:${NC}        $ZIP_SIZE"
+fi
+
+info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+
+cat <<SUMMARY
 ${BOLD}Next steps:${NC}
-  1. Test the DMG: ${BLUE}open $DMG_NAME${NC}
-  2. Drag Ferrufi.app to Applications
-  3. Launch Ferrufi from Applications
+  1. Copy ${APP_NAME}.app to /Applications:
+     ${BLUE}cp -R "$FINAL_APP_PATH" /Applications/${NC}
+
+  2. Or double-click to launch directly from:
+     ${BLUE}$OUTPUT_DIR${NC}
+
+  3. Share with others:
+$(if [ $CREATE_ZIP -eq 1 ]; then
+    echo "     ${BLUE}Upload $ZIP_NAME or share $APP_NAME.app${NC}"
+  else
+    echo "     ${BLUE}Share $APP_NAME.app (or run with --zip to create archive)${NC}"
+  fi)
 
 ${BOLD}Note:${NC}
-  - App is unsigned - users need to:
-    • Right-click the app and select "Open" (first time)
+  - ${YELLOW}App is unsigned${NC} - users may need to:
+    • Right-click → Open (first time only)
     • Or allow in System Settings → Privacy & Security
-    • Or run: xattr -cr /Applications/Ferrufi.app
-
-${BOLD}Build info:${NC}
-  - Version:        $VERSION
-  - Configuration:  $BUILD_CONFIGURATION
-  - Architecture:   $DYLIB_ARCH
-  - DMG:            $DMG_NAME
+    • Or run: ${BLUE}xattr -cr /Applications/Ferrufi.app${NC}
 
 ${GREEN}Happy coding with Ferrufi! 🚀${NC}
 SUMMARY
