@@ -11,9 +11,9 @@
     <key>CFBundleDisplayName</key>
     <string>Ferrufi</string>
     <key>CFBundleVersion</key>
-    <string>home-folder-permission</string>
+    <string>0.0.0</string>
     <key>CFBundleShortVersionString</key>
-    <string>home-folder-permission</string>
+    <string>0.0.0</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleSignature</key>
@@ -24,5 +24,7 @@
     <true/>
     <key>LSApplicationCategoryType</key>
     <string>public.app-category.productivity</string>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>Ferrufi needs access to store your notes and scripts in ~/.ferrufi/</string>
 </dict>
 </plist>
