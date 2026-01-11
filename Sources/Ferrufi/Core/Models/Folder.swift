@@ -357,8 +357,10 @@ extension FolderManager {
             )
         }
 
-        // Write content to file
-        try content.write(to: fileURL, atomically: true, encoding: .utf8)
+        // Write content to file with security-scoped access
+        try fileURL.withSecurityScope { url in
+            try content.write(to: url, atomically: true, encoding: .utf8)
+        }
 
         // Create note object
         let note = Note(
@@ -442,11 +444,13 @@ extension FolderManager {
     }
 
     /// Updates the content of an existing note
-    public func updateNoteContent(_ note: Note, content: String) throws {
+    func updateNoteContent(_ note: Note, content: String) throws {
         let fileURL = URL(fileURLWithPath: note.filePath)
 
-        // Write the updated content to file
-        try content.write(to: fileURL, atomically: true, encoding: .utf8)
+        // Write the updated content to file with security-scoped access
+        try fileURL.withSecurityScope { url in
+            try content.write(to: url, atomically: true, encoding: .utf8)
+        }
 
         // Update the note in memory
         if let index = notes.firstIndex(where: { $0.id == note.id }) {

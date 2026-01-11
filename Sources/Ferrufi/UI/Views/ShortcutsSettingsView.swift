@@ -59,7 +59,8 @@ public struct ShortcutsSettingsView: View {
                     panel.allowedContentTypes = [UTType.json]
                     panel.begin { response in
                         guard response == .OK, let url = panel.url else { return }
-                        // store pending URL and ask for confirmation before applying
+                        // Store pending URL with security scope access
+                        // Note: User will need to grant access when importing
                         pendingImportURL = url
                         showImportConfirm = true
                     }
@@ -76,7 +77,10 @@ public struct ShortcutsSettingsView: View {
                         guard response == .OK, let url = panel.url else { return }
                         do {
                             let data = try shortcuts.exportProfile()
-                            try data.write(to: url, options: .atomic)
+                            // Write with security-scoped access
+                            try url.withSecurityScope { url in
+                                try data.write(to: url, options: .atomic)
+                            }
                         } catch {
                             exportErrorMessage = error.localizedDescription
                             showExportError = true

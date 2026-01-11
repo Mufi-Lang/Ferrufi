@@ -475,7 +475,10 @@ public class ConfigurationManager: ObservableObject {
         }
 
         do {
-            let data = try Data(contentsOf: configurationURL)
+            // Read with security-scoped access
+            let data = try configurationURL.withSecurityScope { url in
+                try Data(contentsOf: url)
+            }
             configuration = try decoder.decode(FerrufiConfiguration.self, from: data)
         } catch {
             print("Failed to load configuration: \(error)")
@@ -487,7 +490,10 @@ public class ConfigurationManager: ObservableObject {
     public func saveConfiguration() {
         do {
             let data = try encoder.encode(configuration)
-            try data.write(to: configurationURL)
+            // Write with security-scoped access
+            try configurationURL.withSecurityScope { url in
+                try data.write(to: url)
+            }
         } catch {
             print("Failed to save configuration: \(error)")
         }
@@ -508,12 +514,18 @@ public class ConfigurationManager: ObservableObject {
     /// Exports configuration to a file
     public func exportConfiguration(to url: URL) throws {
         let data = try encoder.encode(configuration)
-        try data.write(to: url)
+        // Write with security-scoped access
+        try url.withSecurityScope { url in
+            try data.write(to: url)
+        }
     }
 
     /// Imports configuration from a file
     public func importConfiguration(from url: URL) throws {
-        let data = try Data(contentsOf: url)
+        // Read with security-scoped access
+        let data = try url.withSecurityScope { url in
+            try Data(contentsOf: url)
+        }
         configuration = try decoder.decode(FerrufiConfiguration.self, from: data)
         saveConfiguration()
     }

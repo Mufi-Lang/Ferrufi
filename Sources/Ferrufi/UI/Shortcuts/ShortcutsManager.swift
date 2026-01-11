@@ -164,7 +164,10 @@ public final class ShortcutsManager: ObservableObject {
 
     /// Import a shortcuts profile from a file URL.
     public func importProfile(from url: URL, merge: Bool = false) throws {
-        let data = try Data(contentsOf: url)
+        // Read with security-scoped access
+        let data = try url.withSecurityScope { url in
+            try Data(contentsOf: url)
+        }
         try importProfile(from: data, merge: merge)
     }
 

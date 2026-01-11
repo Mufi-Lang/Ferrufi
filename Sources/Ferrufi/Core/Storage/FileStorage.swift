@@ -107,12 +107,14 @@ public final class FileStorage: NSObject, FileStorageProtocol, ObservableObject,
                     let noteURL = URL(fileURLWithPath: self.vaultPath)
                         .appendingPathComponent("\(note.title).md")
 
-                    // Save markdown content
-                    try note.content.write(
-                        to: noteURL,
-                        atomically: true,
-                        encoding: .utf8
-                    )
+                    // Save markdown content with security-scoped access
+                    try noteURL.withSecurityScope { url in
+                        try note.content.write(
+                            to: url,
+                            atomically: true,
+                            encoding: .utf8
+                        )
+                    }
 
                     // Save metadata
                     try self.saveNoteMetadata(note)
@@ -136,7 +138,10 @@ public final class FileStorage: NSObject, FileStorageProtocol, ObservableObject,
                 }
                 do {
                     let noteURL = URL(fileURLWithPath: path)
-                    let content = try String(contentsOf: noteURL, encoding: .utf8)
+                    // Read content with security-scoped access
+                    let content = try noteURL.withSecurityScope { url in
+                        try String(contentsOf: url, encoding: .utf8)
+                    }
 
                     var note = Note.fromMarkdown(filePath: path, content: content)
 
@@ -167,7 +172,10 @@ public final class FileStorage: NSObject, FileStorageProtocol, ObservableObject,
                 }
                 do {
                     let noteURL = URL(fileURLWithPath: path)
-                    try self.fileManager.removeItem(at: noteURL)
+                    // Delete with security-scoped access
+                    try noteURL.withSecurityScope { url in
+                        try self.fileManager.removeItem(at: url)
+                    }
 
                     // Also delete metadata
                     let filename = noteURL.deletingPathExtension().lastPathComponent
@@ -196,7 +204,12 @@ public final class FileStorage: NSObject, FileStorageProtocol, ObservableObject,
                     let sourceURL = URL(fileURLWithPath: sourcePath)
                     let destinationURL = URL(fileURLWithPath: destinationPath)
 
-                    try self.fileManager.moveItem(at: sourceURL, to: destinationURL)
+                    // Move with security-scoped access
+                    try sourceURL.withSecurityScope { source in
+                        try destinationURL.withSecurityScope { dest in
+                            try self.fileManager.moveItem(at: source, to: dest)
+                        }
+                    }
                     continuation.resume()
                 } catch {
                     continuation.resume(throwing: error)
