@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Allow app to run without App Sandbox -->
+    <key>com.apple.security.app-sandbox</key>
+    <false/>
+
+    <!-- Allow reading and writing files chosen by the user -->
+    <key>com.apple.security.files.user-selected.read-write</key>
+    <true/>
+
+    <!-- Allow reading and writing to user's Documents, Downloads, etc. -->
+    <key>com.apple.security.files.downloads.read-write</key>
+    <true/>
+
+    <!-- Allow access to USB and external drives -->
+    <key>com.apple.security.files.all</key>
+    <true/>
+
+    <!-- Disable library validation (needed for libmufiz.dylib) -->
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
+
+    <!-- Allow loading unsigned libraries -->
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+
+    <!-- Allow dyld environment variables -->
+    <key>com.apple.security.cs.allow-dyld-environment-variables</key>
+    <true/>
+
+    <!-- Network access (if needed for future features) -->
+    <key>com.apple.security.network.client</key>
+    <true/>
+
+    <!-- Allow JIT compilation (if Mufi needs it) -->
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+</dict>
+</plist>

@@ -307,6 +307,33 @@ EOF
 
 success "App bundle created in build directory"
 
+# Ad-hoc sign with entitlements for file access
+section "Applying Entitlements"
+ENTITLEMENTS_FILE="$REPO_ROOT/Ferrufi.entitlements"
+
+if [ -f "$ENTITLEMENTS_FILE" ]; then
+  info "Applying entitlements for file access permissions"
+
+  # Sign dylib first
+  if codesign --force --sign "-" "$FRAMEWORKS_DIR/libmufiz.dylib" 2>/dev/null; then
+    success "Signed libmufiz.dylib"
+  else
+    warn "Failed to sign dylib (non-fatal)"
+  fi
+
+  # Sign app with entitlements
+  if codesign --force --sign "-" --entitlements "$ENTITLEMENTS_FILE" --deep "$BUNDLE_DIR" 2>/dev/null; then
+    success "App signed with entitlements (ad-hoc signature)"
+    info "This allows the app to access user files and load libmufiz.dylib"
+  else
+    warn "Failed to apply entitlements (non-fatal)"
+    warn "App may have limited file access in Applications folder"
+  fi
+else
+  warn "Entitlements file not found: $ENTITLEMENTS_FILE"
+  warn "App may have limited file access in Applications folder"
+fi
+
 # Copy to output directory
 section "Finalizing"
 FINAL_APP_PATH="$OUTPUT_DIR/${APP_NAME}.app"
@@ -389,7 +416,8 @@ $(if [ $CREATE_ZIP -eq 1 ]; then
   fi)
 
 ${BOLD}Note:${NC}
-  - ${YELLOW}App is unsigned${NC} - users may need to:
+  - ${YELLOW}App is ad-hoc signed with entitlements${NC}
+  - This allows file access but users still need to:
     • Right-click → Open (first time only)
     • Or allow in System Settings → Privacy & Security
     • Or run: ${BLUE}xattr -cr /Applications/Ferrufi.app${NC}

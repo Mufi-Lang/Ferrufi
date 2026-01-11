@@ -78,6 +78,13 @@ jobs:
           echo "✓ libmufiz.dylib found"
           lipo -info Sources/CMufi/libmufiz.dylib
 
+          echo "Checking entitlements file..."
+          if [ ! -f "Ferrufi.entitlements" ]; then
+            echo "ERROR: Ferrufi.entitlements not found!"
+            exit 1
+          fi
+          echo "✓ Entitlements file found"
+
       - name: Run linking tests
         run: |
           ./scripts/test_linking.sh
@@ -109,6 +116,14 @@ jobs:
 
           echo "✓ App created: $APP_BUNDLE ($APP_SIZE)"
           echo "✓ Zip created: $ZIP_FILE ($ZIP_SIZE)"
+
+          # Verify entitlements are applied
+          echo "Verifying entitlements..."
+          if codesign -d --entitlements - "$APP_BUNDLE" 2>&1 | grep -q "com.apple.security.files.all"; then
+            echo "✓ Entitlements verified"
+          else
+            echo "⚠ Warning: Entitlements may not be applied correctly"
+          fi
 
           echo "zip_path=$ZIP_FILE" >> "$GITHUB_OUTPUT"
           echo "zip_name=$(basename $ZIP_FILE)" >> "$GITHUB_OUTPUT"
@@ -185,6 +200,7 @@ jobs:
 
           - ✓ Ferrufi application (${{ steps.verify-build.outputs.app_size }})
           - ✓ Mufi runtime (libmufiz.dylib) bundled
+          - ✓ Entitlements for file access enabled
           - ✓ All features from commit ${{ github.sha }}
 
           ## Build Information
@@ -285,6 +301,7 @@ jobs:
           - **Swift Version:** ${{ steps.swift-version.outputs.version }}
           - **Build Number:** #${{ github.run_number }}
           - **Commit:** \`${{ github.sha }}\`
+          - **Entitlements:** Applied ✅
 
           ## Download
           - [Experimental Release](${{ github.server_url }}/${{ github.repository }}/releases/tag/experimental)

@@ -37,6 +37,8 @@ Create a traditional DMG installer:
 
 **See [DISTRIBUTION_QUICKSTART.md](DISTRIBUTION_QUICKSTART.md) for more options and [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md) for complete guide.**
 
+**Note:** Apps are built with entitlements for file access. See [docs/FILE_ACCESS_FIX.md](docs/FILE_ACCESS_FIX.md) if you experience file editing issues.
+
 Mufi Integration
 - The project now includes native integration with the Mufi runtime via a system library.
   - Place the runtime artifacts into `include/`:

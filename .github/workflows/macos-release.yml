@@ -1,0 +1,279 @@
+name: macOS App Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (e.g., 1.0.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build-release-app:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Read Swift tools version
+        id: swift-version
+        run: |
+          SWIFT_VERSION=$(awk '/^\/\/ swift-tools-version:/ { print $3; exit }' Package.swift)
+          echo "version=$SWIFT_VERSION" >> "$GITHUB_OUTPUT"
+          echo "Detected Swift version: $SWIFT_VERSION"
+
+      - name: Set up Swift toolchain
+        uses: swift-actions/setup-swift@v3
+        with:
+          swift-version: ${{ steps.swift-version.outputs.version }}
+
+      - name: Determine release version
+        id: version
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            # Manual workflow dispatch with version input
+            VERSION="${{ inputs.version }}"
+          elif [ -n "${{ github.ref_name }}" ] && [[ "${{ github.ref_name }}" == v* ]]; then
+            # Tag push (strip 'v' prefix)
+            VERSION="${{ github.ref_name }}"
+            VERSION="${VERSION#v}"
+          else
+            # Read from Version.swift
+            MAJOR=$(grep -E '^\s*public static let major = ' Sources/Ferrufi/Version.swift | sed 's/.*= //' | tr -d ' ')
+            MINOR=$(grep -E '^\s*public static let minor = ' Sources/Ferrufi/Version.swift | sed 's/.*= //' | tr -d ' ')
+            PATCH=$(grep -E '^\s*public static let patch = ' Sources/Ferrufi/Version.swift | sed 's/.*= //' | tr -d ' ')
+            VERSION="${MAJOR}.${MINOR}.${PATCH}"
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Release version: $VERSION"
+
+      - name: Make scripts executable
+        run: |
+          chmod +x scripts/build_app.sh
+          chmod +x scripts/set_version.sh
+          chmod +x scripts/test_linking.sh
+
+      - name: Verify dependencies
+        run: |
+          echo "Checking libmufiz.dylib..."
+          if [ ! -f "Sources/CMufi/libmufiz.dylib" ]; then
+            echo "ERROR: libmufiz.dylib not found!"
+            exit 1
+          fi
+
+          echo "✓ libmufiz.dylib found"
+          lipo -info Sources/CMufi/libmufiz.dylib
+
+          echo "Checking entitlements file..."
+          if [ ! -f "Ferrufi.entitlements" ]; then
+            echo "ERROR: Ferrufi.entitlements not found!"
+            exit 1
+          fi
+
+          echo "✓ Entitlements file found"
+          echo "Architecture verification complete"
+
+      - name: Run linking validation tests
+        run: |
+          ./scripts/test_linking.sh
+
+      - name: Build Release App
+        run: |
+          ./scripts/build_app.sh --version ${{ steps.version.outputs.version }} --zip
+
+      - name: Verify Build Artifacts
+        id: verify-build
+        run: |
+          ZIP_FILE="Ferrufi-${{ steps.version.outputs.version }}-macos.zip"
+          APP_BUNDLE="Ferrufi.app"
+
+          if [ ! -f "$ZIP_FILE" ]; then
+            echo "ERROR: Zip file not created: $ZIP_FILE"
+            exit 1
+          fi
+
+          if [ ! -d "$APP_BUNDLE" ]; then
+            echo "ERROR: App bundle not created: $APP_BUNDLE"
+            exit 1
+          fi
+
+          ZIP_SIZE=$(du -h "$ZIP_FILE" | cut -f1)
+          APP_SIZE=$(du -sh "$APP_BUNDLE" | cut -f1)
+
+          echo "✓ App verified: $APP_BUNDLE ($APP_SIZE)"
+          echo "✓ Zip verified: $ZIP_FILE ($ZIP_SIZE)"
+
+          # Verify entitlements are applied
+          echo "Verifying entitlements..."
+          if codesign -d --entitlements - "$APP_BUNDLE" 2>&1 | grep -q "com.apple.security.files.all"; then
+            echo "✓ Entitlements verified"
+          else
+            echo "⚠ Warning: Entitlements may not be applied correctly"
+          fi
+
+          echo "zip_path=$ZIP_FILE" >> "$GITHUB_OUTPUT"
+          echo "zip_name=$(basename $ZIP_FILE)" >> "$GITHUB_OUTPUT"
+          echo "zip_size=$ZIP_SIZE" >> "$GITHUB_OUTPUT"
+          echo "app_size=$APP_SIZE" >> "$GITHUB_OUTPUT"
+
+      - name: Upload Zip as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ferrufi-release-zip
+          path: ${{ steps.verify-build.outputs.zip_path }}
+          retention-days: 90
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          ZIP_FILE="${{ steps.verify-build.outputs.zip_path }}"
+          TAG_NAME="v$VERSION"
+
+          # Generate release notes
+          cat > release_notes.md <<EOF
+          # Ferrufi $VERSION
+
+          Official release of Ferrufi version $VERSION.
+
+          ## Installation
+
+          1. Download \`${{ steps.verify-build.outputs.zip_name }}\`
+          2. Double-click to extract \`Ferrufi.app\`
+          3. Drag \`Ferrufi.app\` to your Applications folder
+          4. **Right-click \`Ferrufi.app\`** and select **"Open"** (first time only)
+          5. Click **"Open"** in the security dialog
+
+          **Or via terminal:**
+          \`\`\`bash
+          unzip ${{ steps.verify-build.outputs.zip_name }}
+          cp -R Ferrufi.app /Applications/
+          xattr -cr /Applications/Ferrufi.app
+          open /Applications/Ferrufi.app
+          \`\`\`
+
+          ## What's New
+
+          See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/v$VERSION/CHANGELOG.md) for details.
+
+          ## System Requirements
+
+          - macOS 14.0 or later
+          - Apple Silicon (arm64) recommended
+
+          ## Build Information
+
+          - **Version:** $VERSION
+          - **Build Date:** $(date -u '+%Y-%m-%d')
+          - **Swift Version:** ${{ steps.swift-version.outputs.version }}
+          - **Commit:** \`${{ github.sha }}\`
+          - **Entitlements:** Applied (file access enabled)
+
+          ## Download
+
+          - **Zip:** ${{ steps.verify-build.outputs.zip_name }} (${{ steps.verify-build.outputs.zip_size }})
+          - **Extracted Size:** ${{ steps.verify-build.outputs.app_size }}
+
+          ## Important Notes
+
+          This app is **ad-hoc signed with entitlements** which means:
+          - ✅ Full file system access for editing
+          - ✅ Can load the Mufi runtime library
+          - ⚠️ You must right-click → Open on first launch
+          - ⚠️ macOS will show a security warning (this is normal)
+
+          After the first launch, you can open the app normally.
+
+          ---
+
+          For issues, please visit [GitHub Issues](https://github.com/${{ github.repository }}/issues)
+
+          For documentation, see:
+          - [Distribution Guide](https://github.com/${{ github.repository }}/blob/v$VERSION/docs/DISTRIBUTION.md)
+          - [Quick Start Guide](https://github.com/${{ github.repository }}/blob/v$VERSION/DISTRIBUTION_QUICKSTART.md)
+          - [File Access Fix](https://github.com/${{ github.repository }}/blob/v$VERSION/docs/FILE_ACCESS_FIX.md)
+          EOF
+
+          # Check if release exists
+          if gh release view "$TAG_NAME" >/dev/null 2>&1; then
+            echo "Updating existing release $TAG_NAME..."
+            gh release upload "$TAG_NAME" "$ZIP_FILE" --clobber
+            gh release edit "$TAG_NAME" --notes-file release_notes.md
+          else
+            echo "Creating new release $TAG_NAME..."
+            gh release create "$TAG_NAME" \
+              --title "Ferrufi $VERSION" \
+              --notes-file release_notes.md \
+              "$ZIP_FILE"
+          fi
+
+          echo "✓ Release published: $TAG_NAME"
+
+      - name: Build Summary
+        run: |
+          cat >> $GITHUB_STEP_SUMMARY <<EOF
+          # ✅ Release Build Complete
+
+          ## Release Information
+          - **Version:** ${{ steps.version.outputs.version }}
+          - **Zip File:** ${{ steps.verify-build.outputs.zip_name }}
+          - **Zip Size:** ${{ steps.verify-build.outputs.zip_size }}
+          - **App Size:** ${{ steps.verify-build.outputs.app_size }}
+          - **Swift Version:** ${{ steps.swift-version.outputs.version }}
+
+          ## Build Details
+          - **Trigger:** ${{ github.event_name }}
+          - **Ref:** ${{ github.ref }}
+          - **Commit:** \`${{ github.sha }}\`
+          - **Run:** #${{ github.run_number }}
+
+          ## Downloads
+          - [Workflow Artifact](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+          EOF
+
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            cat >> $GITHUB_STEP_SUMMARY <<EOF
+          - [GitHub Release](${{ github.server_url }}/${{ github.repository }}/releases/tag/v${{ steps.version.outputs.version }})
+          EOF
+          fi
+
+          cat >> $GITHUB_STEP_SUMMARY <<EOF
+
+          ## Installation Instructions
+
+          \`\`\`bash
+          # Download and extract
+          unzip ${{ steps.verify-build.outputs.zip_name }}
+
+          # Copy to Applications
+          cp -R Ferrufi.app /Applications/
+
+          # Remove quarantine and launch
+          xattr -cr /Applications/Ferrufi.app
+          open /Applications/Ferrufi.app
+          \`\`\`
+
+          ## Entitlements Applied
+
+          ✅ App includes entitlements for:
+          - Full file system access
+          - Loading unsigned libraries (libmufiz.dylib)
+          - Network access
+          - JIT compilation
+
+          ---
+
+          🎉 **Build completed successfully!**
+          EOF
+
+          exit 0

@@ -293,6 +293,33 @@ EOF
 
 success "App bundle created: $BUNDLE_DIR"
 
+# Ad-hoc sign with entitlements for file access
+section "Applying Entitlements"
+ENTITLEMENTS_FILE="$REPO_ROOT/Ferrufi.entitlements"
+
+if [ -f "$ENTITLEMENTS_FILE" ]; then
+  info "Applying entitlements for file access permissions"
+
+  # Sign dylib first
+  if codesign --force --sign "-" "$FRAMEWORKS_DIR/libmufiz.dylib" 2>/dev/null; then
+    success "Signed libmufiz.dylib"
+  else
+    warn "Failed to sign dylib (non-fatal)"
+  fi
+
+  # Sign app with entitlements
+  if codesign --force --sign "-" --entitlements "$ENTITLEMENTS_FILE" --deep "$BUNDLE_DIR" 2>/dev/null; then
+    success "App signed with entitlements (ad-hoc signature)"
+    info "This allows the app to access user files and load libmufiz.dylib"
+  else
+    warn "Failed to apply entitlements (non-fatal)"
+    warn "App may have limited file access in Applications folder"
+  fi
+else
+  warn "Entitlements file not found: $ENTITLEMENTS_FILE"
+  warn "App may have limited file access in Applications folder"
+fi
+
 # Create DMG
 section "Creating DMG"
 DMG_NAME="Ferrufi-${VERSION}-macos.dmg"
@@ -394,7 +421,8 @@ ${BOLD}Next steps:${NC}
   3. Launch Ferrufi from Applications
 
 ${BOLD}Note:${NC}
-  - App is unsigned - users need to:
+  - App is ad-hoc signed with entitlements
+  - This allows file access but users still need to:
     • Right-click the app and select "Open" (first time)
     • Or allow in System Settings → Privacy & Security
     • Or run: xattr -cr /Applications/Ferrufi.app
