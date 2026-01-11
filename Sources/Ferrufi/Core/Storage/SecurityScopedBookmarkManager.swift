@@ -13,6 +13,9 @@ import Foundation
 @MainActor
 public class SecurityScopedBookmarkManager: ObservableObject {
 
+    /// Shared singleton instance for app-wide access
+    public static let shared = SecurityScopedBookmarkManager()
+
     private let userDefaults = UserDefaults.standard
     private let bookmarkKey = "com.ferrufi.securityScopedBookmarks"
 
@@ -160,9 +163,15 @@ public class SecurityScopedBookmarkManager: ObservableObject {
     // MARK: - Helper Methods
 
     /// Requests user to select a folder and creates a bookmark for it
-    /// - Parameter completion: Called with the selected URL and whether bookmark was created
+    /// - Parameters:
+    ///   - message: The message to show in the open panel
+    ///   - defaultDirectory: Optional directory to open the panel in (defaults to nil)
+    ///   - showHidden: If true, the open panel will display hidden files/folders
+    ///   - completion: Called with the selected URL and whether bookmark was created
     public func requestFolderAccess(
         message: String = "Select a folder to grant Ferrufi access",
+        defaultDirectory: URL? = nil,
+        showHidden: Bool = false,
         completion: @escaping (URL?, Bool) -> Void
     ) {
         #if os(macOS)
@@ -173,6 +182,16 @@ public class SecurityScopedBookmarkManager: ObservableObject {
             panel.canCreateDirectories = true
             panel.prompt = "Grant Access"
             panel.message = message
+
+            // Use the provided default directory if available
+            if let dir = defaultDirectory {
+                panel.directoryURL = dir
+            }
+
+            // Optionally show hidden files (e.g. allow selecting `.ferrufi`)
+            if showHidden {
+                panel.setValue(true, forKey: "showsHiddenFiles")
+            }
 
             panel.begin { [weak self] response in
                 guard let self = self else { return }

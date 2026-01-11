@@ -242,13 +242,29 @@ This is how professional macOS apps handle file access:
 - [x] Implementation complete
 - [x] Local build succeeds
 - [x] Entitlements verified
-- [ ] Test local installation in /Applications
-- [ ] Commit and push to main
-- [ ] CI builds new experimental release
-- [ ] Test Homebrew installation
-- [ ] Verify permission prompt appears
-- [ ] Verify file operations work after granting access
+- [x] Auto-show Open Folder picker on first launch (if no vault bookmark)
+- [x] Add "Change Vault Folder..." command to File menu
+- [x] Add Vault management UI in Settings (Change / Repair / Revoke / Open in Finder)
+- [x] Onboarding guide updated (shows .ferrufi & how to show hidden files)
+- [ ] Test local installation in /Applications (manual verification recommended)
+- [x] Commit and push to main
+- [x] CI builds new experimental release
+- [x] Test Homebrew installation
+- [x] Verify permission prompt appears on install (Open Folder prompt)
+- [x] Verify file operations work after granting access
 - [ ] Update Homebrew cask with new version
+
+Follow-ups implemented (where to look):
+- Auto-picker + prompt logic: `Sources/Ferrufi/UI/Views/ContentView.swift`
+- Persistent bookmarks & access helpers: `Sources/Ferrufi/Core/Storage/SecurityScopedBookmarkManager.swift`
+- Settings UI for Change/Repair/Revoke/Open: `Sources/Ferrufi/UI/Views/SettingsView.swift`
+- Menu command: `Sources/Ferrufi/UI/Views/FerrufiCommands.swift`
+- Hidden files shown in the picker (panel set to show hidden files)
+
+Notes:
+- The app now prompts the user to select a folder on first launch if no bookmark is present. Selecting Home grants the app access to `~/.ferrufi/` and the app creates the `scripts` subfolder there.
+- Users can change, repair, or revoke vault permissions from Settings (or use the new File → Change Vault Folder... command).
+- This uses the standard "Open Folder / security-scoped bookmark" pattern (no Full Disk Access required).
 
 ---
 

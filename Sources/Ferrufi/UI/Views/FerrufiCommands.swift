@@ -49,6 +49,13 @@ public struct FerrufiCommands: Commands {
             .keyboardShortcut(
                 shortcuts.keyboardShortcut(for: "exportVault")
                     ?? KeyboardShortcut(KeyEquivalent("e"), modifiers: [.command, .shift]))
+
+            Divider()
+
+            Button("Change Vault Folder...") {
+                changeVaultFolderAction()
+            }
+            .keyboardShortcut(KeyboardShortcut(KeyEquivalent("v"), modifiers: [.command, .shift]))
         }
 
         // Edit Menu
@@ -303,6 +310,49 @@ public struct FerrufiCommands: Commands {
             } catch {
                 print("Export failed: \(error)")
                 showAlert(title: "Export Failed", message: "\(error.localizedDescription)")
+            }
+        }
+    }
+
+    private func changeVaultFolderAction() {
+        let homeURL = FileManager.default.homeDirectoryForCurrentUser
+
+        SecurityScopedBookmarkManager.shared.requestFolderAccess(
+            message:
+                "Select a folder to contain your Ferrufi vault (select Home to use ~/.ferrufi/)",
+            defaultDirectory: homeURL,
+            showHidden: true
+        ) { url, created in
+            guard let selectedURL = url else { return }
+            Task {
+                do {
+                    try await SecurityScopedBookmarkManager.shared.withAccess(
+                        toPath: selectedURL.path
+                    ) { parentURL in
+                        // If the user picked Home, we create ~/.ferrufi inside it.
+                        // Otherwise we use the selected folder directly as the vault root.
+                        let ferrufiDir: URL
+                        if parentURL.path == homeURL.path {
+                            ferrufiDir = parentURL.appendingPathComponent(".ferrufi")
+                        } else {
+                            ferrufiDir = parentURL
+                        }
+                        let scriptsDir = ferrufiDir.appendingPathComponent("scripts")
+
+                        try FileManager.default.createDirectory(
+                            at: ferrufiDir, withIntermediateDirectories: true, attributes: nil)
+                        try FileManager.default.createDirectory(
+                            at: scriptsDir, withIntermediateDirectories: true, attributes: nil)
+
+                        // Reinitialize Ferrufi with the new vault location
+                        if let app = ferrufiApp {
+                            try await app.initialize(vaultPath: scriptsDir.path)
+                        }
+                    }
+                } catch {
+                    print("Failed to change vault folder: \(error)")
+                    // Non-fatal: attempt to surface to user via an alert in the UI if appropriate
+                }
             }
         }
     }

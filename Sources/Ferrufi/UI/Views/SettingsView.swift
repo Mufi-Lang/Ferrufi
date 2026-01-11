@@ -104,6 +104,10 @@ struct GeneralSettingsView: View {
     @State private var lastBackupAt: Date? = nil
     @State private var isBackingUpNow: Bool = false
 
+    // Vault management states
+    @State private var showVaultInfoAlert: Bool = false
+    @State private var vaultInfoMessage: String = ""
+
     public init() {}
 
     var body: some View {
@@ -147,6 +151,123 @@ struct GeneralSettingsView: View {
                 .background(Color.red.opacity(0.12))
                 .foregroundColor(.red)
                 .cornerRadius(6)
+
+            GroupBox(label: Label("Vault", systemImage: "folder")) {
+                VStack(alignment: .leading, spacing: 8) {
+                    // Compute commonly used paths
+                    let homeURL = FileManager.default.homeDirectoryForCurrentUser
+                    let vaultPath = homeURL.appendingPathComponent(".ferrufi/scripts")
+                    let bookmarkedParent = SecurityScopedBookmarkManager.shared
+                        .allBookmarkedPaths()
+                        .first { vaultPath.path.hasPrefix($0) }
+
+                    HStack(alignment: .center) {
+                        Text("Vault location:")
+                            .frame(width: settingsLabelWidth, alignment: .leading)
+                        Spacer()
+                        Text(bookmarkedParent ?? "No folder selected")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+
+                    HStack(spacing: 10) {
+                        Button("Change Vault Folder") {
+                            SecurityScopedBookmarkManager.shared.requestFolderAccess(
+                                message:
+                                    "Select a folder to contain your Ferrufi vault (select Home to use ~/.ferrufi/)",
+                                defaultDirectory: homeURL,
+                                showHidden: true
+                            ) { url, created in
+                                guard let selectedURL = url else { return }
+                                Task {
+                                    do {
+                                        try await SecurityScopedBookmarkManager.shared.withAccess(
+                                            toPath: selectedURL.path
+                                        ) { parentURL in
+                                            let ferrufiDir: URL
+                                            if parentURL.path == homeURL.path {
+                                                ferrufiDir = parentURL.appendingPathComponent(
+                                                    ".ferrufi")
+                                            } else {
+                                                ferrufiDir = parentURL
+                                            }
+                                            let scriptsDir = ferrufiDir.appendingPathComponent(
+                                                "scripts")
+                                            try FileManager.default.createDirectory(
+                                                at: ferrufiDir,
+                                                withIntermediateDirectories: true,
+                                                attributes: nil
+                                            )
+                                            try FileManager.default.createDirectory(
+                                                at: scriptsDir,
+                                                withIntermediateDirectories: true,
+                                                attributes: nil
+                                            )
+
+                                            // Reinitialize Ferrufi storage to point at the new vault
+                                            try await ferrufiApp.initialize(
+                                                vaultPath: scriptsDir.path)
+                                        }
+
+                                        vaultInfoMessage = "Vault folder updated."
+                                        showVaultInfoAlert = true
+                                    } catch {
+                                        errorMessage = error.localizedDescription
+                                        showErrorAlert = true
+                                    }
+                                }
+                            }
+                        }
+                        .controlSize(.small)
+
+                        Button("Repair Permission") {
+                            SecurityScopedBookmarkManager.shared.requestFolderAccess(
+                                message: "Select the folder again to repair permissions",
+                                defaultDirectory: homeURL,
+                                showHidden: true
+                            ) { url, created in
+                                if url != nil {
+                                    vaultInfoMessage = "Permission repaired."
+                                    showVaultInfoAlert = true
+                                } else {
+                                    errorMessage = "Repair cancelled."
+                                    showErrorAlert = true
+                                }
+                            }
+                        }
+                        .controlSize(.small)
+
+                        Button("Revoke Permission") {
+                            let vaultPath = homeURL.appendingPathComponent(".ferrufi/scripts")
+                            if let parent = SecurityScopedBookmarkManager.shared
+                                .allBookmarkedPaths()
+                                .first(where: { vaultPath.path.hasPrefix($0) })
+                            {
+                                SecurityScopedBookmarkManager.shared.removeBookmark(forPath: parent)
+                                vaultInfoMessage =
+                                    "Permission revoked. App will prompt again on next initialization."
+                                showVaultInfoAlert = true
+                            } else {
+                                errorMessage = "No vault permission found to revoke."
+                                showErrorAlert = true
+                            }
+                        }
+                        .controlSize(.small)
+
+                        Button("Open in Finder") {
+                            let target = homeURL.appendingPathComponent(".ferrufi/scripts")
+                            NSWorkspace.shared.open(target)
+                        }
+                        .controlSize(.small)
+                    }  // HStack
+                }  // VStack
+            }  // GroupBox
+            .padding(.vertical, 8)
+            .alert("Vault", isPresented: $showVaultInfoAlert) {
+                Button("OK") {}
+            } message: {
+                Text(vaultInfoMessage)
+            }
 
             ScrollView(.vertical) {
                 VStack(alignment: .leading, spacing: 14) {
