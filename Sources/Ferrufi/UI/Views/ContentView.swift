@@ -8,6 +8,7 @@ public struct ContentView: View {
     @EnvironmentObject private var themeManager: ThemeManager
     @State private var showingFolderPermissionRequest = false
     @State private var vaultFolderURL: URL?
+    @State private var showingVaultOnboarding = false
     @StateObject private var bookmarkManager = SecurityScopedBookmarkManager()
 
     public init() {}
@@ -107,13 +108,18 @@ public struct ContentView: View {
                 `~/.ferrufi/`, select your Home folder.
                 """)
         }
+        .sheet(isPresented: $showingVaultOnboarding) {
+            VaultOnboardingView(
+                onSelectFolder: { presentVaultFolderPicker() },
+                onSkip: { Task { await createAppSupportVaultAndInitialize() } }
+            )
+        }
     }
 
     private func initializeApp() async {
         // Use ~/.ferrufi as the single storage location
         let homeDirectory = FileManager.default.homeDirectoryForCurrentUser
         let ironDirectory = homeDirectory.appendingPathComponent(".ferrufi")
-        let scriptsDirectory = ironDirectory.appendingPathComponent("scripts")
 
         // Ensure we have a user-granted folder selection (security-scoped bookmark)
         let vaultPath = ironDirectory.path
@@ -128,9 +134,9 @@ public struct ContentView: View {
         }
 
         if bookmarkedParent == nil {
-            // Request the user to select a parent folder (one-time)
+            // Show a friendly onboarding sheet and prompt the user to select a folder (one-time)
             await MainActor.run {
-                showingFolderPermissionRequest = true
+                showingVaultOnboarding = true
             }
             return  // Wait for user to pick folder and restart initialization
         }
@@ -309,6 +315,26 @@ public struct ContentView: View {
 
     private func openFullDiskAccessSettings() {
         // No-op: Full Disk Access flow is no longer used. Use "Select Folder" to grant access.
+    }
+
+    private func createAppSupportVaultAndInitialize() async {
+        // Fallback for users who skip selecting a folder: use Application Support
+        let appSupportBase = FileManager.default.urls(
+            for: .applicationSupportDirectory, in: .userDomainMask
+        ).first!
+        let ferrufiAppSupport = appSupportBase.appendingPathComponent("Ferrufi")
+        let scriptsDir = ferrufiAppSupport.appendingPathComponent("scripts")
+
+        do {
+            try FileManager.default.createDirectory(
+                at: scriptsDir, withIntermediateDirectories: true, attributes: nil)
+            try await ferrufiApp.initialize(vaultPath: scriptsDir.path)
+        } catch {
+            await MainActor.run {
+                navigationModel.currentError = error
+                navigationModel.showingError = true
+            }
+        }
     }
 
     private func createWelcomeNote(at url: URL) throws {
