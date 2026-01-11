@@ -5,6 +5,8 @@ public struct ContentView: View {
     @EnvironmentObject var ferrufiApp: FerrufiApp
     @StateObject private var navigationModel = NavigationModel()
     @EnvironmentObject private var themeManager: ThemeManager
+    @StateObject private var bookmarkManager = SecurityScopedBookmarkManager()
+    @State private var showingFolderAccessRequest = false
 
     public init() {}
 
@@ -85,6 +87,13 @@ public struct ContentView: View {
         .onChange(of: navigationModel.showingFolderCreation) { _, newValue in
             print("ContentView: showingFolderCreation changed to: \(newValue)")
         }
+        .alert("Folder Access Required", isPresented: $showingFolderAccessRequest) {
+            Button("OK") {}
+        } message: {
+            Text(
+                "Ferrufi needs access to your notes folder to function properly. Please select the folder when prompted."
+            )
+        }
     }
 
     private func initializeApp() async {
@@ -112,6 +121,9 @@ public struct ContentView: View {
             if !FileManager.default.fileExists(atPath: welcomeScriptPath.path) {
                 try createWelcomeNote(at: welcomeScriptPath)
             }
+
+            // Request security-scoped access to the vault folder if not already granted
+            await requestVaultAccess(vaultPath: scriptsDirectory.path)
 
             // Initialize Ferrufi with the scripts directory
             try await ferrufiApp.initialize(vaultPath: scriptsDirectory.path)
@@ -170,6 +182,36 @@ public struct ContentView: View {
                 navigationModel.currentError = error
                 navigationModel.showingError = true
             }
+        }
+    }
+
+    private func requestVaultAccess(vaultPath: String) async {
+        await MainActor.run {
+            // Check if we already have a bookmark for the vault path
+            if bookmarkManager.hasBookmark(forPath: vaultPath) {
+                // Already have access, just resolve it to activate
+                _ = bookmarkManager.resolveBookmark(forPath: vaultPath)
+                return
+            }
+
+            // Need to request access
+            showingFolderAccessRequest = true
+        }
+
+        // Request folder access from user
+        await withCheckedContinuation { continuation in
+            bookmarkManager.migrateVaultPath(vaultPath) { success in
+                if success {
+                    print("✅ Security-scoped access granted for vault: \(vaultPath)")
+                } else {
+                    print("⚠️ User denied security-scoped access or vault path doesn't exist")
+                }
+                continuation.resume()
+            }
+        }
+
+        await MainActor.run {
+            showingFolderAccessRequest = false
         }
     }
 

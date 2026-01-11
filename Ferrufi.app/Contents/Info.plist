@@ -11,9 +11,9 @@
     <key>CFBundleDisplayName</key>
     <string>Ferrufi</string>
     <key>CFBundleVersion</key>
-    <string>0.0.0</string>
+    <string>test-bookmark-fix</string>
     <key>CFBundleShortVersionString</key>
-    <string>0.0.0</string>
+    <string>test-bookmark-fix</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleSignature</key>
