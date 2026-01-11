@@ -301,6 +301,8 @@ cat > "$CONTENTS_DIR/Info.plist" <<EOF
     <true/>
     <key>LSApplicationCategoryType</key>
     <string>public.app-category.productivity</string>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>Ferrufi needs access to store your notes and scripts in ~/.ferrufi/</string>
 </dict>
 </plist>
 EOF

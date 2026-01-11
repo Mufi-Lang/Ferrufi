@@ -87,15 +87,30 @@ public struct ContentView: View {
         .onChange(of: navigationModel.showingFolderCreation) { _, newValue in
             print("ContentView: showingFolderCreation changed to: \(newValue)")
         }
-        .alert("Folder Access Required", isPresented: $showingFolderPermissionRequest) {
-            Button("Grant Access") {
-                requestFolderAccess()
+        .alert("Full Disk Access Required", isPresented: $showingFolderPermissionRequest) {
+            Button("Open System Settings") {
+                openFullDiskAccessSettings()
             }
-            Button("Cancel", role: .cancel) {}
+            Button("I've Granted Access") {
+                // User will click this after granting access
+                showingFolderPermissionRequest = false
+                Task {
+                    await initializeApp()
+                }
+            }
+            Button("Quit", role: .cancel) {
+                NSApplication.shared.terminate(nil)
+            }
         } message: {
             Text(
-                "Ferrufi needs access to your home folder to store notes in ~/.ferrufi/\n\nClick 'Grant Access' and select your home folder when prompted."
-            )
+                """
+                Ferrufi needs Full Disk Access to store notes in ~/.ferrufi/
+
+                Steps:
+                1. Click "Open System Settings"
+                2. Enable "Ferrufi" in the list
+                3. Come back and click "I've Granted Access"
+                """)
         }
     }
 
@@ -105,43 +120,12 @@ public struct ContentView: View {
         let ironDirectory = homeDirectory.appendingPathComponent(".ferrufi")
         let scriptsDirectory = ironDirectory.appendingPathComponent("scripts")
 
-        // Check if we can access home directory for writing
-        // If not, request permission via NSOpenPanel
-        let canAccessHome =
-            FileManager.default.isWritableFile(atPath: ironDirectory.path)
-            || !FileManager.default.fileExists(atPath: ironDirectory.path)
-
-        if !canAccessHome {
+        // Check if we have Full Disk Access by trying to read a known system file
+        if !hasFullDiskAccess() {
             await MainActor.run {
                 showingFolderPermissionRequest = true
             }
-
-            // Wait for user to grant access
-            await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-                // Store continuation to resume after folder selection
-                Task { @MainActor in
-                    while vaultFolderURL == nil && showingFolderPermissionRequest {
-                        try? await Task.sleep(nanoseconds: 100_000_000)  // 0.1 second
-                    }
-                    continuation.resume()
-                }
-            }
-
-            if vaultFolderURL == nil {
-                // User cancelled, use fallback location
-                await MainActor.run {
-                    navigationModel.currentError = NSError(
-                        domain: "com.ferrufi",
-                        code: -1,
-                        userInfo: [
-                            NSLocalizedDescriptionKey:
-                                "Folder access required. Please restart and grant access to Documents folder."
-                        ]
-                    )
-                    navigationModel.showingError = true
-                }
-                return
-            }
+            return  // Stop initialization, wait for user to grant access
         }
 
         do {
@@ -224,29 +208,38 @@ public struct ContentView: View {
         }
     }
 
-    private func requestFolderAccess() {
+    private func hasFullDiskAccess() -> Bool {
+        // Try to access a system location that requires Full Disk Access
+        // If we can read it, we have Full Disk Access
+        let testPath = NSHomeDirectory() + "/Library/Safari/Bookmarks.plist"
+        let fileManager = FileManager.default
+
+        // Check if we can read the file (this requires Full Disk Access)
+        if fileManager.isReadableFile(atPath: testPath) {
+            return true
+        }
+
+        // Alternative check: try to create a file in ~/.ferrufi
+        let testDir = NSHomeDirectory() + "/.ferrufi"
+        let testFile = testDir + "/.permission_test"
+
+        do {
+            try fileManager.createDirectory(atPath: testDir, withIntermediateDirectories: true)
+            try "test".write(toFile: testFile, atomically: true, encoding: .utf8)
+            try fileManager.removeItem(atPath: testFile)
+            return true
+        } catch {
+            print("❌ No Full Disk Access: \(error)")
+            return false
+        }
+    }
+
+    private func openFullDiskAccessSettings() {
         #if os(macOS)
-            let panel = NSOpenPanel()
-            panel.canChooseDirectories = true
-            panel.canChooseFiles = false
-            panel.allowsMultipleSelection = false
-            panel.canCreateDirectories = false
-            panel.prompt = "Grant Access"
-            panel.message =
-                "Select your home folder to grant Ferrufi access.\n\nFerrufi will store notes in ~/.ferrufi/scripts/"
-
-            // Navigate to home folder by default
-            let homeURL = FileManager.default.homeDirectoryForCurrentUser
-            panel.directoryURL = homeURL
-
-            panel.begin { [self] response in
-                if response == .OK, let url = panel.url {
-                    // User selected home folder - this grants us security-scoped access to ~/.ferrufi
-                    vaultFolderURL = url
-                    print("✅ User granted access to: \(url.path)")
-                }
-                showingFolderPermissionRequest = false
-            }
+            // Open System Settings to Privacy & Security > Full Disk Access
+            let url = URL(
+                string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles")!
+            NSWorkspace.shared.open(url)
         #endif
     }
 
