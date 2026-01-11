@@ -5,8 +5,8 @@ public struct ContentView: View {
     @EnvironmentObject var ferrufiApp: FerrufiApp
     @StateObject private var navigationModel = NavigationModel()
     @EnvironmentObject private var themeManager: ThemeManager
-    @StateObject private var bookmarkManager = SecurityScopedBookmarkManager()
-    @State private var showingFolderAccessRequest = false
+    @State private var showingFolderPermissionRequest = false
+    @State private var vaultFolderURL: URL?
 
     public init() {}
 
@@ -87,11 +87,14 @@ public struct ContentView: View {
         .onChange(of: navigationModel.showingFolderCreation) { _, newValue in
             print("ContentView: showingFolderCreation changed to: \(newValue)")
         }
-        .alert("Folder Access Required", isPresented: $showingFolderAccessRequest) {
-            Button("OK") {}
+        .alert("Folder Access Required", isPresented: $showingFolderPermissionRequest) {
+            Button("Grant Access") {
+                requestFolderAccess()
+            }
+            Button("Cancel", role: .cancel) {}
         } message: {
             Text(
-                "Ferrufi needs access to your notes folder to function properly. Please select the folder when prompted."
+                "Ferrufi needs access to your home folder to store notes in ~/.ferrufi/\n\nClick 'Grant Access' and select your home folder when prompted."
             )
         }
     }
@@ -101,6 +104,45 @@ public struct ContentView: View {
         let homeDirectory = FileManager.default.homeDirectoryForCurrentUser
         let ironDirectory = homeDirectory.appendingPathComponent(".ferrufi")
         let scriptsDirectory = ironDirectory.appendingPathComponent("scripts")
+
+        // Check if we can access home directory for writing
+        // If not, request permission via NSOpenPanel
+        let canAccessHome =
+            FileManager.default.isWritableFile(atPath: ironDirectory.path)
+            || !FileManager.default.fileExists(atPath: ironDirectory.path)
+
+        if !canAccessHome {
+            await MainActor.run {
+                showingFolderPermissionRequest = true
+            }
+
+            // Wait for user to grant access
+            await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+                // Store continuation to resume after folder selection
+                Task { @MainActor in
+                    while vaultFolderURL == nil && showingFolderPermissionRequest {
+                        try? await Task.sleep(nanoseconds: 100_000_000)  // 0.1 second
+                    }
+                    continuation.resume()
+                }
+            }
+
+            if vaultFolderURL == nil {
+                // User cancelled, use fallback location
+                await MainActor.run {
+                    navigationModel.currentError = NSError(
+                        domain: "com.ferrufi",
+                        code: -1,
+                        userInfo: [
+                            NSLocalizedDescriptionKey:
+                                "Folder access required. Please restart and grant access to Documents folder."
+                        ]
+                    )
+                    navigationModel.showingError = true
+                }
+                return
+            }
+        }
 
         do {
             // Create ~/.ferrufi directory structure
@@ -121,9 +163,6 @@ public struct ContentView: View {
             if !FileManager.default.fileExists(atPath: welcomeScriptPath.path) {
                 try createWelcomeNote(at: welcomeScriptPath)
             }
-
-            // Request security-scoped access to the vault folder if not already granted
-            await requestVaultAccess(vaultPath: scriptsDirectory.path)
 
             // Initialize Ferrufi with the scripts directory
             try await ferrufiApp.initialize(vaultPath: scriptsDirectory.path)
@@ -185,34 +224,30 @@ public struct ContentView: View {
         }
     }
 
-    private func requestVaultAccess(vaultPath: String) async {
-        await MainActor.run {
-            // Check if we already have a bookmark for the vault path
-            if bookmarkManager.hasBookmark(forPath: vaultPath) {
-                // Already have access, just resolve it to activate
-                _ = bookmarkManager.resolveBookmark(forPath: vaultPath)
-                return
-            }
+    private func requestFolderAccess() {
+        #if os(macOS)
+            let panel = NSOpenPanel()
+            panel.canChooseDirectories = true
+            panel.canChooseFiles = false
+            panel.allowsMultipleSelection = false
+            panel.canCreateDirectories = false
+            panel.prompt = "Grant Access"
+            panel.message =
+                "Select your home folder to grant Ferrufi access.\n\nFerrufi will store notes in ~/.ferrufi/scripts/"
 
-            // Need to request access
-            showingFolderAccessRequest = true
-        }
+            // Navigate to home folder by default
+            let homeURL = FileManager.default.homeDirectoryForCurrentUser
+            panel.directoryURL = homeURL
 
-        // Request folder access from user
-        await withCheckedContinuation { continuation in
-            bookmarkManager.migrateVaultPath(vaultPath) { success in
-                if success {
-                    print("✅ Security-scoped access granted for vault: \(vaultPath)")
-                } else {
-                    print("⚠️ User denied security-scoped access or vault path doesn't exist")
+            panel.begin { [self] response in
+                if response == .OK, let url = panel.url {
+                    // User selected home folder - this grants us security-scoped access to ~/.ferrufi
+                    vaultFolderURL = url
+                    print("✅ User granted access to: \(url.path)")
                 }
-                continuation.resume()
+                showingFolderPermissionRequest = false
             }
-        }
-
-        await MainActor.run {
-            showingFolderAccessRequest = false
-        }
+        #endif
     }
 
     private func createWelcomeNote(at url: URL) throws {

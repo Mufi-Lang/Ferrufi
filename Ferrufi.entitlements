@@ -2,7 +2,9 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <!-- Allow app to run without App Sandbox -->
+    <!-- Non-sandboxed app (required for flexible file access) -->
+    <!-- Note: Non-sandboxed apps don't get automatic TCC dialogs -->
+    <!-- They need to use NSOpenPanel for user-selected folders -->
     <key>com.apple.security.app-sandbox</key>
     <false/>
 
@@ -10,11 +12,11 @@
     <key>com.apple.security.files.user-selected.read-write</key>
     <true/>
 
-    <!-- Allow reading and writing to user's Documents, Downloads, etc. -->
+    <!-- Allow reading and writing to Downloads -->
     <key>com.apple.security.files.downloads.read-write</key>
     <true/>
 
-    <!-- Allow access to USB and external drives -->
+    <!-- Allow broad file access (non-sandboxed apps can use this) -->
     <key>com.apple.security.files.all</key>
     <true/>
 
@@ -30,11 +32,11 @@
     <key>com.apple.security.cs.allow-dyld-environment-variables</key>
     <true/>
 
-    <!-- Network access (if needed for future features) -->
+    <!-- Network access -->
     <key>com.apple.security.network.client</key>
     <true/>
 
-    <!-- Allow JIT compilation (if Mufi needs it) -->
+    <!-- Allow JIT compilation -->
     <key>com.apple.security.cs.allow-jit</key>
     <true/>
 </dict>
