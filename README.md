@@ -81,31 +81,34 @@ sudo ./scripts/install_app.sh /path/to/Ferrufi.app
 
 Manual alternative:
 ```bash
-# Copy the app bundle (preserves metadata)
-sudo ditto -v /path/to/Ferrufi.app /Applications/
+# Copy the app bundle into /usr/local/bin (preserves metadata)
+sudo ditto -v /path/to/Ferrufi.app /usr/local/bin/Ferrufi.app
+
+# Create a /Applications symlink pointing to the installed bundle
+sudo ln -sfn /usr/local/bin/Ferrufi.app /Applications/Ferrufi.app
 
 # Create a CLI symlink to the bundled executable
-sudo ln -sf /Applications/Ferrufi.app/Contents/MacOS/Ferrufi /usr/local/bin/ferrufi
+sudo ln -sf /usr/local/bin/Ferrufi.app/Contents/MacOS/Ferrufi /usr/local/bin/ferrufi
 
 # If Gatekeeper blocks the app on first launch, clear quarantine:
-sudo xattr -dr com.apple.quarantine /Applications/Ferrufi.app
+sudo xattr -dr com.apple.quarantine /usr/local/bin/Ferrufi.app || true
 ```
 
 The install script also attempts to remove quarantine and prints handy instructions when elevated privileges are required.
 
-Quick CLI install (curl one-liner)
-- If you'd like a single command to install just the CLI symlink (assuming `Ferrufi.app` is already present on the system), you can run the curl installer directly:
+Quick install (curl one-liner — app + CLI)
+- Run the release installer (this will download the release, place `Ferrufi.app` into `/usr/local/bin/Ferrufi.app`, create `/Applications/Ferrufi.app -> /usr/local/bin/Ferrufi.app`, and set up the CLI at `/usr/local/bin/ferrufi`):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/<owner>/<repo>/main/scripts/install_cli.sh | sh
+curl -fsSL https://raw.githubusercontent.com/Mufi-Lang/Ferrufi/main/scripts/install_release.sh | sh
 ```
 
 Security note: piping a remote script directly into a shell can be risky. We strongly recommend that you download and inspect the script before running it:
 
 ```bash
-curl -fsSL -o /tmp/install_cli.sh https://raw.githubusercontent.com/<owner>/<repo>/main/scripts/install_cli.sh
-less /tmp/install_cli.sh   # verify contents
-sh /tmp/install_cli.sh
+curl -fsSL -o /tmp/install_release.sh https://raw.githubusercontent.com/Mufi-Lang/Ferrufi/main/scripts/install_release.sh
+less /tmp/install_release.sh   # verify contents
+sh /tmp/install_release.sh
 ```
 
 Mufi Integration
