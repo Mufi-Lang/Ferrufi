@@ -77,6 +77,9 @@ public class SecurityScopedBookmarkManager: ObservableObject {
                 print("✅ Resolved and accessing bookmark for: \(path)")
             } else {
                 print("⚠️ Failed to start accessing security-scoped resource: \(path)")
+                // If we cannot start accessing the resource, treat it as a failure so
+                // callers can re-prompt the user or handle the error correctly.
+                return nil
             }
 
             // If bookmark is stale, recreate it
@@ -193,14 +196,29 @@ public class SecurityScopedBookmarkManager: ObservableObject {
                 panel.setValue(true, forKey: "showsHiddenFiles")
             }
 
-            panel.begin { [weak self] response in
-                guard let self = self else { return }
+            // Prefer presenting as a sheet attached to the key window when available,
+            // otherwise fall back to a standalone panel.
+            if let window = NSApp.keyWindow {
+                panel.beginSheetModal(for: window) { [weak self] response in
+                    guard let self = self else { return }
 
-                if response == .OK, let url = panel.url {
-                    let bookmarkCreated = self.createBookmark(for: url)
-                    completion(url, bookmarkCreated)
-                } else {
-                    completion(nil, false)
+                    if response == .OK, let url = panel.url {
+                        let bookmarkCreated = self.createBookmark(for: url)
+                        completion(url, bookmarkCreated)
+                    } else {
+                        completion(nil, false)
+                    }
+                }
+            } else {
+                panel.begin { [weak self] response in
+                    guard let self = self else { return }
+
+                    if response == .OK, let url = panel.url {
+                        let bookmarkCreated = self.createBookmark(for: url)
+                        completion(url, bookmarkCreated)
+                    } else {
+                        completion(nil, false)
+                    }
                 }
             }
         #else

@@ -178,39 +178,55 @@ struct GeneralSettingsView: View {
                                 defaultDirectory: homeURL,
                                 showHidden: true
                             ) { url, created in
-                                guard let selectedURL = url else { return }
+                                // Ensure the user actually granted permission and a bookmark was created
+                                guard let selectedURL = url, created else {
+                                    errorMessage = "Folder not selected or permission not granted."
+                                    showErrorAlert = true
+                                    return
+                                }
+
                                 Task {
                                     do {
-                                        try await SecurityScopedBookmarkManager.shared.withAccess(
-                                            toPath: selectedURL.path
-                                        ) { parentURL in
-                                            let ferrufiDir: URL
-                                            if parentURL.path == homeURL.path {
-                                                ferrufiDir = parentURL.appendingPathComponent(
-                                                    ".ferrufi")
-                                            } else {
-                                                ferrufiDir = parentURL
+                                        // The withAccess call returns nil if access could not be started.
+                                        let accessed =
+                                            try await SecurityScopedBookmarkManager.shared
+                                            .withAccess(
+                                                toPath: selectedURL.path
+                                            ) { parentURL in
+                                                let ferrufiDir: URL
+                                                if parentURL.path == homeURL.path {
+                                                    ferrufiDir = parentURL.appendingPathComponent(
+                                                        ".ferrufi")
+                                                } else {
+                                                    ferrufiDir = parentURL
+                                                }
+                                                let scriptsDir = ferrufiDir.appendingPathComponent(
+                                                    "scripts")
+
+                                                try FileManager.default.createDirectory(
+                                                    at: ferrufiDir,
+                                                    withIntermediateDirectories: true,
+                                                    attributes: nil
+                                                )
+                                                try FileManager.default.createDirectory(
+                                                    at: scriptsDir,
+                                                    withIntermediateDirectories: true,
+                                                    attributes: nil
+                                                )
+
+                                                // Reinitialize Ferrufi storage to point at the new vault
+                                                try await ferrufiApp.initialize(
+                                                    vaultPath: scriptsDir.path)
                                             }
-                                            let scriptsDir = ferrufiDir.appendingPathComponent(
-                                                "scripts")
-                                            try FileManager.default.createDirectory(
-                                                at: ferrufiDir,
-                                                withIntermediateDirectories: true,
-                                                attributes: nil
-                                            )
-                                            try FileManager.default.createDirectory(
-                                                at: scriptsDir,
-                                                withIntermediateDirectories: true,
-                                                attributes: nil
-                                            )
 
-                                            // Reinitialize Ferrufi storage to point at the new vault
-                                            try await ferrufiApp.initialize(
-                                                vaultPath: scriptsDir.path)
+                                        if accessed == nil {
+                                            errorMessage =
+                                                "Failed to access the selected folder. Permission may not have been granted."
+                                            showErrorAlert = true
+                                        } else {
+                                            vaultInfoMessage = "Vault folder updated."
+                                            showVaultInfoAlert = true
                                         }
-
-                                        vaultInfoMessage = "Vault folder updated."
-                                        showVaultInfoAlert = true
                                     } catch {
                                         errorMessage = error.localizedDescription
                                         showErrorAlert = true
@@ -226,11 +242,21 @@ struct GeneralSettingsView: View {
                                 defaultDirectory: homeURL,
                                 showHidden: true
                             ) { url, created in
-                                if url != nil {
-                                    vaultInfoMessage = "Permission repaired."
-                                    showVaultInfoAlert = true
+                                // Ensure user selected and we successfully created a bookmark
+                                if let selectedURL = url, created {
+                                    // Verify we can actually resolve and start access for the bookmark
+                                    if SecurityScopedBookmarkManager.shared.resolveBookmark(
+                                        forPath: selectedURL.path) != nil
+                                    {
+                                        vaultInfoMessage = "Permission repaired."
+                                        showVaultInfoAlert = true
+                                    } else {
+                                        errorMessage =
+                                            "Failed to repair permission (couldn't access folder)."
+                                        showErrorAlert = true
+                                    }
                                 } else {
-                                    errorMessage = "Repair cancelled."
+                                    errorMessage = "Repair cancelled or permission not granted."
                                     showErrorAlert = true
                                 }
                             }
