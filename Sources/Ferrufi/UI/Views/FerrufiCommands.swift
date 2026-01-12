@@ -323,10 +323,18 @@ public struct FerrufiCommands: Commands {
             defaultDirectory: homeURL,
             showHidden: true
         ) { url, created in
-            guard let selectedURL = url else { return }
+            // Ensure the user actually selected a folder and a bookmark was created
+            guard let selectedURL = url, created else {
+                self.showAlert(
+                    title: "Permission Required",
+                    message: "Folder selection cancelled or permission was not granted."
+                )
+                return
+            }
+
             Task {
                 do {
-                    try await SecurityScopedBookmarkManager.shared.withAccess(
+                    let result = try await SecurityScopedBookmarkManager.shared.withAccess(
                         toPath: selectedURL.path
                     ) { parentURL in
                         // If the user picked Home, we create ~/.ferrufi inside it.
@@ -349,9 +357,26 @@ public struct FerrufiCommands: Commands {
                             try await app.initialize(vaultPath: scriptsDir.path)
                         }
                     }
+
+                    // If we couldn't start accessing the bookmark, withAccess returns nil.
+                    if result == nil {
+                        throw NSError(
+                            domain: "Ferrufi",
+                            code: 1,
+                            userInfo: [
+                                NSLocalizedDescriptionKey:
+                                    "Failed to access selected folder. Permission may not have been granted."
+                            ]
+                        )
+                    }
+
+                    self.showAlert(
+                        title: "Vault Updated", message: "Vault folder updated successfully.")
                 } catch {
                     print("Failed to change vault folder: \(error)")
-                    // Non-fatal: attempt to surface to user via an alert in the UI if appropriate
+                    self.showAlert(
+                        title: "Failed",
+                        message: "Failed to change vault folder: \(error.localizedDescription)")
                 }
             }
         }
