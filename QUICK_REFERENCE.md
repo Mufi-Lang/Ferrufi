@@ -10,19 +10,38 @@
 
 ### Download & Install
 
+#### Method A — Installer script (recommended)
+We provide a single-script installer (like Zed) that downloads the latest experimental build and installs Ferrufi to /Applications.
+
 ```bash
-# 1. Download the latest experimental release
-# Visit: https://github.com/Mufi-Lang/Ferrufi/releases/tag/experimental
-# Or use wget/curl:
-curl -L -O https://github.com/Mufi-Lang/Ferrufi/releases/download/experimental/Ferrufi-0.0.0-exp.4.6eb4fb3-macos.zip
+# Run the installer (recommended):
+curl -fsSL https://raw.githubusercontent.com/Mufi-Lang/Ferrufi/main/scripts/install.sh | sh
+
+# Or download and run manually:
+curl -L -o install.sh https://raw.githubusercontent.com/Mufi-Lang/Ferrufi/main/scripts/install.sh
+sh install.sh --install-dir /Applications
+
+# Useful flags:
+#   --no-quarantine    Skip automatic xattr removal
+#   --install-dir DIR  Install to a custom directory
+#   --local FILE       Install from a local zip
+#   --yes              Non-interactive (auto-accept prompts)
+```
+
+#### Method B — Manual download
+If you prefer to install manually:
+
+```bash
+# 1. Visit the experimental release page and download the macOS zip:
+#    https://github.com/Mufi-Lang/Ferrufi/releases/tag/experimental
 
 # 2. Extract
-unzip Ferrufi-0.0.0-exp.4.6eb4fb3-macos.zip
+unzip Ferrufi-<version>-macos.zip
 
 # 3. Install to Applications
 cp -R Ferrufi.app /Applications/
 
-# 4. Remove quarantine (recommended)
+# 4. (Optional) Remove quarantine so users can open without Gatekeeper friction:
 xattr -cr /Applications/Ferrufi.app
 
 # 5. Launch
