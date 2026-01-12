@@ -265,7 +265,7 @@ public struct ContentView: View {
                         if bookmarkManager.resolveBookmark(forPath: selectedURL.path) != nil {
                             Task {
                                 do {
-                                    try await bookmarkManager.withAccess(toPath: selectedURL.path) {
+                                    try bookmarkManager.withAccess(toPath: selectedURL.path) {
                                         parentURL in
                                         // If the user picked Home, create ~/.ferrufi inside it.
                                         // Otherwise, use the selected folder directly as vault root.
