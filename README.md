@@ -93,6 +93,21 @@ sudo xattr -dr com.apple.quarantine /Applications/Ferrufi.app
 
 The install script also attempts to remove quarantine and prints handy instructions when elevated privileges are required.
 
+Quick CLI install (curl one-liner)
+- If you'd like a single command to install just the CLI symlink (assuming `Ferrufi.app` is already present on the system), you can run the curl installer directly:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/<owner>/<repo>/main/scripts/install_cli.sh | sh
+```
+
+Security note: piping a remote script directly into a shell can be risky. We strongly recommend that you download and inspect the script before running it:
+
+```bash
+curl -fsSL -o /tmp/install_cli.sh https://raw.githubusercontent.com/<owner>/<repo>/main/scripts/install_cli.sh
+less /tmp/install_cli.sh   # verify contents
+sh /tmp/install_cli.sh
+```
+
 Mufi Integration
 - The project now includes native integration with the Mufi runtime via a system library.
   - Place the runtime artifacts into `include/`:
