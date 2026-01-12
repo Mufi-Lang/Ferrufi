@@ -43,6 +43,16 @@ public struct ContentView: View {
                 Text(error.localizedDescription)
             }
         }
+        .alert("Success", isPresented: $navigationModel.showingInfoMessage) {
+            Button("OK") {
+                navigationModel.showingInfoMessage = false
+                navigationModel.currentInfoMessage = nil
+            }
+        } message: {
+            if let msg = navigationModel.currentInfoMessage {
+                Text(msg)
+            }
+        }
         .sheet(isPresented: $navigationModel.showingNoteCreation) {
             NoteCreationSheet()
                 .environmentObject(ferrufiApp)
@@ -279,6 +289,7 @@ public struct ContentView: View {
                             if bookmarkManager.resolveBookmark(forPath: selectedURL.path) != nil {
                                 Task {
                                     do {
+                                        var createdScriptsPath: String? = nil
                                         try bookmarkManager.withAccess(toPath: selectedURL.path) {
                                             parentURL in
                                             // If the user picked Home, create ~/.ferrufi inside it.
@@ -298,9 +309,17 @@ public struct ContentView: View {
                                             try FileManager.default.createDirectory(
                                                 at: scriptsDir, withIntermediateDirectories: true,
                                                 attributes: nil)
+                                            // capture path for confirmation after initialization
+                                            createdScriptsPath = scriptsDir.path
                                         }
                                         // After creating, restart initialization to proceed
                                         await initializeApp()
+                                        if let path = createdScriptsPath {
+                                            await MainActor.run {
+                                                navigationModel.showInfo(
+                                                    "Vault ready — storing data at \(path)")
+                                            }
+                                        }
                                     } catch {
                                         await MainActor.run {
                                             navigationModel.currentError = error

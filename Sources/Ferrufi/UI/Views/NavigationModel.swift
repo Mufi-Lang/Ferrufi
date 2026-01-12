@@ -48,6 +48,12 @@ public class NavigationModel: ObservableObject {
     /// Whether to show error alert
     @Published public var showingError: Bool = false
 
+    /// Current informational message to display to the user (success/confirmation)
+    @Published public var currentInfoMessage: String?
+
+    /// Whether to show the info/confirmation alert
+    @Published public var showingInfoMessage: Bool = false
+
     /// Whether to show note creation sheet
     @Published public var showingNoteCreation: Bool = false
 
@@ -177,6 +183,13 @@ public class NavigationModel: ObservableObject {
         showingError = true
     }
 
+    /// Shows an informational (non-error) message to the user
+    /// - Parameter message: The message to display
+    public func showInfo(_ message: String) {
+        currentInfoMessage = message
+        showingInfoMessage = true
+    }
+
     // MARK: - Rename/Move Actions
 
     /// Show rename dialog for a note
@@ -297,8 +310,9 @@ public class NavigationModel: ObservableObject {
     }
 
     /// Creates a note in the current working directory
-    public func createNoteInWorkingDirectory(title: String, content: String = "", ferrufiApp: FerrufiApp)
-    {
+    public func createNoteInWorkingDirectory(
+        title: String, content: String = "", ferrufiApp: FerrufiApp
+    ) {
         Task {
             do {
                 let targetFolder: Folder
