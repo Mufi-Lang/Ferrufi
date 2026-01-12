@@ -204,6 +204,10 @@ public struct FerrufiCommands: Commands {
                 shortcuts.keyboardShortcut(for: "runScript")
                     ?? KeyboardShortcut(KeyEquivalent("r"), modifiers: [.command]))
 
+            Button("Trust Current Vault") {
+                trustCurrentVaultAction()
+            }
+
             Divider()
 
             Button("Export as PDF") {
@@ -247,6 +251,69 @@ public struct FerrufiCommands: Commands {
 
     private func newNoteAction() {
         nav?.showingNoteCreation = true
+    }
+
+    /// Ask the user to trust the current vault (workspace) and persist a trusted entry.
+    /// This will:
+    ///  - Use an existing bookmarked parent if present (no further prompt required),
+    ///  - Otherwise present the folder picker so the user can select the folder to trust,
+    ///  - Resolve and activate a security-scoped bookmark for the chosen folder,
+    ///  - Persist the trusted path in configuration.
+    private func trustCurrentVaultAction() {
+        let homeURL = FileManager.default.homeDirectoryForCurrentUser
+        guard let app = ferrufiApp else { return }
+
+        // Resolve the actual vault path (use currently initialized path if available)
+        let rawVaultPath = app.currentVaultPath ?? app.configuration.vault.defaultVaultPath
+        let vaultPath = (rawVaultPath as NSString).expandingTildeInPath
+
+        // If there's already a bookmarked parent that covers the vault, trust it directly
+        if let existingParent = SecurityScopedBookmarkManager.shared
+            .allBookmarkedPaths()
+            .first(where: { vaultPath.hasPrefix($0) })
+        {
+            app.configuration.updateConfiguration { config in
+                var arr = config.trustedVaultPaths ?? []
+                if !arr.contains(existingParent) {
+                    arr.append(existingParent)
+                    config.trustedVaultPaths = arr
+                }
+            }
+            FerrufiApp.sharedNavigationModel?.showInfo("Vault trusted: \(existingParent)")
+            return
+        }
+
+        // Otherwise ask the user to select a folder to trust
+        SecurityScopedBookmarkManager.shared.requestFolderAccess(
+            message: "Select a folder to trust for Ferrufi (select Home to use ~/.ferrufi/)",
+            defaultDirectory: homeURL,
+            showHidden: true
+        ) { url, created in
+            guard let selectedURL = url else { return }
+
+            // Resolve and activate the bookmark; persist the selected path as trusted
+            if SecurityScopedBookmarkManager.shared.resolveBookmark(forPath: selectedURL.path)
+                != nil
+            {
+                app.configuration.updateConfiguration { config in
+                    var arr = config.trustedVaultPaths ?? []
+                    if !arr.contains(selectedURL.path) {
+                        arr.append(selectedURL.path)
+                        config.trustedVaultPaths = arr
+                    }
+                }
+                FerrufiApp.sharedNavigationModel?.showInfo("Vault trusted: \(selectedURL.path)")
+            } else {
+                // Show an error if we couldn't activate the bookmark
+                let err = NSError(
+                    domain: "com.ferrufi", code: -1,
+                    userInfo: [
+                        NSLocalizedDescriptionKey:
+                            "Failed to activate bookmark for the selected folder. Please try again."
+                    ])
+                FerrufiApp.sharedNavigationModel?.showError(err)
+            }
+        }
     }
 
     private func newFolderAction() {
@@ -326,28 +393,39 @@ public struct FerrufiCommands: Commands {
             guard let selectedURL = url else { return }
             Task {
                 do {
-                    try await SecurityScopedBookmarkManager.shared.withAccess(
-                        toPath: selectedURL.path
-                    ) { parentURL in
-                        // If the user picked Home, we create ~/.ferrufi inside it.
-                        // Otherwise we use the selected folder directly as the vault root.
-                        let ferrufiDir: URL
-                        if parentURL.path == homeURL.path {
-                            ferrufiDir = parentURL.appendingPathComponent(".ferrufi")
-                        } else {
-                            ferrufiDir = parentURL
-                        }
-                        let scriptsDir = ferrufiDir.appendingPathComponent("scripts")
+                    // Resolve and activate persistent access to the selected folder
+                    guard
+                        let parentURL = SecurityScopedBookmarkManager.shared.resolveBookmark(
+                            forPath: selectedURL.path)
+                    else {
+                        print("Failed to activate bookmark for selected folder.")
+                        return
+                    }
 
-                        try FileManager.default.createDirectory(
-                            at: ferrufiDir, withIntermediateDirectories: true, attributes: nil)
-                        try FileManager.default.createDirectory(
-                            at: scriptsDir, withIntermediateDirectories: true, attributes: nil)
+                    // If the user picked Home, create ~/.ferrufi inside it
+                    let ferrufiDir: URL
+                    if parentURL.path == homeURL.path {
+                        ferrufiDir = parentURL.appendingPathComponent(".ferrufi")
+                    } else {
+                        ferrufiDir = parentURL
+                    }
+                    let scriptsDir = ferrufiDir.appendingPathComponent("scripts")
 
-                        // Reinitialize Ferrufi with the new vault location
-                        if let app = ferrufiApp {
-                            try await app.initialize(vaultPath: scriptsDir.path)
-                        }
+                    // Create the necessary directories under the active security scope
+                    try FileManager.default.createDirectory(
+                        at: ferrufiDir, withIntermediateDirectories: true, attributes: nil)
+                    try FileManager.default.createDirectory(
+                        at: scriptsDir, withIntermediateDirectories: true, attributes: nil)
+
+                    // Reinitialize Ferrufi with the new vault location
+                    if let app = ferrufiApp {
+                        try await app.initialize(vaultPath: scriptsDir.path)
+                    }
+
+                    // Show a confirmation message via the shared navigation model (if available)
+                    await MainActor.run {
+                        FerrufiApp.sharedNavigationModel?.showInfo(
+                            "Vault folder updated: \(scriptsDir.path)")
                     }
                 } catch {
                     print("Failed to change vault folder: \(error)")
@@ -355,6 +433,7 @@ public struct FerrufiCommands: Commands {
                 }
             }
         }
+
     }
 
     private func findInNotesAction() {

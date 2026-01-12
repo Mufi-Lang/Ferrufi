@@ -74,6 +74,28 @@ public struct FerrufiConfiguration: Codable, Sendable {
         }
     }
 
+    /// Trusted vault paths (persisted as JSON in additionalSettings)
+    /// - Stores an array of folder paths that the user has explicitly marked as "trusted".
+    /// - Trust is an application-level flag and is intended to be used together with security-scoped
+    ///   bookmarks (the user must still grant OS-level access via the open panel).
+    public var trustedVaultPaths: [String]? {
+        get {
+            if let data = additionalSettings["trustedVaultPaths"]?.data(using: .utf8) {
+                return try? JSONDecoder().decode([String].self, from: data)
+            }
+            return nil
+        }
+        set {
+            if let paths = newValue,
+                let data = try? JSONEncoder().encode(paths)
+            {
+                additionalSettings["trustedVaultPaths"] = String(data: data, encoding: .utf8)
+            } else {
+                additionalSettings.removeValue(forKey: "trustedVaultPaths")
+            }
+        }
+    }
+
     public init(
         vault: VaultConfiguration = VaultConfiguration(),
         editor: EditorConfiguration = EditorConfiguration(),
@@ -602,6 +624,18 @@ extension ConfigurationManager {
         get { configuration.recentNoteIds }
         set {
             configuration.recentNoteIds = newValue
+            saveConfiguration()
+        }
+    }
+
+    /// Quick access to trusted vault paths
+    /// Stored as an array of folder paths that the user has explicitly marked as trusted.
+    /// Trust is an application-level flag and should be used together with OS-level
+    /// security-scoped bookmarks (the user must still grant OS access via the picker).
+    public var trustedVaultPaths: [String]? {
+        get { configuration.trustedVaultPaths }
+        set {
+            configuration.trustedVaultPaths = newValue
             saveConfiguration()
         }
     }

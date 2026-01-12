@@ -154,9 +154,13 @@ struct GeneralSettingsView: View {
 
             GroupBox(label: Label("Vault", systemImage: "folder")) {
                 VStack(alignment: .leading, spacing: 8) {
-                    // Compute commonly used paths
+                    // Compute currently initialized vault path (expand '~' if present)
                     let homeURL = FileManager.default.homeDirectoryForCurrentUser
-                    let vaultPath = homeURL.appendingPathComponent(".ferrufi/scripts")
+                    let rawVaultPath =
+                        ferrufiApp.currentVaultPath
+                        ?? ferrufiApp.configuration.vault.defaultVaultPath
+                    let vaultPath = URL(
+                        fileURLWithPath: (rawVaultPath as NSString).expandingTildeInPath)
                     let bookmarkedParent = SecurityScopedBookmarkManager.shared
                         .allBookmarkedPaths()
                         .first { vaultPath.path.hasPrefix($0) }
@@ -170,7 +174,50 @@ struct GeneralSettingsView: View {
                             .foregroundColor(.secondary)
                     }
 
+                    // Trusted state
+                    let trustedList = ferrufiApp.configuration.trustedVaultPaths ?? []
+                    HStack(alignment: .center) {
+                        Text("Trusted:")
+                            .frame(width: settingsLabelWidth, alignment: .leading)
+                        Spacer()
+                        if trustedList.isEmpty {
+                            Text("Not trusted")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        } else {
+                            VStack(alignment: .trailing, spacing: 2) {
+                                ForEach(trustedList, id: \.self) { p in
+                                    Text(p)
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                        }
+                    }
+
+                    // Bookmarked paths
+                    let bookmarks = SecurityScopedBookmarkManager.shared.allBookmarkedPaths()
+                    HStack(alignment: .center) {
+                        Text("Bookmarked:")
+                            .frame(width: settingsLabelWidth, alignment: .leading)
+                        Spacer()
+                        if bookmarks.isEmpty {
+                            Text("None")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        } else {
+                            VStack(alignment: .trailing, spacing: 2) {
+                                ForEach(bookmarks, id: \.self) { b in
+                                    Text(b)
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                        }
+                    }
+
                     HStack(spacing: 10) {
+
                         Button("Change Vault Folder") {
                             SecurityScopedBookmarkManager.shared.requestFolderAccess(
                                 message:
@@ -181,33 +228,38 @@ struct GeneralSettingsView: View {
                                 guard let selectedURL = url else { return }
                                 Task {
                                     do {
-                                        try await SecurityScopedBookmarkManager.shared.withAccess(
-                                            toPath: selectedURL.path
-                                        ) { parentURL in
-                                            let ferrufiDir: URL
-                                            if parentURL.path == homeURL.path {
-                                                ferrufiDir = parentURL.appendingPathComponent(
-                                                    ".ferrufi")
-                                            } else {
-                                                ferrufiDir = parentURL
-                                            }
-                                            let scriptsDir = ferrufiDir.appendingPathComponent(
-                                                "scripts")
-                                            try FileManager.default.createDirectory(
-                                                at: ferrufiDir,
-                                                withIntermediateDirectories: true,
-                                                attributes: nil
-                                            )
-                                            try FileManager.default.createDirectory(
-                                                at: scriptsDir,
-                                                withIntermediateDirectories: true,
-                                                attributes: nil
-                                            )
-
-                                            // Reinitialize Ferrufi storage to point at the new vault
-                                            try await ferrufiApp.initialize(
-                                                vaultPath: scriptsDir.path)
+                                        // Resolve and activate the selected parent folder (persistent access)
+                                        guard
+                                            let parentURL = SecurityScopedBookmarkManager.shared
+                                                .resolveBookmark(forPath: selectedURL.path)
+                                        else {
+                                            errorMessage =
+                                                "Failed to activate bookmark for selected folder."
+                                            showErrorAlert = true
+                                            return
                                         }
+
+                                        // If the user picked Home, create ~/.ferrufi inside it
+                                        let ferrufiDir: URL
+                                        if parentURL.path == homeURL.path {
+                                            ferrufiDir = parentURL.appendingPathComponent(
+                                                ".ferrufi")
+                                        } else {
+                                            ferrufiDir = parentURL
+                                        }
+                                        let scriptsDir = ferrufiDir.appendingPathComponent(
+                                            "scripts")
+                                        try FileManager.default.createDirectory(
+                                            at: ferrufiDir, withIntermediateDirectories: true,
+                                            attributes: nil
+                                        )
+                                        try FileManager.default.createDirectory(
+                                            at: scriptsDir, withIntermediateDirectories: true,
+                                            attributes: nil
+                                        )
+
+                                        // Reinitialize Ferrufi storage to point at the new vault
+                                        try await ferrufiApp.initialize(vaultPath: scriptsDir.path)
 
                                         vaultInfoMessage = "Vault folder updated."
                                         showVaultInfoAlert = true
@@ -219,6 +271,76 @@ struct GeneralSettingsView: View {
                             }
                         }
                         .controlSize(.small)
+
+                        // Trust / Untrust controls
+                        if (ferrufiApp.configuration.trustedVaultPaths ?? []).contains(where: {
+                            vaultPath.path.hasPrefix($0)
+                        }) {
+                            Button("Untrust Vault") {
+                                // Find the trusted entry that covers the current vault and remove it
+                                let trusted = ferrufiApp.configuration.trustedVaultPaths ?? []
+                                if let parentToRemove = trusted.first(where: {
+                                    vaultPath.path.hasPrefix($0)
+                                }) {
+                                    ferrufiApp.configuration.updateConfiguration { config in
+                                        var arr = config.trustedVaultPaths ?? []
+                                        arr.removeAll(where: { $0 == parentToRemove })
+                                        config.trustedVaultPaths = arr.isEmpty ? nil : arr
+                                    }
+                                    vaultInfoMessage = "Vault untrusted: \(parentToRemove)"
+                                    showVaultInfoAlert = true
+                                } else {
+                                    errorMessage = "No trusted path found to untrust."
+                                    showErrorAlert = true
+                                }
+                            }
+                            .controlSize(.small)
+                        } else {
+                            Button("Trust Vault") {
+                                // If there's already a bookmarked parent, trust it; otherwise ask for folder access first
+                                if let existingParent = SecurityScopedBookmarkManager.shared
+                                    .allBookmarkedPaths()
+                                    .first(where: { vaultPath.path.hasPrefix($0) })
+                                {
+                                    ferrufiApp.configuration.updateConfiguration { config in
+                                        var arr = config.trustedVaultPaths ?? []
+                                        if !arr.contains(existingParent) {
+                                            arr.append(existingParent)
+                                            config.trustedVaultPaths = arr
+                                        }
+                                    }
+                                    vaultInfoMessage = "Vault trusted: \(existingParent)"
+                                    showVaultInfoAlert = true
+                                } else {
+                                    SecurityScopedBookmarkManager.shared.requestFolderAccess(
+                                        message:
+                                            "Select a folder to trust for Ferrufi (select Home to use ~/.ferrufi/)",
+                                        defaultDirectory: homeURL,
+                                        showHidden: true
+                                    ) { url, created in
+                                        guard let sel = url else { return }
+                                        if SecurityScopedBookmarkManager.shared.resolveBookmark(
+                                            forPath: sel.path) != nil
+                                        {
+                                            ferrufiApp.configuration.updateConfiguration { config in
+                                                var arr = config.trustedVaultPaths ?? []
+                                                if !arr.contains(sel.path) {
+                                                    arr.append(sel.path)
+                                                    config.trustedVaultPaths = arr
+                                                }
+                                            }
+                                            vaultInfoMessage = "Vault trusted: \(sel.path)"
+                                            showVaultInfoAlert = true
+                                        } else {
+                                            errorMessage =
+                                                "Failed to activate permission for the selected folder."
+                                            showErrorAlert = true
+                                        }
+                                    }
+                                }
+                            }
+                            .controlSize(.small)
+                        }
 
                         Button("Repair Permission") {
                             SecurityScopedBookmarkManager.shared.requestFolderAccess(
@@ -233,6 +355,32 @@ struct GeneralSettingsView: View {
                                     errorMessage = "Repair cancelled."
                                     showErrorAlert = true
                                 }
+                            }
+                        }
+                        .controlSize(.small)
+
+                        Button("Scan & Repair Bookmarks") {
+                            Task {
+                                var removed: [String] = []
+                                let bookmarks = SecurityScopedBookmarkManager.shared
+                                    .allBookmarkedPaths()
+                                for path in bookmarks {
+                                    // Attempt to resolve each bookmark; resolveBookmark will remove corrupt ones
+                                    if SecurityScopedBookmarkManager.shared.resolveBookmark(
+                                        forPath: path) == nil
+                                    {
+                                        removed.append(path)
+                                    }
+                                }
+
+                                if removed.isEmpty {
+                                    vaultInfoMessage = "No broken bookmarks found."
+                                } else {
+                                    vaultInfoMessage =
+                                        "Removed broken bookmarks:\n"
+                                        + removed.joined(separator: "\n")
+                                }
+                                showVaultInfoAlert = true
                             }
                         }
                         .controlSize(.small)

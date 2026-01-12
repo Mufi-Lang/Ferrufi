@@ -166,31 +166,39 @@ public struct ContentView: View {
                 )
             }
 
-            try await bookmarkManager.withAccess(toPath: parentPath) { parentURL in
-                let ferrufiDir = parentURL.appendingPathComponent(".ferrufi")
-                let scriptsDir = ferrufiDir.appendingPathComponent("scripts")
-
-                try FileManager.default.createDirectory(
-                    at: ferrufiDir,
-                    withIntermediateDirectories: true,
-                    attributes: nil
+            // Resolve the bookmarked parent and keep the security scope active
+            guard let parentURL = bookmarkManager.resolveBookmark(forPath: parentPath) else {
+                throw NSError(
+                    domain: "com.ferrufi", code: -1,
+                    userInfo: [
+                        NSLocalizedDescriptionKey: "Failed to resolve permission for vault parent."
+                    ]
                 )
-
-                try FileManager.default.createDirectory(
-                    at: scriptsDir,
-                    withIntermediateDirectories: true,
-                    attributes: nil
-                )
-
-                // Create welcome script if this is first run
-                let welcomeScriptPath = scriptsDir.appendingPathComponent("Welcome.md")
-                if !FileManager.default.fileExists(atPath: welcomeScriptPath.path) {
-                    try createWelcomeNote(at: welcomeScriptPath)
-                }
-
-                // Initialize Ferrufi with the scripts directory
-                try await ferrufiApp.initialize(vaultPath: scriptsDir.path)
             }
+
+            let ferrufiDir = parentURL.appendingPathComponent(".ferrufi")
+            let scriptsDir = ferrufiDir.appendingPathComponent("scripts")
+
+            try FileManager.default.createDirectory(
+                at: ferrufiDir,
+                withIntermediateDirectories: true,
+                attributes: nil
+            )
+
+            try FileManager.default.createDirectory(
+                at: scriptsDir,
+                withIntermediateDirectories: true,
+                attributes: nil
+            )
+
+            // Create welcome script if this is first run
+            let welcomeScriptPath = scriptsDir.appendingPathComponent("Welcome.md")
+            if !FileManager.default.fileExists(atPath: welcomeScriptPath.path) {
+                try createWelcomeNote(at: welcomeScriptPath)
+            }
+
+            // Initialize Ferrufi with the scripts directory
+            try await ferrufiApp.initialize(vaultPath: scriptsDir.path)
 
             // Apply configured startup behavior (restore last session, open welcome, or open a specific note)
             await MainActor.run {
@@ -290,28 +298,38 @@ public struct ContentView: View {
                                 Task {
                                     do {
                                         var createdScriptsPath: String? = nil
-                                        try bookmarkManager.withAccess(toPath: selectedURL.path) {
-                                            parentURL in
-                                            // If the user picked Home, create ~/.ferrufi inside it.
-                                            // Otherwise, use the selected folder directly as vault root.
-                                            let ferrufiDir: URL
-                                            if parentURL.path == homeURL.path {
-                                                ferrufiDir = parentURL.appendingPathComponent(
-                                                    ".ferrufi")
-                                            } else {
-                                                ferrufiDir = parentURL
-                                            }
-                                            let scriptsDir = ferrufiDir.appendingPathComponent(
-                                                "scripts")
-                                            try FileManager.default.createDirectory(
-                                                at: ferrufiDir, withIntermediateDirectories: true,
-                                                attributes: nil)
-                                            try FileManager.default.createDirectory(
-                                                at: scriptsDir, withIntermediateDirectories: true,
-                                                attributes: nil)
-                                            // capture path for confirmation after initialization
-                                            createdScriptsPath = scriptsDir.path
+                                        // Resolve and activate the bookmarked parent folder (persistent access)
+                                        guard
+                                            let parentURL = bookmarkManager.resolveBookmark(
+                                                forPath: selectedURL.path)
+                                        else {
+                                            throw NSError(
+                                                domain: "com.ferrufi", code: -1,
+                                                userInfo: [
+                                                    NSLocalizedDescriptionKey:
+                                                        "Failed to activate folder permission for the selected path."
+                                                ]
+                                            )
                                         }
+                                        // If the user picked Home, create ~/.ferrufi inside it.
+                                        // Otherwise, use the selected folder directly as vault root.
+                                        let ferrufiDir: URL
+                                        if parentURL.path == homeURL.path {
+                                            ferrufiDir = parentURL.appendingPathComponent(
+                                                ".ferrufi")
+                                        } else {
+                                            ferrufiDir = parentURL
+                                        }
+                                        let scriptsDir = ferrufiDir.appendingPathComponent(
+                                            "scripts")
+                                        try FileManager.default.createDirectory(
+                                            at: ferrufiDir, withIntermediateDirectories: true,
+                                            attributes: nil)
+                                        try FileManager.default.createDirectory(
+                                            at: scriptsDir, withIntermediateDirectories: true,
+                                            attributes: nil)
+                                        // capture path for confirmation after initialization
+                                        createdScriptsPath = scriptsDir.path
                                         // After creating, restart initialization to proceed
                                         await initializeApp()
                                         if let path = createdScriptsPath {
@@ -327,6 +345,17 @@ public struct ContentView: View {
                                         }
                                     }
                                 }
+                            } else {
+                                // Resolution failed: provide a clear, user-visible error and suggest re-selecting the folder.
+                                Task { @MainActor in
+                                    navigationModel.currentError = NSError(
+                                        domain: "com.ferrufi", code: -1,
+                                        userInfo: [
+                                            NSLocalizedDescriptionKey:
+                                                "Could not activate permission for the selected folder. The bookmark could not be resolved — please try selecting the folder again (Settings → General → Vault → Change Vault Folder) or revoke and re-grant permission."
+                                        ])
+                                    navigationModel.showingError = true
+                                }
                             }
                         } else {
                             Task { @MainActor in
@@ -334,7 +363,7 @@ public struct ContentView: View {
                                     domain: "com.ferrufi", code: -1,
                                     userInfo: [
                                         NSLocalizedDescriptionKey:
-                                            "Failed to store folder permission"
+                                            "Could not store folder permission for the selected folder. Please try again."
                                     ])
                                 navigationModel.showingError = true
                             }

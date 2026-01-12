@@ -88,6 +88,15 @@ public class SecurityScopedBookmarkManager: ObservableObject {
             return url
         } catch {
             print("❌ Failed to resolve bookmark for \(path): \(error)")
+
+            // If the bookmark data is corrupt (e.g. NSCocoaErrorDomain code 259),
+            // remove the stored bookmark so the app will prompt the user to re-grant access.
+            let nsError = error as NSError
+            if nsError.domain == NSCocoaErrorDomain && nsError.code == 259 {
+                print("⚠️ Corrupt bookmark detected for path \(path), removing bookmark")
+                removeBookmark(forPath: path)
+            }
+
             return nil
         }
     }

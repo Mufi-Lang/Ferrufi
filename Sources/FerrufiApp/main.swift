@@ -56,6 +56,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        // Stop all active security-scoped resources so the system can release them
+        SecurityScopedBookmarkManager.shared.stopAccessingAll()
+
         // Deinitialize Mufi runtime on app shutdown
         Task {
             await MufiBridge.shared.deinitialize()
