@@ -110,7 +110,13 @@ public struct ContentView: View {
         }
         .sheet(isPresented: $showingVaultOnboarding) {
             VaultOnboardingView(
-                onSelectFolder: { presentVaultFolderPicker() },
+                onSelectFolder: {
+                    // Dismiss the onboarding sheet before presenting the system picker
+                    showingVaultOnboarding = false
+                    DispatchQueue.main.async {
+                        presentVaultFolderPicker()
+                    }
+                },
                 onSkip: { Task { await createAppSupportVaultAndInitialize() } }
             )
         }
@@ -235,80 +241,89 @@ public struct ContentView: View {
 
     private func presentVaultFolderPicker() {
         #if os(macOS)
-            let panel = NSOpenPanel()
-            panel.canChooseDirectories = true
-            panel.canChooseFiles = false
-            panel.allowsMultipleSelection = false
-            panel.canCreateDirectories = true
-            panel.prompt = "Select"
-            panel.message =
-                "Select the folder that should contain your Ferrufi vault. To use ~/.ferrufi/, select your Home folder. Hidden folders (like .ferrufi) will be shown."
+            // Present the open panel asynchronously so any open menus are dismissed first
+            DispatchQueue.main.async {
+                let panel = NSOpenPanel()
+                panel.canChooseDirectories = true
+                panel.canChooseFiles = false
+                panel.allowsMultipleSelection = false
+                panel.canCreateDirectories = true
+                panel.prompt = "Select"
+                panel.message =
+                    "Select the folder that should contain your Ferrufi vault. To use ~/.ferrufi/, select your Home folder. Hidden folders (like .ferrufi) will be shown."
 
-            // Default to ~/.ferrufi if it exists, otherwise default to the Home folder
-            let homeURL = FileManager.default.homeDirectoryForCurrentUser
-            let defaultVaultURL = homeURL.appendingPathComponent(".ferrufi")
-            if FileManager.default.fileExists(atPath: defaultVaultURL.path) {
-                panel.directoryURL = defaultVaultURL
-            } else {
-                panel.directoryURL = homeURL
-            }
+                // Default to ~/.ferrufi if it exists, otherwise default to the Home folder
+                let homeURL = FileManager.default.homeDirectoryForCurrentUser
+                let defaultVaultURL = homeURL.appendingPathComponent(".ferrufi")
+                if FileManager.default.fileExists(atPath: defaultVaultURL.path) {
+                    panel.directoryURL = defaultVaultURL
+                } else {
+                    panel.directoryURL = homeURL
+                }
 
-            // Ensure hidden files/folders are visible in the panel
-            // (uses KVC to enable hidden files in the Open Panel)
-            panel.setValue(true, forKey: "showsHiddenFiles")
+                // Ensure hidden files/folders are visible in the panel
+                // (uses KVC to enable hidden files in the Open Panel)
+                panel.setValue(true, forKey: "showsHiddenFiles")
 
-            panel.begin { response in
-                if response == .OK, let selectedURL = panel.url {
-                    // Create and persist a security-scoped bookmark for the selected folder
-                    if bookmarkManager.createBookmark(for: selectedURL) {
-                        // Resolve and use the bookmark to create the vault directories
-                        if bookmarkManager.resolveBookmark(forPath: selectedURL.path) != nil {
-                            Task {
-                                do {
-                                    try bookmarkManager.withAccess(toPath: selectedURL.path) {
-                                        parentURL in
-                                        // If the user picked Home, create ~/.ferrufi inside it.
-                                        // Otherwise, use the selected folder directly as vault root.
-                                        let ferrufiDir: URL
-                                        if parentURL.path == homeURL.path {
-                                            ferrufiDir = parentURL.appendingPathComponent(
-                                                ".ferrufi")
-                                        } else {
-                                            ferrufiDir = parentURL
+                panel.begin { response in
+                    if response == .OK, let selectedURL = panel.url {
+                        // Immediately dismiss any onboarding/permission UI so the menu and sheets go away
+                        showingVaultOnboarding = false
+                        showingFolderPermissionRequest = false
+                        // Bring Ferrufi to the front to ensure the app is visible after selection
+                        NSApp.activate(ignoringOtherApps: true)
+
+                        // Create and persist a security-scoped bookmark for the selected folder
+                        if bookmarkManager.createBookmark(for: selectedURL) {
+                            // Resolve and use the bookmark to create the vault directories
+                            if bookmarkManager.resolveBookmark(forPath: selectedURL.path) != nil {
+                                Task {
+                                    do {
+                                        try bookmarkManager.withAccess(toPath: selectedURL.path) {
+                                            parentURL in
+                                            // If the user picked Home, create ~/.ferrufi inside it.
+                                            // Otherwise, use the selected folder directly as vault root.
+                                            let ferrufiDir: URL
+                                            if parentURL.path == homeURL.path {
+                                                ferrufiDir = parentURL.appendingPathComponent(
+                                                    ".ferrufi")
+                                            } else {
+                                                ferrufiDir = parentURL
+                                            }
+                                            let scriptsDir = ferrufiDir.appendingPathComponent(
+                                                "scripts")
+                                            try FileManager.default.createDirectory(
+                                                at: ferrufiDir, withIntermediateDirectories: true,
+                                                attributes: nil)
+                                            try FileManager.default.createDirectory(
+                                                at: scriptsDir, withIntermediateDirectories: true,
+                                                attributes: nil)
                                         }
-                                        let scriptsDir = ferrufiDir.appendingPathComponent(
-                                            "scripts")
-                                        try FileManager.default.createDirectory(
-                                            at: ferrufiDir, withIntermediateDirectories: true,
-                                            attributes: nil)
-                                        try FileManager.default.createDirectory(
-                                            at: scriptsDir, withIntermediateDirectories: true,
-                                            attributes: nil)
-                                    }
-                                    // After creating, restart initialization to proceed
-                                    await initializeApp()
-                                } catch {
-                                    await MainActor.run {
-                                        navigationModel.currentError = error
-                                        navigationModel.showingError = true
+                                        // After creating, restart initialization to proceed
+                                        await initializeApp()
+                                    } catch {
+                                        await MainActor.run {
+                                            navigationModel.currentError = error
+                                            navigationModel.showingError = true
+                                        }
                                     }
                                 }
                             }
+                        } else {
+                            Task { @MainActor in
+                                navigationModel.currentError = NSError(
+                                    domain: "com.ferrufi", code: -1,
+                                    userInfo: [
+                                        NSLocalizedDescriptionKey:
+                                            "Failed to store folder permission"
+                                    ])
+                                navigationModel.showingError = true
+                            }
                         }
                     } else {
-                        Task { @MainActor in
-                            navigationModel.currentError = NSError(
-                                domain: "com.ferrufi", code: -1,
-                                userInfo: [
-                                    NSLocalizedDescriptionKey: "Failed to store folder permission"
-                                ])
-                            navigationModel.showingError = true
-                        }
+                        // User cancelled - no action
                     }
-                } else {
-                    // User cancelled - no action
                 }
-                showingFolderPermissionRequest = false
             }
         #endif
     }
