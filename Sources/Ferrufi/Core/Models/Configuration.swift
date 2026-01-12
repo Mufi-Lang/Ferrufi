@@ -161,24 +161,15 @@ public struct VaultConfiguration: Codable, Sendable {
     public var defaultVaultPath: String
     public var autoSaveInterval: TimeInterval
     public var fileWatchingEnabled: Bool
-    public var backupEnabled: Bool
-    public var backupInterval: TimeInterval
-    public var maxBackups: Int
 
     public init(
         defaultVaultPath: String = "~/.ferrufi/notes",
         autoSaveInterval: TimeInterval = 30.0,
-        fileWatchingEnabled: Bool = true,
-        backupEnabled: Bool = true,
-        backupInterval: TimeInterval = 3600.0,  // 1 hour
-        maxBackups: Int = 10
+        fileWatchingEnabled: Bool = true
     ) {
         self.defaultVaultPath = defaultVaultPath
         self.autoSaveInterval = autoSaveInterval
         self.fileWatchingEnabled = fileWatchingEnabled
-        self.backupEnabled = backupEnabled
-        self.backupInterval = backupInterval
-        self.maxBackups = maxBackups
     }
 }
 

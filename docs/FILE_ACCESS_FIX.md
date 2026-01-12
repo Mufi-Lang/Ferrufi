@@ -130,9 +130,36 @@ xattr -cr /Applications/Ferrufi.app
 
 # Launch
 open /Applications/Ferrufi.app
-
-# Try editing a file - should work now!
 ```
+
+Minimal bookmark flow
+
+We use a small, predictable flow for persistent folder access:
+
+- Present an `NSOpenPanel` configured for directory selection:
+  - `canChooseDirectories = true`
+  - `canChooseFiles = false`
+  - `allowsMultipleSelection = false`
+  - `canCreateDirectories = true`
+  - `prompt = "Grant Access"`
+  - A short `message` explains why access is needed
+
+- On selection (fail-fast approach):
+  1. Call `url.startAccessingSecurityScopedResource()` immediately. If that fails, do not persist anything and report failure.
+  2. If starting access succeeds, create a `.withSecurityScope` bookmark (`url.bookmarkData(options: .withSecurityScope, ...)`) and persist it under a canonical key.
+  3. Return the selected `URL` (with the security scope already active) so the app can perform immediate operations. On future launches call `resolveBookmark(forPath:)` to resolve and restart the security scope.
+
+Public, minimalist API
+- `requestFolderAccess(presentingWindow:completion:) -> URL?` — present the picker and return a `URL` with an active security scope on success (or `nil` on failure).
+- `resolveBookmark(forPath:) -> URL?` — resolve a stored bookmark and start access (returns `URL` when access is active).
+- `removeBookmark(forPath:)`, `clearAllBookmarks()`, and `withAccess(toPath:operation:)` remain for convenience.
+
+Notes
+- Keys are canonicalized (tilde/symlink normalized) for robust lookups.
+- If resolving a bookmark fails because the system refuses access, the bookmark is removed to avoid future repeated failures.
+- Active scopes are cleaned up on app termination to avoid leaking access.
+
+This keeps the implementation minimal, predictable, and aligned with the snippet-style flow: start access first, then persist.
 
 ## Troubleshooting
 

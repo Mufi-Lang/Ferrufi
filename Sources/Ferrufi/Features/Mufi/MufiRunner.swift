@@ -149,6 +149,11 @@ public struct MufiRunner {
             }
 
             do {
+                #if DEBUG
+                    let args = (process.arguments ?? [])
+                    let argsStr = args.map { "\"\($0)\"" }.joined(separator: " ")
+                    print("🔧 [MufiRunner] exec: \(exe.path) args: \(argsStr)")
+                #endif
                 try process.run()
             } catch {
                 cont.resume(throwing: MufiRunnerError.ioError(error))

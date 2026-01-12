@@ -288,7 +288,7 @@ public struct FerrufiCommands: Commands {
             message: "Select a folder to trust for Ferrufi (select Home to use ~/.ferrufi/)",
             defaultDirectory: homeURL,
             showHidden: true
-        ) { url, created in
+        ) { url in
             guard let selectedURL = url else { return }
 
             // Resolve and activate the bookmark; persist the selected path as trusted
@@ -389,7 +389,7 @@ public struct FerrufiCommands: Commands {
                 "Select a folder to contain your Ferrufi vault (select Home to use ~/.ferrufi/)",
             defaultDirectory: homeURL,
             showHidden: true
-        ) { url, created in
+        ) { url in
             guard let selectedURL = url else { return }
             Task {
                 do {

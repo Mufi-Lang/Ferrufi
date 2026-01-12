@@ -1,16 +1,33 @@
-# Ferrufi 
+# Ferrufi
 
-This is an IDE developed specifically for the Mufi Programming Language, and will incorporate the compiler 
-to be able to run scripts, REPL mode and the IDE will allow for documentation to be readily available for users.
+Ferrufi is a native macOS editor and lightweight IDE built around the Mufi programming language.  
+It combines an integrated REPL and compiler runner with a high-performance, Metal-accelerated UI for smooth text rendering and scrolling.  
+The editor focuses on a polished developer experience (theme selector, live preview, and first-class Mufi execution), while exposing a simple CLI for scripting and automation.
 
 ## Features
-- Theme Selector 
-- Syntax Highlighting for Mufi Language
-- Project Creation/Runner
-- REPL Mode
-- Integrated Documentation Viewer
+- Metal-accelerated UI (GPU rendering for smooth scrolling and SDF text)
+- Theme selector (light/dark and custom theme support)
+- REPL mode (inline split or floating sheet)
+- Built-in compiler runner (embedded CMufi runtime and optional external runner)
+- Project creation, run and quick-run workflows
+- Integrated documentation viewer and quick reference search
+- CLI launcher (installable via `scripts/install_app.sh`) to expose `ferrufi` on your PATH — once installed you can open Ferrufi from your terminal for any folder:
+  - Open a specific directory as the vault: `ferrufi /path/to/folder`
+  - Open the current directory as the vault: `ferrufi .`
+  You can also use the macOS `open` helper: `open -a Ferrufi --args /path/to/folder`
 
-This project is currently in the early stages of development. Contributions and suggestions are welcome!
+  Note: when launched with a directory argument, Ferrufi will initialize that directory as the vault root (creating it if necessary) and will skip the one-time onboarding flow.
+- Editor features: syntax highlighting (Mufi and Markdown), auto-complete, live preview, and word count
+
+This project is actively developed. Contributions and suggestions are welcome!
+
+## Roadmap / TODOs
+- Complete and extend syntax highlighting and language modes
+- Built-in documentation authoring and improved in-app docs viewer
+- Language Server (LSP) integration for enhanced completion and refactoring
+- Code folding, linting, and formatter hooks
+- Notarized installer and packaged releases
+- Expanded automated tests for editor flows and permission handling
 
 ## Quick Start - Building for Distribution
 
@@ -38,6 +55,43 @@ Create a traditional DMG installer:
 **See [DISTRIBUTION_QUICKSTART.md](DISTRIBUTION_QUICKSTART.md) for more options and [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md) for complete guide.**
 
 **Note:** Apps are built with entitlements for file access. See [docs/FILE_ACCESS_FIX.md](docs/FILE_ACCESS_FIX.md) if you experience file editing issues.
+
+## Install (macOS)
+
+We provide a helper installer script that copies `Ferrufi.app` into `/Applications` (or `~/Applications` for a per-user install), installs a CLI launcher at `/usr/local/bin/ferrufi`, and allows you to open Ferrufi directly from the terminal for any folder. For example:
+
+- Open a specific directory as the vault:
+  `ferrufi /path/to/folder`
+
+- Open the current working directory as the vault:
+  `ferrufi .`
+
+You can also achieve the same with macOS's `open` helper:
+`open -a Ferrufi --args /path/to/folder`
+
+- System install (requires sudo):
+```bash
+sudo ./scripts/install_app.sh /path/to/Ferrufi.app
+```
+
+- Per-user install (no sudo):
+```bash
+./scripts/install_app.sh /path/to/Ferrufi.app --user
+```
+
+Manual alternative:
+```bash
+# Copy the app bundle (preserves metadata)
+sudo ditto -v /path/to/Ferrufi.app /Applications/
+
+# Create a CLI symlink to the bundled executable
+sudo ln -sf /Applications/Ferrufi.app/Contents/MacOS/Ferrufi /usr/local/bin/ferrufi
+
+# If Gatekeeper blocks the app on first launch, clear quarantine:
+sudo xattr -dr com.apple.quarantine /Applications/Ferrufi.app
+```
+
+The install script also attempts to remove quarantine and prints handy instructions when elevated privileges are required.
 
 Mufi Integration
 - The project now includes native integration with the Mufi runtime via a system library.

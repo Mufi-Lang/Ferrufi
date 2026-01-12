@@ -9,6 +9,11 @@ public struct ContentView: View {
     @State private var showingFolderPermissionRequest = false
     @State private var vaultFolderURL: URL?
     @State private var showingVaultOnboarding = false
+
+    // Pending trust flow: store the selected folder here until user confirms trust
+    @State private var pendingVaultURL: URL? = nil
+    @State private var showTrustVaultAlert: Bool = false
+
     @StateObject private var bookmarkManager = SecurityScopedBookmarkManager()
 
     public init() {}
@@ -31,7 +36,98 @@ public struct ContentView: View {
             navigationModel.ferrufiApp = ferrufiApp
             FerrufiApp.registerNavigationModel(navigationModel)
             Task {
-                await initializeApp()
+                // If the app was launched with a vault path argument (e.g. `ferrufi /path`),
+                // use it to initialize Ferrufi directly and skip the onboarding flow.
+                if let rawVaultArg = vaultPathFromCommandLineArgs() {
+                    // Normalize tilde and `.` to an absolute path
+                    var normalized = (rawVaultArg as NSString).expandingTildeInPath
+                    if normalized == "." {
+                        normalized = FileManager.default.currentDirectoryPath
+                    }
+                    var vaultURL = URL(fileURLWithPath: normalized)
+                    var isDir: ObjCBool = false
+
+                    // If the path doesn't exist, attempt to create the directory
+                    if !FileManager.default.fileExists(atPath: vaultURL.path, isDirectory: &isDir) {
+                        do {
+                            try FileManager.default.createDirectory(
+                                at: vaultURL, withIntermediateDirectories: true)
+                        } catch {
+                            await MainActor.run {
+                                navigationModel.currentError = error
+                                navigationModel.showingError = true
+                            }
+                            return
+                        }
+                    } else if !isDir.boolValue {
+                        // If the path points to a file, use its parent directory
+                        vaultURL = vaultURL.deletingLastPathComponent()
+                    }
+
+                    do {
+                        try await ferrufiApp.initialize(vaultPath: vaultURL.path)
+
+                        // Ensure a welcome note exists when initializing via CLI.
+                        // If it does not exist, create it. Failures are non-fatal.
+                        let welcomeURL = URL(fileURLWithPath: vaultURL.path).appendingPathComponent(
+                            "Welcome.md")
+                        if !FileManager.default.fileExists(atPath: welcomeURL.path) {
+                            do {
+                                try createWelcomeNote(at: welcomeURL)
+                            } catch {
+                                // Non-fatal: surface an informational message but continue startup.
+                                await MainActor.run {
+                                    navigationModel.showInfo(
+                                        "Vault initialized at \(vaultURL.path). Failed to create Welcome note: \(error.localizedDescription)"
+                                    )
+                                }
+                            }
+                        }
+
+                        // Apply configured startup behavior (restore last session, open welcome, or open a specific note)
+                        await MainActor.run {
+                            switch ferrufiApp.configuration.general.startupBehavior {
+                            case .restore:
+                                if let ids = ferrufiApp.configuration.recentNoteIds,
+                                    let first = ids.first,
+                                    let note = ferrufiApp.notes.first(where: { $0.id == first })
+                                {
+                                    navigationModel.selectNote(note, ferrufiApp: ferrufiApp)
+                                } else if let welcome = ferrufiApp.notes.first(where: {
+                                    $0.title == "Welcome"
+                                }) {
+                                    navigationModel.selectNote(welcome, ferrufiApp: ferrufiApp)
+                                }
+                            case .welcome:
+                                if let welcome = ferrufiApp.notes.first(where: {
+                                    $0.title == "Welcome"
+                                }) {
+                                    navigationModel.selectNote(welcome, ferrufiApp: ferrufiApp)
+                                }
+                            case .specific:
+                                if let id = ferrufiApp.configuration.general.startupNoteId,
+                                    let note = ferrufiApp.notes.first(where: { $0.id == id })
+                                {
+                                    navigationModel.selectNote(note, ferrufiApp: ferrufiApp)
+                                } else if let ids = ferrufiApp.configuration.recentNoteIds,
+                                    let first = ids.first,
+                                    let note = ferrufiApp.notes.first(where: { $0.id == first })
+                                {
+                                    navigationModel.selectNote(note, ferrufiApp: ferrufiApp)
+                                }
+                            }
+                        }
+
+                        return
+                    } catch {
+                        await MainActor.run {
+                            navigationModel.currentError = error
+                            navigationModel.showingError = true
+                        }
+                    }
+                } else {
+                    await initializeApp()
+                }
             }
         }
         .alert("Error", isPresented: $navigationModel.showingError) {
@@ -130,9 +226,98 @@ public struct ContentView: View {
                 onSkip: { Task { await createAppSupportVaultAndInitialize() } }
             )
         }
+        .alert("Trust this workspace?", isPresented: $showTrustVaultAlert) {
+            Button("Trust") {
+                Task {
+                    await trustSelectedVault()
+                }
+            }
+            Button("Cancel", role: .cancel) {
+                if let url = pendingVaultURL {
+                    url.stopAccessingSecurityScopedResource()
+                }
+                pendingVaultURL = nil
+            }
+        } message: {
+            Text(
+                "Do you trust this folder to be used as your Ferrufi vault? Trusting it will allow Ferrufi persistent access to files in this folder."
+            )
+        }
+    }
+
+    @MainActor private func trustSelectedVault() async {
+        guard let url = pendingVaultURL else { return }
+
+        // Ensure the security scope is active (it should already be active from selection)
+        if !url.startAccessingSecurityScopedResource() {
+            let err = NSError(
+                domain: "com.ferrufi", code: -1,
+                userInfo: [
+                    NSLocalizedDescriptionKey:
+                        "Failed to activate folder permission. Please try again."
+                ]
+            )
+            FerrufiApp.sharedNavigationModel?.showError(err)
+            pendingVaultURL = nil
+            showTrustVaultAlert = false
+            return
+        }
+
+        // Persist the bookmark
+        guard bookmarkManager.createBookmark(for: url) else {
+            let err = NSError(
+                domain: "com.ferrufi", code: -1,
+                userInfo: [
+                    NSLocalizedDescriptionKey: "Failed to persist bookmark. Please try again."
+                ]
+            )
+            FerrufiApp.sharedNavigationModel?.showError(err)
+            url.stopAccessingSecurityScopedResource()
+            pendingVaultURL = nil
+            showTrustVaultAlert = false
+            return
+        }
+
+        // Determine vault directories (if Home was selected, create ~/.ferrufi inside it)
+        let homeURL = FileManager.default.homeDirectoryForCurrentUser
+        let ferrufiDir: URL
+        if url.path == homeURL.path {
+            ferrufiDir = url.appendingPathComponent(".ferrufi")
+        } else {
+            ferrufiDir = url
+        }
+        let scriptsDir = ferrufiDir.appendingPathComponent("scripts")
+
+        do {
+            try FileManager.default.createDirectory(
+                at: ferrufiDir, withIntermediateDirectories: true, attributes: nil)
+            try FileManager.default.createDirectory(
+                at: scriptsDir, withIntermediateDirectories: true, attributes: nil)
+
+            // Continue initialization now that bookmark is stored and folders exist
+            await initializeApp()
+
+            await MainActor.run {
+                navigationModel.showInfo("Vault ready — storing data at \(scriptsDir.path)")
+            }
+        } catch {
+            await MainActor.run {
+                FerrufiApp.sharedNavigationModel?.showError(
+                    NSError(
+                        domain: "com.ferrufi", code: -1,
+                        userInfo: [NSLocalizedDescriptionKey: error.localizedDescription]))
+            }
+            url.stopAccessingSecurityScopedResource()
+        }
+
+        pendingVaultURL = nil
+        showTrustVaultAlert = false
     }
 
     private func initializeApp() async {
+        // If the app was already initialized (for example via CLI args), skip re-initialization.
+        if ferrufiApp.isInitialized { return }
+
         // Use ~/.ferrufi as the single storage location
         let homeDirectory = FileManager.default.homeDirectoryForCurrentUser
         let ironDirectory = homeDirectory.appendingPathComponent(".ferrufi")
@@ -168,12 +353,13 @@ public struct ContentView: View {
 
             // Resolve the bookmarked parent and keep the security scope active
             guard let parentURL = bookmarkManager.resolveBookmark(forPath: parentPath) else {
-                throw NSError(
-                    domain: "com.ferrufi", code: -1,
-                    userInfo: [
-                        NSLocalizedDescriptionKey: "Failed to resolve permission for vault parent."
-                    ]
-                )
+                // The stored bookmark is invalid or access could not be started.
+                // Remove the invalid bookmark and show onboarding so the user can re-select a folder.
+                bookmarkManager.removeBookmark(forPath: parentPath)
+                await MainActor.run {
+                    showingVaultOnboarding = true
+                }
+                return
             }
 
             let ferrufiDir = parentURL.appendingPathComponent(".ferrufi")
@@ -257,6 +443,19 @@ public struct ContentView: View {
         }
     }
 
+    private func vaultPathFromCommandLineArgs() -> String? {
+        // Return the first non-flag argument provided at launch (if any).
+        // Examples:
+        //   ferrufi /path/to/project
+        //   open -a Ferrufi --args /path/to/project
+        let args = CommandLine.arguments.dropFirst()
+        for arg in args {
+            if arg.starts(with: "-") { continue }
+            return arg
+        }
+        return nil
+    }
+
     private func presentVaultFolderPicker() {
         #if os(macOS)
             // Present the open panel asynchronously so any open menus are dismissed first
@@ -291,85 +490,27 @@ public struct ContentView: View {
                         // Bring Ferrufi to the front to ensure the app is visible after selection
                         NSApp.activate(ignoringOtherApps: true)
 
-                        // Create and persist a security-scoped bookmark for the selected folder
-                        if bookmarkManager.createBookmark(for: selectedURL) {
-                            // Resolve and use the bookmark to create the vault directories
-                            if bookmarkManager.resolveBookmark(forPath: selectedURL.path) != nil {
-                                Task {
-                                    do {
-                                        var createdScriptsPath: String? = nil
-                                        // Resolve and activate the bookmarked parent folder (persistent access)
-                                        guard
-                                            let parentURL = bookmarkManager.resolveBookmark(
-                                                forPath: selectedURL.path)
-                                        else {
-                                            throw NSError(
-                                                domain: "com.ferrufi", code: -1,
-                                                userInfo: [
-                                                    NSLocalizedDescriptionKey:
-                                                        "Failed to activate folder permission for the selected path."
-                                                ]
-                                            )
-                                        }
-                                        // If the user picked Home, create ~/.ferrufi inside it.
-                                        // Otherwise, use the selected folder directly as vault root.
-                                        let ferrufiDir: URL
-                                        if parentURL.path == homeURL.path {
-                                            ferrufiDir = parentURL.appendingPathComponent(
-                                                ".ferrufi")
-                                        } else {
-                                            ferrufiDir = parentURL
-                                        }
-                                        let scriptsDir = ferrufiDir.appendingPathComponent(
-                                            "scripts")
-                                        try FileManager.default.createDirectory(
-                                            at: ferrufiDir, withIntermediateDirectories: true,
-                                            attributes: nil)
-                                        try FileManager.default.createDirectory(
-                                            at: scriptsDir, withIntermediateDirectories: true,
-                                            attributes: nil)
-                                        // capture path for confirmation after initialization
-                                        createdScriptsPath = scriptsDir.path
-                                        // After creating, restart initialization to proceed
-                                        await initializeApp()
-                                        if let path = createdScriptsPath {
-                                            await MainActor.run {
-                                                navigationModel.showInfo(
-                                                    "Vault ready — storing data at \(path)")
-                                            }
-                                        }
-                                    } catch {
-                                        await MainActor.run {
-                                            navigationModel.currentError = error
-                                            navigationModel.showingError = true
-                                        }
-                                    }
-                                }
-                            } else {
-                                // Resolution failed: provide a clear, user-visible error and suggest re-selecting the folder.
-                                Task { @MainActor in
-                                    navigationModel.currentError = NSError(
-                                        domain: "com.ferrufi", code: -1,
-                                        userInfo: [
-                                            NSLocalizedDescriptionKey:
-                                                "Could not activate permission for the selected folder. The bookmark could not be resolved — please try selecting the folder again (Settings → General → Vault → Change Vault Folder) or revoke and re-grant permission."
-                                        ])
-                                    navigationModel.showingError = true
-                                }
-                            }
+                        // Start security-scoped access and prompt the user to confirm trust before persisting
+                        // (fail-fast pattern: if access cannot be started, inform user and re-prompt)
+                        if selectedURL.startAccessingSecurityScopedResource() {
+                            // Hold the selected URL until the user confirms trust
+                            pendingVaultURL = selectedURL
+                            showTrustVaultAlert = true
                         } else {
-                            Task { @MainActor in
-                                navigationModel.currentError = NSError(
-                                    domain: "com.ferrufi", code: -1,
-                                    userInfo: [
-                                        NSLocalizedDescriptionKey:
-                                            "Could not store folder permission for the selected folder. Please try again."
-                                    ])
-                                navigationModel.showingError = true
+                            let err = NSError(
+                                domain: "com.ferrufi", code: -1,
+                                userInfo: [
+                                    NSLocalizedDescriptionKey:
+                                        "Failed to activate folder permission for the selected path. Please try again."
+                                ]
+                            )
+                            FerrufiApp.sharedNavigationModel?.showError(err)
+                            DispatchQueue.main.async {
+                                presentVaultFolderPicker()
                             }
                         }
                     } else {
-                        // User cancelled - no action
+                        // User cancelled or did not select a folder; nothing to do.
                     }
                 }
             }

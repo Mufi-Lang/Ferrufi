@@ -20,6 +20,9 @@
     <key>com.apple.security.files.all</key>
     <true/>
 
+    <key>com.apple.security.files.bookmark.app-scope</key>
+    <true/>
+
     <!-- Disable library validation (needed for libmufiz.dylib) -->
     <key>com.apple.security.cs.disable-library-validation</key>
     <true/>

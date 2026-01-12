@@ -360,10 +360,8 @@ public class FerrufiApp: ObservableObject {
 
     private func handleConfigurationChange() {
         // Handle configuration changes that might affect the app state
-        // (backups, auto-update scheduling, launch-at-login state, etc.)
+        // (auto-update scheduling, launch-at-login state, etc.)
         Task { @MainActor in
-            // Ensure backup scheduler matches the current vault configuration
-            BackupManager.shared.rescheduleFromCurrentConfig()
 
             // Apply auto-update preference immediately
             if configuration.general.autoUpdateEnabled {

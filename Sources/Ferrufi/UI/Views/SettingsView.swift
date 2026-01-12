@@ -101,8 +101,6 @@ struct GeneralSettingsView: View {
     @State private var showResetConfirm: Bool = false
     @State private var showErrorAlert: Bool = false
     @State private var errorMessage: String = ""
-    @State private var lastBackupAt: Date? = nil
-    @State private var isBackingUpNow: Bool = false
 
     // Vault management states
     @State private var showVaultInfoAlert: Bool = false
@@ -169,9 +167,10 @@ struct GeneralSettingsView: View {
                         Text("Vault location:")
                             .frame(width: settingsLabelWidth, alignment: .leading)
                         Spacer()
-                        Text(bookmarkedParent ?? "No folder selected")
+                        Text(bookmarkedParent ?? vaultPath.path)
                             .font(.caption)
                             .foregroundColor(.secondary)
+                            .truncationMode(.middle)
                     }
 
                     // Trusted state
@@ -224,21 +223,10 @@ struct GeneralSettingsView: View {
                                     "Select a folder to contain your Ferrufi vault (select Home to use ~/.ferrufi/)",
                                 defaultDirectory: homeURL,
                                 showHidden: true
-                            ) { url, created in
-                                guard let selectedURL = url else { return }
+                            ) { selectedURL in
+                                guard let parentURL = selectedURL else { return }
                                 Task {
                                     do {
-                                        // Resolve and activate the selected parent folder (persistent access)
-                                        guard
-                                            let parentURL = SecurityScopedBookmarkManager.shared
-                                                .resolveBookmark(forPath: selectedURL.path)
-                                        else {
-                                            errorMessage =
-                                                "Failed to activate bookmark for selected folder."
-                                            showErrorAlert = true
-                                            return
-                                        }
-
                                         // If the user picked Home, create ~/.ferrufi inside it
                                         let ferrufiDir: URL
                                         if parentURL.path == homeURL.path {
@@ -317,25 +305,17 @@ struct GeneralSettingsView: View {
                                             "Select a folder to trust for Ferrufi (select Home to use ~/.ferrufi/)",
                                         defaultDirectory: homeURL,
                                         showHidden: true
-                                    ) { url, created in
-                                        guard let sel = url else { return }
-                                        if SecurityScopedBookmarkManager.shared.resolveBookmark(
-                                            forPath: sel.path) != nil
-                                        {
-                                            ferrufiApp.configuration.updateConfiguration { config in
-                                                var arr = config.trustedVaultPaths ?? []
-                                                if !arr.contains(sel.path) {
-                                                    arr.append(sel.path)
-                                                    config.trustedVaultPaths = arr
-                                                }
+                                    ) { sel in
+                                        guard let sel = sel else { return }
+                                        ferrufiApp.configuration.updateConfiguration { config in
+                                            var arr = config.trustedVaultPaths ?? []
+                                            if !arr.contains(sel.path) {
+                                                arr.append(sel.path)
+                                                config.trustedVaultPaths = arr
                                             }
-                                            vaultInfoMessage = "Vault trusted: \(sel.path)"
-                                            showVaultInfoAlert = true
-                                        } else {
-                                            errorMessage =
-                                                "Failed to activate permission for the selected folder."
-                                            showErrorAlert = true
                                         }
+                                        vaultInfoMessage = "Vault trusted: \(sel.path)"
+                                        showVaultInfoAlert = true
                                     }
                                 }
                             }
@@ -347,7 +327,7 @@ struct GeneralSettingsView: View {
                                 message: "Select the folder again to repair permissions",
                                 defaultDirectory: homeURL,
                                 showHidden: true
-                            ) { url, created in
+                            ) { url in
                                 if url != nil {
                                     vaultInfoMessage = "Permission repaired."
                                     showVaultInfoAlert = true
@@ -386,7 +366,6 @@ struct GeneralSettingsView: View {
                         .controlSize(.small)
 
                         Button("Revoke Permission") {
-                            let vaultPath = homeURL.appendingPathComponent(".ferrufi/scripts")
                             if let parent = SecurityScopedBookmarkManager.shared
                                 .allBookmarkedPaths()
                                 .first(where: { vaultPath.path.hasPrefix($0) })
@@ -403,8 +382,7 @@ struct GeneralSettingsView: View {
                         .controlSize(.small)
 
                         Button("Open in Finder") {
-                            let target = homeURL.appendingPathComponent(".ferrufi/scripts")
-                            NSWorkspace.shared.open(target)
+                            NSWorkspace.shared.open(vaultPath)
                         }
                         .controlSize(.small)
                     }  // HStack
@@ -591,130 +569,7 @@ struct GeneralSettingsView: View {
                         .padding(8)
                     }
 
-                    GroupBox(label: Label("Backup", systemImage: "archivebox")) {
-                        VStack(spacing: 12) {
-                            Toggle(
-                                "Enable backups",
-                                isOn: Binding(
-                                    get: { ferrufiApp.configuration.vault.backupEnabled },
-                                    set: { newValue in
-                                        ferrufiApp.configuration.updateConfiguration { config in
-                                            config.vault.backupEnabled = newValue
-                                        }
-                                    }
-                                )
-                            )
-                            .controlSize(.small)
-                            .controlSize(.small)
-
-                            if ferrufiApp.configuration.vault.backupEnabled {
-                                SettingsRow("Backup interval:") {
-                                    HStack {
-                                        TextField(
-                                            "Hours",
-                                            value: Binding(
-                                                get: {
-                                                    ferrufiApp.configuration.vault.backupInterval
-                                                        / 3600
-                                                },
-                                                set: { newValue in
-                                                    ferrufiApp.configuration.updateConfiguration {
-                                                        config in
-                                                        config.vault.backupInterval =
-                                                            newValue * 3600
-                                                    }
-                                                }
-                                            ), format: .number
-                                        )
-                                        .textFieldStyle(.roundedBorder)
-                                        .frame(width: 80)
-                                        .controlSize(.small)
-                                        Text("hours").foregroundColor(.secondary)
-                                    }
-                                }
-
-                                SettingsRow("Keep backups:") {
-                                    HStack {
-                                        TextField(
-                                            "Count",
-                                            value: Binding(
-                                                get: { ferrufiApp.configuration.vault.maxBackups },
-                                                set: { newValue in
-                                                    ferrufiApp.configuration.updateConfiguration {
-                                                        config in
-                                                        config.vault.maxBackups = newValue
-                                                    }
-                                                }
-                                            ), format: .number
-                                        )
-                                        .textFieldStyle(.roundedBorder)
-                                        .frame(width: 80)
-                                        .controlSize(.small)
-                                        Text("files").foregroundColor(.secondary)
-                                    }
-                                }
-
-                                SettingsRow("Last backup:") {
-                                    if let last = lastBackupAt {
-                                        Text(
-                                            DateFormatter.localizedString(
-                                                from: last, dateStyle: .medium, timeStyle: .short)
-                                        )
-                                        .foregroundColor(.secondary)
-                                    } else {
-                                        Text("Never").foregroundColor(.secondary)
-                                    }
-                                }
-
-                                SettingsRow("") {
-                                    Button(action: {
-                                        isBackingUpNow = true
-                                        Task { @MainActor in
-                                            await BackupManager.shared.performPeriodicBackup()
-                                            if let recs = try? BackupManager.shared.listBackups(
-                                                forNoteId: nil), let rec = recs.first
-                                            {
-                                                lastBackupAt = rec.createdAt
-                                            } else {
-                                                lastBackupAt = nil
-                                            }
-                                            isBackingUpNow = false
-                                        }
-                                    }) {
-                                        HStack(spacing: 8) {
-                                            if isBackingUpNow {
-                                                ProgressView()
-                                                    .scaleEffect(0.75, anchor: .center)
-                                            }
-                                            Text(isBackingUpNow ? "Running..." : "Run backup now")
-                                        }
-                                    }
-                                    .controlSize(.small)
-                                }
-                                .task {
-                                    Task { @MainActor in
-                                        if let recs = try? BackupManager.shared.listBackups(
-                                            forNoteId: nil), let rec = recs.first
-                                        {
-                                            lastBackupAt = rec.createdAt
-                                        } else {
-                                            lastBackupAt = nil
-                                        }
-                                    }
-                                }
-                            }
-
-                            // Explanatory footnote to inform the user about backups and how the interval works
-                            Text(
-                                "Backups are stored under `~/.ferrufi/backups` and tracked in `Ferrufi.db`. The interval above is specified in hours; the manager will back up notes that have changed since their last backup. 'Keep backups' limits how many backups are retained per note."
-                            )
-                            .font(.footnote)
-                            .foregroundColor(.secondary)
-                            .padding(.top, 6)
-                            .fixedSize(horizontal: false, vertical: true)
-                        }
-                        .padding(8)
-                    }
+                    // Backup settings removed.
 
                     GroupBox(label: Label("Performance", systemImage: "speedometer")) {
                         VStack(spacing: 12) {

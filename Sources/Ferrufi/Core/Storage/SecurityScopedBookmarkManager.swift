@@ -22,7 +22,24 @@ public class SecurityScopedBookmarkManager: ObservableObject {
     /// Active security-scoped resources that need to be stopped on cleanup
     private var activeResources: [URL: Bool] = [:]
 
-    public init() {}
+    public init() {
+        #if os(macOS)
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(handleAppWillTerminate(_:)),
+                name: NSApplication.willTerminateNotification,
+                object: nil
+            )
+        #endif
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
+    @objc private func handleAppWillTerminate(_ notification: Notification) {
+        stopAccessingAll()
+    }
 
     // MARK: - Bookmark Management
 
@@ -39,7 +56,8 @@ public class SecurityScopedBookmarkManager: ObservableObject {
             )
 
             var bookmarks = loadBookmarks()
-            bookmarks[url.path] = bookmarkData
+            let key = canonicalKey(forPath: url.path)
+            bookmarks[key] = bookmarkData
             saveBookmarks(bookmarks)
 
             print("✅ Created security-scoped bookmark for: \(url.path)")
@@ -55,9 +73,31 @@ public class SecurityScopedBookmarkManager: ObservableObject {
     /// - Returns: The resolved URL with active security scope, or nil if failed
     public func resolveBookmark(forPath path: String) -> URL? {
         let bookmarks = loadBookmarks()
+        let normalizedKey = canonicalKey(forPath: path)
 
-        guard let bookmarkData = bookmarks[path] else {
-            print("⚠️ No bookmark found for path: \(path)")
+        // Try normalized key first, then raw path lookup as a fallback
+        var bookmarkData = bookmarks[normalizedKey] ?? bookmarks[path]
+
+        // Fallback: try to find any stored key whose normalized form matches the normalizedKey.
+        // This handles cases where a bookmark was stored under a previously non-normalized key.
+        if bookmarkData == nil {
+            for (storedKey, data) in bookmarks {
+                let storedNormalized = canonicalKey(forPath: storedKey)
+                if storedNormalized == normalizedKey {
+                    bookmarkData = data
+                    // Migrate the stored key to the normalized key to make future lookups direct
+                    var updated = bookmarks
+                    updated[normalizedKey] = data
+                    updated.removeValue(forKey: storedKey)
+                    saveBookmarks(updated)
+                    print("ℹ️ Migrated bookmark key '\(storedKey)' -> '\(normalizedKey)'")
+                    break
+                }
+            }
+        }
+
+        guard let bookmarkData = bookmarkData else {
+            print("⚠️ No bookmark found for path: \(path) (normalized: \(normalizedKey))")
             return nil
         }
 
@@ -77,6 +117,7 @@ public class SecurityScopedBookmarkManager: ObservableObject {
                 print("✅ Resolved and accessing bookmark for: \(path)")
             } else {
                 print("⚠️ Failed to start accessing security-scoped resource: \(path)")
+                return nil
             }
 
             // If bookmark is stale, recreate it
@@ -101,21 +142,34 @@ public class SecurityScopedBookmarkManager: ObservableObject {
         }
     }
 
+    // validateBookmark removed in minimalist API; use resolveBookmark(forPath:) which returns a URL? when access is active.
+
     /// Removes a bookmark for a given path
     /// - Parameter path: The file path to remove bookmark for
     public func removeBookmark(forPath path: String) {
+        let key = canonicalKey(forPath: path)
         var bookmarks = loadBookmarks()
-        bookmarks.removeValue(forKey: path)
-        saveBookmarks(bookmarks)
-        print("🗑️ Removed bookmark for: \(path)")
+        if bookmarks.removeValue(forKey: key) != nil {
+            saveBookmarks(bookmarks)
+            print("🗑️ Removed bookmark for: \(path) (normalized: \(key))")
+            return
+        }
+
+        if bookmarks.removeValue(forKey: path) != nil {
+            saveBookmarks(bookmarks)
+            print("🗑️ Removed bookmark for raw path: \(path)")
+        } else {
+            print("⚠️ No bookmark found to remove for: \(path)")
+        }
     }
 
     /// Checks if a bookmark exists for the given path
     /// - Parameter path: The file path to check
     /// - Returns: True if a bookmark exists
     public func hasBookmark(forPath path: String) -> Bool {
+        let key = canonicalKey(forPath: path)
         let bookmarks = loadBookmarks()
-        return bookmarks[path] != nil
+        return bookmarks[key] != nil || bookmarks[path] != nil
     }
 
     /// Gets all bookmarked paths
@@ -129,6 +183,8 @@ public class SecurityScopedBookmarkManager: ObservableObject {
         userDefaults.removeObject(forKey: bookmarkKey)
         print("🗑️ Cleared all security-scoped bookmarks")
     }
+
+    // debugValidateAllBookmarks removed in minimalist API.
 
     // MARK: - Resource Access Management
 
@@ -169,19 +225,29 @@ public class SecurityScopedBookmarkManager: ObservableObject {
         }
     }
 
+    /// Normalize a path to a canonical key used for storing bookmarks.
+    /// Expands tilde and returns the standardized file URL path.
+    private func canonicalKey(forPath path: String) -> String {
+        let expanded = (path as NSString).expandingTildeInPath
+        let url = URL(fileURLWithPath: expanded).standardizedFileURL
+        return url.path
+    }
+
     // MARK: - Helper Methods
 
     /// Requests user to select a folder and creates a bookmark for it
     /// - Parameters:
+    ///   - presentingWindow: Optional NSWindow to present the panel as a sheet (preferred)
     ///   - message: The message to show in the open panel
     ///   - defaultDirectory: Optional directory to open the panel in (defaults to nil)
     ///   - showHidden: If true, the open panel will display hidden files/folders
-    ///   - completion: Called with the selected URL and whether bookmark was created
+    ///   - completion: Called with the selected URL (with active security scope) or nil on failure
     public func requestFolderAccess(
+        presentingWindow: NSWindow? = nil,
         message: String = "Select a folder to grant Ferrufi access",
         defaultDirectory: URL? = nil,
         showHidden: Bool = false,
-        completion: @escaping (URL?, Bool) -> Void
+        completion: @escaping (URL?) -> Void
     ) {
         #if os(macOS)
             let panel = NSOpenPanel()
@@ -202,15 +268,41 @@ public class SecurityScopedBookmarkManager: ObservableObject {
                 panel.setValue(true, forKey: "showsHiddenFiles")
             }
 
-            panel.begin { [weak self] response in
+            // Handler that will be used for sheet or standalone presentation
+            // Simplified: start the security scope immediately, then store the bookmark.
+            // This follows the \"fail fast\" snippet pattern — if starting access fails,
+            // we don't persist anything and return failure to the caller.
+            let handler: (NSApplication.ModalResponse) -> Void = { [weak self] response in
                 guard let self = self else { return }
 
                 if response == .OK, let url = panel.url {
-                    let bookmarkCreated = self.createBookmark(for: url)
-                    completion(url, bookmarkCreated)
+                    // Start security-scoped access immediately (fail fast)
+                    if url.startAccessingSecurityScopedResource() {
+                        // Persist bookmark using existing helper (keeps canonical keys)
+                        let created = self.createBookmark(for: url)
+                        if created {
+                            // Track the active resource so stopAccessing() can clean it up later
+                            self.activeResources[url] = true
+                            print("✅ Granted and stored security-scoped bookmark for: \(url.path)")
+                            completion(url)
+                        } else {
+                            // Failed to persist bookmark; stop access and report failure
+                            url.stopAccessingSecurityScopedResource()
+                            completion(nil)
+                        }
+                    } else {
+                        // Could not start security scope (user denied or OS blocked)
+                        completion(nil)
+                    }
                 } else {
-                    completion(nil, false)
+                    completion(nil)
                 }
+            }
+
+            if let window = presentingWindow {
+                panel.beginSheetModal(for: window, completionHandler: handler)
+            } else {
+                panel.begin(completionHandler: handler)
             }
         #else
             completion(nil, false)
@@ -237,12 +329,13 @@ public class SecurityScopedBookmarkManager: ObservableObject {
         if requestIfNeeded {
             requestFolderAccess(
                 message:
-                    "Ferrufi needs access to: \(path)\n\nPlease select this folder to grant access."
-            ) { [weak self] url, bookmarkCreated in
-                if let url = url, bookmarkCreated {
-                    // Resolve the newly created bookmark to start accessing
-                    let resolvedURL = self?.resolveBookmark(forPath: url.path)
-                    completion(resolvedURL)
+                    "Ferrufi needs access to: \(path)\n\nPlease select this folder to grant access.",
+                defaultDirectory: URL(fileURLWithPath: path),
+                showHidden: false
+            ) { [weak self] url in
+                if let url = url {
+                    // URL has an active security scope already
+                    completion(url)
                 } else {
                     completion(nil)
                 }
