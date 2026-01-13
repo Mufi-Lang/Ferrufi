@@ -29,16 +29,43 @@ for cmd in curl ditto ln chmod; do
 done
 
 echo "Fetching latest release metadata for $REPO..."
-RELEASE_JSON="$(curl -sSfL "$API_URL")" || {
-  echo "Failed to fetch release metadata from GitHub." >&2
-  exit 1
-}
+# Check the latest release endpoint silently (suppress curl stderr). If it's not available,
+# fall back to the 'experimental' prerelease.
+HTTP_STATUS="$(curl -sSL -o /dev/null -w "%{http_code}" "$API_URL" 2>/dev/null || true)"
+
+if [ "$HTTP_STATUS" = "200" ]; then
+  RELEASE_JSON="$(curl -sSL "$API_URL" 2>/dev/null)" || {
+    echo "Failed to fetch release metadata from GitHub (latest)." >&2
+    exit 1
+  }
+else
+  echo "Latest release not available (HTTP ${HTTP_STATUS:-unknown}). Trying 'experimental' release tag..."
+  TAG_API_URL="https://api.github.com/repos/$REPO/releases/tags/experimental"
+  HTTP_STATUS_TAG="$(curl -sSL -o /dev/null -w "%{http_code}" "$TAG_API_URL" 2>/dev/null || true)"
+
+  if [ "$HTTP_STATUS_TAG" = "200" ]; then
+    RELEASE_JSON="$(curl -sSL "$TAG_API_URL" 2>/dev/null)" || {
+      echo "Failed to fetch 'experimental' release metadata from GitHub." >&2
+      exit 1
+    }
+    echo "Using 'experimental' release"
+  else
+    echo "Failed to fetch release metadata from GitHub (latest: ${HTTP_STATUS:-unknown}, experimental: ${HTTP_STATUS_TAG:-unknown})." >&2
+    exit 1
+  fi
+fi
 
 # Pick first asset that looks like macOS release: prefer dmg, then zip, then tar.gz
+# Prefer a stable experimental asset name first (Ferrufi-experimental.zip) for deterministic installs
+EXPERIMENTAL_ASSET_NAME="Ferrufi-experimental.zip"
 ASSET_URL="$(printf '%s\n' "$RELEASE_JSON" \
-  | awk -F\" '/browser_download_url/{print $4}' \
-  | grep -E -i '\.(dmg|zip|tar\.gz)$' \
-  | head -n1 || true)"
+  | awk -F\" -v target=\"$EXPERIMENTAL_ASSET_NAME\" '/"name"/ { name=$4 } /browser_download_url/ { if (name == target) { print $4; exit } }' || true)"
+if [ -z "$ASSET_URL" ]; then
+  ASSET_URL="$(printf '%s\n' "$RELEASE_JSON" \
+    | awk -F\" '/browser_download_url/{print $4}' \
+    | grep -E -i '\.(dmg|zip|tar\.gz)$' \
+    | head -n1 || true)"
+fi
 
 if [ -z "$ASSET_URL" ]; then
   echo "No suitable release asset (.dmg, .zip, .tar.gz) found for $REPO." >&2
@@ -49,10 +76,10 @@ ASSET_NAME="$(basename "$ASSET_URL")"
 ASSET_PATH="$TMPDIR/$ASSET_NAME"
 
 echo "Downloading asset: $ASSET_NAME ..."
-curl -L --fail -o "$ASSET_PATH" "$ASSET_URL" || {
-  echo "Download failed." >&2
+if ! curl -L --fail -o "$ASSET_PATH" "$ASSET_URL" 2>/dev/null; then
+  echo "Download failed (HTTP error or asset not accessible): $ASSET_URL" >&2
   exit 1
-}
+fi
 
 # Helper: find .app inside path
 find_app() {

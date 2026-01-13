@@ -177,7 +177,7 @@ jobs:
 
           ## Installation
 
-          1. Download \`${{ steps.verify-build.outputs.zip_name }}\`
+          1. Download \`${{ steps.verify-build.outputs.zip_name }}\` (or the stable asset \`Ferrufi-experimental.zip\`)
           2. Double-click to extract \`Ferrufi.app\`
           3. Drag \`Ferrufi.app\` to Applications folder
           4. **Right-click the app and select "Open"** (first time only)
@@ -245,9 +245,10 @@ jobs:
               --target ${{ github.sha }}
           fi
 
-          # Upload new zip
-          echo "Uploading zip to experimental release..."
-          gh release upload experimental "$ZIP_FILE" --clobber
+          # Upload new zip (include a stable filename for easy automation)
+          cp "$ZIP_FILE" "Ferrufi-experimental.zip"
+          echo "Uploading zip(s) to experimental release..."
+          gh release upload experimental "$ZIP_FILE" "Ferrufi-experimental.zip" --clobber
 
           echo "✓ Experimental release updated successfully!"
 
