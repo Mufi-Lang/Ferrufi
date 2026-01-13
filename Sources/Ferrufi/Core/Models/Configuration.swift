@@ -9,7 +9,7 @@ import Foundation
 
 /// Main configuration object for Ferrufi app
 public struct FerrufiConfiguration: Codable, Sendable {
-    public var vault: VaultConfiguration
+    public var workspace: WorkspaceConfiguration
     public var editor: EditorConfiguration
     public var search: SearchConfiguration
     public var ui: UIConfiguration
@@ -19,6 +19,9 @@ public struct FerrufiConfiguration: Codable, Sendable {
     public var additionalSettings: [String: String]
 
     enum CodingKeys: String, CodingKey {
+        // Primary, modern key:
+        case workspace
+        // Legacy key (kept to allow decoding older config files that still use 'vault')
         case vault
         case editor
         case search
@@ -29,16 +32,22 @@ public struct FerrufiConfiguration: Codable, Sendable {
         case additionalSettings
     }
 
-    /// Currently selected vault URL
-    public var vaultURL: URL? {
+    /// Currently selected workspace URL (backwards-compatible with legacy 'vaultURL' key)
+    public var workspaceURL: URL? {
         get {
+            if let path = additionalSettings["workspaceURL"] {
+                return URL(fileURLWithPath: path)
+            }
+            // Fallback to legacy key if present
             if let path = additionalSettings["vaultURL"] {
                 return URL(fileURLWithPath: path)
             }
             return nil
         }
         set {
-            additionalSettings["vaultURL"] = newValue?.path
+            additionalSettings["workspaceURL"] = newValue?.path
+            // Remove legacy key to keep configuration canonical
+            additionalSettings.removeValue(forKey: "vaultURL")
         }
     }
 
@@ -74,12 +83,15 @@ public struct FerrufiConfiguration: Codable, Sendable {
         }
     }
 
-    /// Trusted vault paths (persisted as JSON in additionalSettings)
+    /// Trusted workspace paths (persisted as JSON in additionalSettings)
     /// - Stores an array of folder paths that the user has explicitly marked as "trusted".
-    /// - Trust is an application-level flag and is intended to be used together with security-scoped
-    ///   bookmarks (the user must still grant OS-level access via the open panel).
-    public var trustedVaultPaths: [String]? {
+    /// - Backwards-compatible: attempts to read legacy 'trustedVaultPaths' if present.
+    public var trustedWorkspacePaths: [String]? {
         get {
+            if let data = additionalSettings["trustedWorkspacePaths"]?.data(using: .utf8) {
+                return try? JSONDecoder().decode([String].self, from: data)
+            }
+            // Fallback to legacy key if present
             if let data = additionalSettings["trustedVaultPaths"]?.data(using: .utf8) {
                 return try? JSONDecoder().decode([String].self, from: data)
             }
@@ -89,15 +101,30 @@ public struct FerrufiConfiguration: Codable, Sendable {
             if let paths = newValue,
                 let data = try? JSONEncoder().encode(paths)
             {
-                additionalSettings["trustedVaultPaths"] = String(data: data, encoding: .utf8)
+                additionalSettings["trustedWorkspacePaths"] = String(data: data, encoding: .utf8)
+                // Remove legacy key if present
+                additionalSettings.removeValue(forKey: "trustedVaultPaths")
             } else {
+                additionalSettings.removeValue(forKey: "trustedWorkspacePaths")
                 additionalSettings.removeValue(forKey: "trustedVaultPaths")
             }
         }
     }
 
+    @available(*, deprecated, message: "Use `trustedWorkspacePaths` instead")
+    public var trustedVaultPaths: [String]? {
+        get { trustedWorkspacePaths }
+        set { trustedWorkspacePaths = newValue }
+    }
+
+    @available(*, deprecated, message: "Use `workspace` instead")
+    public var vault: WorkspaceConfiguration {
+        get { workspace }
+        set { workspace = newValue }
+    }
+
     public init(
-        vault: VaultConfiguration = VaultConfiguration(),
+        workspace: WorkspaceConfiguration = WorkspaceConfiguration(),
         editor: EditorConfiguration = EditorConfiguration(),
         search: SearchConfiguration = SearchConfiguration(),
         ui: UIConfiguration = UIConfiguration(),
@@ -106,7 +133,7 @@ public struct FerrufiConfiguration: Codable, Sendable {
         general: GeneralConfiguration = GeneralConfiguration(),
         additionalSettings: [String: String] = [:]
     ) {
-        self.vault = vault
+        self.workspace = workspace
         self.editor = editor
         self.search = search
         self.ui = ui
@@ -117,11 +144,32 @@ public struct FerrufiConfiguration: Codable, Sendable {
     }
 
     // Codable conformance that tolerates older config files which may not contain `general`
+    // Legacy VaultConfiguration: small helper for backward compatibility when decoding older configs that used 'vault'
+    private struct VaultConfiguration: Codable {
+        var defaultVaultPath: String
+        var autoSaveInterval: TimeInterval
+        var fileWatchingEnabled: Bool
+    }
+
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        self.vault =
-            try container.decodeIfPresent(VaultConfiguration.self, forKey: .vault)
-            ?? VaultConfiguration()
+
+        // Prefer new 'workspace' key, but fallback to legacy 'vault' for older configs.
+        if let ws = try container.decodeIfPresent(WorkspaceConfiguration.self, forKey: .workspace) {
+            self.workspace = ws
+        } else if let legacyVault = try container.decodeIfPresent(
+            VaultConfiguration.self, forKey: .vault)
+        {
+            // Migrate legacy VaultConfiguration into WorkspaceConfiguration
+            self.workspace = WorkspaceConfiguration(
+                defaultWorkspacePath: legacyVault.defaultVaultPath,
+                autoSaveInterval: legacyVault.autoSaveInterval,
+                fileWatchingEnabled: legacyVault.fileWatchingEnabled
+            )
+        } else {
+            self.workspace = WorkspaceConfiguration()
+        }
+
         self.editor =
             try container.decodeIfPresent(EditorConfiguration.self, forKey: .editor)
             ?? EditorConfiguration()
@@ -145,7 +193,7 @@ public struct FerrufiConfiguration: Codable, Sendable {
 
     public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(vault, forKey: .vault)
+        try container.encode(workspace, forKey: .workspace)
         try container.encode(editor, forKey: .editor)
         try container.encode(search, forKey: .search)
         try container.encode(ui, forKey: .ui)
@@ -156,18 +204,24 @@ public struct FerrufiConfiguration: Codable, Sendable {
     }
 }
 
-/// Configuration for vault and file management
-public struct VaultConfiguration: Codable, Sendable {
-    public var defaultVaultPath: String
+/// Configuration for workspace and file management
+public struct WorkspaceConfiguration: Codable, Sendable {
+    public var defaultWorkspacePath: String
     public var autoSaveInterval: TimeInterval
     public var fileWatchingEnabled: Bool
 
+    @available(*, deprecated, message: "Use `defaultWorkspacePath` instead")
+    public var defaultVaultPath: String {
+        get { defaultWorkspacePath }
+        set { defaultWorkspacePath = newValue }
+    }
+
     public init(
-        defaultVaultPath: String = "~/.ferrufi/notes",
+        defaultWorkspacePath: String = "~/.ferrufi/notes",
         autoSaveInterval: TimeInterval = 30.0,
         fileWatchingEnabled: Bool = true
     ) {
-        self.defaultVaultPath = defaultVaultPath
+        self.defaultWorkspacePath = defaultWorkspacePath
         self.autoSaveInterval = autoSaveInterval
         self.fileWatchingEnabled = fileWatchingEnabled
     }
@@ -547,11 +601,21 @@ public class ConfigurationManager: ObservableObject {
 // MARK: - Convenience Extensions
 
 extension ConfigurationManager {
-    /// Quick access to vault configuration
-    public var vault: VaultConfiguration {
-        get { configuration.vault }
+    /// Quick access to workspace configuration
+    public var workspace: WorkspaceConfiguration {
+        get { configuration.workspace }
         set {
-            configuration.vault = newValue
+            configuration.workspace = newValue
+            saveConfiguration()
+        }
+    }
+
+    /// Deprecated alias for the legacy name `vault`
+    @available(*, deprecated, message: "Use `workspace` instead")
+    public var vault: WorkspaceConfiguration {
+        get { configuration.workspace }
+        set {
+            configuration.workspace = newValue
             saveConfiguration()
         }
     }
@@ -619,14 +683,25 @@ extension ConfigurationManager {
         }
     }
 
-    /// Quick access to trusted vault paths
+    /// Quick access to trusted workspace paths
     /// Stored as an array of folder paths that the user has explicitly marked as trusted.
     /// Trust is an application-level flag and should be used together with OS-level
     /// security-scoped bookmarks (the user must still grant OS access via the picker).
-    public var trustedVaultPaths: [String]? {
-        get { configuration.trustedVaultPaths }
+    /// Backwards compatible with the legacy `trustedVaultPaths` key.
+    public var trustedWorkspacePaths: [String]? {
+        get { configuration.trustedWorkspacePaths }
         set {
-            configuration.trustedVaultPaths = newValue
+            configuration.trustedWorkspacePaths = newValue
+            saveConfiguration()
+        }
+    }
+
+    /// Deprecated alias for the legacy name `trustedVaultPaths`
+    @available(*, deprecated, message: "Use `trustedWorkspacePaths` instead")
+    public var trustedVaultPaths: [String]? {
+        get { configuration.trustedWorkspacePaths }
+        set {
+            configuration.trustedWorkspacePaths = newValue
             saveConfiguration()
         }
     }
