@@ -56,10 +56,16 @@ else
 fi
 
 # Pick first asset that looks like macOS release: prefer dmg, then zip, then tar.gz
+# Prefer a stable experimental asset name first (Ferrufi-experimental.zip) for deterministic installs
+EXPERIMENTAL_ASSET_NAME="Ferrufi-experimental.zip"
 ASSET_URL="$(printf '%s\n' "$RELEASE_JSON" \
-  | awk -F\" '/browser_download_url/{print $4}' \
-  | grep -E -i '\.(dmg|zip|tar\.gz)$' \
-  | head -n1 || true)"
+  | awk -F\" -v target=\"$EXPERIMENTAL_ASSET_NAME\" '/"name"/ { name=$4 } /browser_download_url/ { if (name == target) { print $4; exit } }' || true)"
+if [ -z "$ASSET_URL" ]; then
+  ASSET_URL="$(printf '%s\n' "$RELEASE_JSON" \
+    | awk -F\" '/browser_download_url/{print $4}' \
+    | grep -E -i '\.(dmg|zip|tar\.gz)$' \
+    | head -n1 || true)"
+fi
 
 if [ -z "$ASSET_URL" ]; then
   echo "No suitable release asset (.dmg, .zip, .tar.gz) found for $REPO." >&2
