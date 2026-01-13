@@ -42,7 +42,13 @@ public enum FileChangeType: Sendable {
 /// File-based storage implementation
 public final class FileStorage: NSObject, FileStorageProtocol, ObservableObject, @unchecked Sendable
 {
-    public let vaultPath: String
+    public let workspacePath: String
+
+    /// If the workspace path is covered by a stored security-scoped bookmark,
+    /// this will hold the resolved security-scoped URL so file operations use
+    /// the canonical, access-granted URL rather than raw path strings.
+    private var resolvedWorkspaceURL: URL? = nil
+
     private let fileManager = FileManager.default
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
@@ -52,14 +58,19 @@ public final class FileStorage: NSObject, FileStorageProtocol, ObservableObject,
     // Queue for file operations to ensure thread safety
     private let fileQueue = DispatchQueue(label: "Ferrufi.file.operations", qos: .utility)
 
-    public init(vaultPath: String) throws {
-        self.vaultPath = vaultPath
+    public init(workspacePath: String, resolvedWorkspaceURL: URL? = nil) throws {
+        self.workspacePath = workspacePath
+        self.resolvedWorkspaceURL = resolvedWorkspaceURL
         super.init()
 
         encoder.dateEncodingStrategy = .iso8601
         decoder.dateDecodingStrategy = .iso8601
 
-        try createVaultDirectoryIfNeeded()
+        if let resolved = resolvedWorkspaceURL {
+            print("ℹ️ Using resolved security-scoped URL for workspace: \(resolved.path)")
+        }
+
+        try createWorkspaceDirectoryIfNeeded()
         setupFileWatcher()
     }
 
@@ -69,26 +80,77 @@ public final class FileStorage: NSObject, FileStorageProtocol, ObservableObject,
 
     // MARK: - Directory Management
 
+    /// Creates the notes directory if it doesn't exist, using a security-scoped
+    /// URL when available. Falls back to plain filesystem operations if access cannot
+    /// be established.
     /// Creates the notes directory if it doesn't exist
-    private func createVaultDirectoryIfNeeded() throws {
-        let notesURL = URL(fileURLWithPath: vaultPath)
-        let metadataURL = notesURL.appendingPathComponent(".metadata")
+    /// If a resolved security-scoped URL is available we assume access has already
+    /// been granted and perform direct file operations to avoid starting/stopping
+    /// the security scope (which would otherwise interfere with an already active scope).
+    private func createWorkspaceDirectoryIfNeeded() throws {
+        // Prefer a resolved security-scoped URL when available
+        let baseURL = resolvedWorkspaceURL ?? URL(fileURLWithPath: workspacePath)
+        var notesURL = baseURL
+        var metadataURL = notesURL.appendingPathComponent(".metadata")
 
-        if !fileManager.fileExists(atPath: vaultPath) {
-            try fileManager.createDirectory(
-                at: notesURL,
-                withIntermediateDirectories: true,
-                attributes: nil
-            )
+        // If we have a resolved bookmark URL, access should already be active;
+        // do direct operations to avoid interfering with the existing security scope.
+        if resolvedWorkspaceURL != nil {
+            // If the resolved URL points to a parent that covers the requested workspace path
+            // compute the child notes URL under the resolved parent so we create the
+            // correct workspace directory while still using the active scope.
+            let resolvedBase = resolvedWorkspaceURL!
+            if workspacePath.hasPrefix(resolvedBase.path) {
+                // Compute the relative suffix between the resolved base and the requested workspace path
+                var relative = String(workspacePath.dropFirst(resolvedBase.path.count))
+                if relative.hasPrefix("/") { relative.removeFirst() }
+                if relative.isEmpty {
+                    notesURL = resolvedBase
+                } else {
+                    notesURL = resolvedBase.appendingPathComponent(relative)
+                }
+                metadataURL = notesURL.appendingPathComponent(".metadata")
+            } else {
+                // Use the resolved base directly
+                notesURL = resolvedBase
+                metadataURL = notesURL.appendingPathComponent(".metadata")
+            }
+
+            if !fileManager.fileExists(atPath: notesURL.path) {
+                try fileManager.createDirectory(
+                    at: notesURL, withIntermediateDirectories: true, attributes: nil)
+            }
+            if !fileManager.fileExists(atPath: metadataURL.path) {
+                try fileManager.createDirectory(
+                    at: metadataURL, withIntermediateDirectories: true, attributes: nil)
+            }
+            return
         }
 
-        // Create metadata directory
-        if !fileManager.fileExists(atPath: metadataURL.path) {
-            try fileManager.createDirectory(
-                at: metadataURL,
-                withIntermediateDirectories: true,
-                attributes: nil
-            )
+        // No resolved bookmark: use security-scoped access wrapper
+        do {
+            try notesURL.withSecurityScope { url in
+                let fm = FileManager.default
+                if !fm.fileExists(atPath: url.path) {
+                    try fm.createDirectory(
+                        at: url, withIntermediateDirectories: true, attributes: nil)
+                }
+                let meta = url.appendingPathComponent(".metadata")
+                if !fm.fileExists(atPath: meta.path) {
+                    try fm.createDirectory(
+                        at: meta, withIntermediateDirectories: true, attributes: nil)
+                }
+            }
+        } catch {
+            // Final fallback to direct ops (may fail if permissions are restricted)
+            if !fileManager.fileExists(atPath: notesURL.path) {
+                try fileManager.createDirectory(
+                    at: notesURL, withIntermediateDirectories: true, attributes: nil)
+            }
+            if !fileManager.fileExists(atPath: metadataURL.path) {
+                try fileManager.createDirectory(
+                    at: metadataURL, withIntermediateDirectories: true, attributes: nil)
+            }
         }
     }
 
@@ -104,16 +166,19 @@ public final class FileStorage: NSObject, FileStorageProtocol, ObservableObject,
                     return
                 }
                 do {
-                    let noteURL = URL(fileURLWithPath: self.vaultPath)
-                        .appendingPathComponent("\(note.title).md")
+                    let baseURL =
+                        self.resolvedWorkspaceURL ?? URL(fileURLWithPath: self.workspacePath)
+                    let noteURL = baseURL.appendingPathComponent("\(note.title).md")
 
-                    // Save markdown content with security-scoped access
-                    try noteURL.withSecurityScope { url in
-                        try note.content.write(
-                            to: url,
-                            atomically: true,
-                            encoding: .utf8
-                        )
+                    // If we have a resolved security-scoped URL, assume access is active and
+                    // perform direct writes to avoid stopping an active scope. Otherwise use
+                    // the withSecurityScope wrapper to request access for the operation.
+                    if self.resolvedWorkspaceURL != nil {
+                        try note.content.write(to: noteURL, atomically: true, encoding: .utf8)
+                    } else {
+                        try noteURL.withSecurityScope { url in
+                            try note.content.write(to: url, atomically: true, encoding: .utf8)
+                        }
                     }
 
                     // Save metadata
@@ -138,9 +203,15 @@ public final class FileStorage: NSObject, FileStorageProtocol, ObservableObject,
                 }
                 do {
                     let noteURL = URL(fileURLWithPath: path)
-                    // Read content with security-scoped access
-                    let content = try noteURL.withSecurityScope { url in
-                        try String(contentsOf: url, encoding: .utf8)
+                    let content: String
+
+                    // If this path lives under a resolved security-scoped workspace, read directly.
+                    if let base = self.resolvedWorkspaceURL, path.hasPrefix(base.path) {
+                        content = try String(contentsOf: noteURL, encoding: .utf8)
+                    } else {
+                        content = try noteURL.withSecurityScope { url in
+                            try String(contentsOf: url, encoding: .utf8)
+                        }
                     }
 
                     var note = Note.fromMarkdown(filePath: path, content: content)
@@ -172,9 +243,14 @@ public final class FileStorage: NSObject, FileStorageProtocol, ObservableObject,
                 }
                 do {
                     let noteURL = URL(fileURLWithPath: path)
-                    // Delete with security-scoped access
-                    try noteURL.withSecurityScope { url in
-                        try self.fileManager.removeItem(at: url)
+
+                    // If inside resolved workspace, perform direct delete so we don't stop an active scope.
+                    if let base = self.resolvedWorkspaceURL, path.hasPrefix(base.path) {
+                        try self.fileManager.removeItem(at: noteURL)
+                    } else {
+                        try noteURL.withSecurityScope { url in
+                            try self.fileManager.removeItem(at: url)
+                        }
                     }
 
                     // Also delete metadata
@@ -204,10 +280,18 @@ public final class FileStorage: NSObject, FileStorageProtocol, ObservableObject,
                     let sourceURL = URL(fileURLWithPath: sourcePath)
                     let destinationURL = URL(fileURLWithPath: destinationPath)
 
-                    // Move with security-scoped access
-                    try sourceURL.withSecurityScope { source in
-                        try destinationURL.withSecurityScope { dest in
-                            try self.fileManager.moveItem(at: source, to: dest)
+                    // If both source and destination are inside the resolved workspace, do a direct move
+                    // to avoid starting/stopping security scopes that might already be active.
+                    if let base = self.resolvedWorkspaceURL,
+                        sourcePath.hasPrefix(base.path),
+                        destinationPath.hasPrefix(base.path)
+                    {
+                        try self.fileManager.moveItem(at: sourceURL, to: destinationURL)
+                    } else {
+                        try sourceURL.withSecurityScope { source in
+                            try destinationURL.withSecurityScope { dest in
+                                try self.fileManager.moveItem(at: source, to: dest)
+                            }
                         }
                     }
                     continuation.resume()
@@ -228,14 +312,27 @@ public final class FileStorage: NSObject, FileStorageProtocol, ObservableObject,
                     return
                 }
                 do {
-                    let notesURL = URL(fileURLWithPath: self.vaultPath)
-                        .appendingPathComponent(directory)
+                    let baseURL =
+                        (self.resolvedWorkspaceURL ?? URL(fileURLWithPath: self.workspacePath))
+                    let notesURL = baseURL.appendingPathComponent(directory)
+                    let contents: [URL]
 
-                    let contents = try self.fileManager.contentsOfDirectory(
-                        at: notesURL,
-                        includingPropertiesForKeys: [.isRegularFileKey],
-                        options: [.skipsHiddenFiles]
-                    )
+                    // If the workspace has an active resolved security scope, perform direct listing.
+                    if self.resolvedWorkspaceURL != nil {
+                        contents = try self.fileManager.contentsOfDirectory(
+                            at: notesURL,
+                            includingPropertiesForKeys: [.isRegularFileKey],
+                            options: [.skipsHiddenFiles]
+                        )
+                    } else {
+                        contents = try notesURL.withSecurityScope { url in
+                            try self.fileManager.contentsOfDirectory(
+                                at: url,
+                                includingPropertiesForKeys: [.isRegularFileKey],
+                                options: [.skipsHiddenFiles]
+                            )
+                        }
+                    }
 
                     let noteFiles = contents.compactMap { url -> String? in
                         guard url.pathExtension == "md" else { return nil }
@@ -269,7 +366,7 @@ public final class FileStorage: NSObject, FileStorageProtocol, ObservableObject,
             modifiedAt: note.modifiedAt
         )
 
-        let metadataURL = URL(fileURLWithPath: vaultPath)
+        let metadataURL = URL(fileURLWithPath: workspacePath)
             .appendingPathComponent(".metadata")
             .appendingPathComponent("\(note.id.uuidString).json")
 
@@ -285,7 +382,7 @@ public final class FileStorage: NSObject, FileStorageProtocol, ObservableObject,
     }
 
     private func loadNoteMetadata(for noteId: UUID) throws -> NoteMetadataFile {
-        let metadataURL = URL(fileURLWithPath: vaultPath)
+        let metadataURL = URL(fileURLWithPath: workspacePath)
             .appendingPathComponent(".metadata")
             .appendingPathComponent("\(noteId.uuidString).json")
 
@@ -294,7 +391,7 @@ public final class FileStorage: NSObject, FileStorageProtocol, ObservableObject,
     }
 
     private func deleteNoteMetadata(for noteId: UUID) throws {
-        let metadataURL = URL(fileURLWithPath: vaultPath)
+        let metadataURL = (self.resolvedWorkspaceURL ?? URL(fileURLWithPath: self.workspacePath))
             .appendingPathComponent(".metadata")
             .appendingPathComponent("\(noteId.uuidString).json")
 
@@ -310,7 +407,9 @@ public final class FileStorage: NSObject, FileStorageProtocol, ObservableObject,
     // MARK: - File Watching
 
     private func setupFileWatcher() {
-        let notesPath = vaultPath
+        // Use the resolved security-scoped URL when available so the watcher operates
+        // on the access-granted URL instead of a raw path that may lack privileges.
+        let notesPath = (resolvedWorkspaceURL ?? URL(fileURLWithPath: workspacePath)).path
         let fileDescriptor = open(notesPath, O_EVTONLY)
 
         guard fileDescriptor >= 0 else { return }
@@ -336,7 +435,7 @@ public final class FileStorage: NSObject, FileStorageProtocol, ObservableObject,
         // For now, we'll emit a generic change event
         // A more sophisticated implementation would determine the specific change
         let event = FileChangeEvent(
-            path: vaultPath,
+            path: workspacePath,
             changeType: .modified
         )
         changeSubject.send(event)
@@ -349,7 +448,7 @@ public final class FileStorage: NSObject, FileStorageProtocol, ObservableObject,
 
 /// Errors that can occur during file storage operations
 public enum FileStorageError: LocalizedError, Sendable {
-    case vaultNotFound
+    case workspaceNotFound
     case invalidPath
     case fileNotFound
     case writeError(Error)
@@ -358,8 +457,8 @@ public enum FileStorageError: LocalizedError, Sendable {
 
     public var errorDescription: String? {
         switch self {
-        case .vaultNotFound:
-            return "Vault directory not found"
+        case .workspaceNotFound:
+            return "Workspace directory not found"
         case .invalidPath:
             return "Invalid file path"
         case .fileNotFound:
@@ -377,12 +476,12 @@ public enum FileStorageError: LocalizedError, Sendable {
 // MARK: - Convenience Extensions
 
 extension FileStorage {
-    /// Creates a new note and saves it to disk
+    // Creates a new note and saves it to disk
     public func createNote(title: String, content: String = "") async throws -> Note {
         let note = Note(
             title: title,
             content: content,
-            filePath: URL(fileURLWithPath: vaultPath)
+            filePath: URL(fileURLWithPath: workspacePath)
                 .appendingPathComponent("\(title).md")
                 .path
         )

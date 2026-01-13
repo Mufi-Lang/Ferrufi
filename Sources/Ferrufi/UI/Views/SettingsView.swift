@@ -102,9 +102,9 @@ struct GeneralSettingsView: View {
     @State private var showErrorAlert: Bool = false
     @State private var errorMessage: String = ""
 
-    // Vault management states
-    @State private var showVaultInfoAlert: Bool = false
-    @State private var vaultInfoMessage: String = ""
+    // Workspace management states
+    @State private var showWorkspaceInfoAlert: Bool = false
+    @State private var workspaceInfoMessage: String = ""
 
     public init() {}
 
@@ -150,31 +150,31 @@ struct GeneralSettingsView: View {
                 .foregroundColor(.red)
                 .cornerRadius(6)
 
-            GroupBox(label: Label("Vault", systemImage: "folder")) {
+            GroupBox(label: Label("Workspace", systemImage: "folder")) {
                 VStack(alignment: .leading, spacing: 8) {
-                    // Compute currently initialized vault path (expand '~' if present)
+                    // Compute currently initialized workspace path (expand '~' if present)
                     let homeURL = FileManager.default.homeDirectoryForCurrentUser
-                    let rawVaultPath =
-                        ferrufiApp.currentVaultPath
-                        ?? ferrufiApp.configuration.vault.defaultVaultPath
-                    let vaultPath = URL(
-                        fileURLWithPath: (rawVaultPath as NSString).expandingTildeInPath)
+                    let rawWorkspacePath =
+                        ferrufiApp.currentWorkspacePath
+                        ?? ferrufiApp.configuration.workspace.defaultWorkspacePath
+                    let workspacePath = URL(
+                        fileURLWithPath: (rawWorkspacePath as NSString).expandingTildeInPath)
                     let bookmarkedParent = SecurityScopedBookmarkManager.shared
                         .allBookmarkedPaths()
-                        .first { vaultPath.path.hasPrefix($0) }
+                        .first { workspacePath.path.hasPrefix($0) }
 
                     HStack(alignment: .center) {
-                        Text("Vault location:")
+                        Text("Workspace location:")
                             .frame(width: settingsLabelWidth, alignment: .leading)
                         Spacer()
-                        Text(bookmarkedParent ?? vaultPath.path)
+                        Text(bookmarkedParent ?? workspacePath.path)
                             .font(.caption)
                             .foregroundColor(.secondary)
                             .truncationMode(.middle)
                     }
 
                     // Trusted state
-                    let trustedList = ferrufiApp.configuration.trustedVaultPaths ?? []
+                    let trustedList = ferrufiApp.configuration.trustedWorkspacePaths ?? []
                     HStack(alignment: .center) {
                         Text("Trusted:")
                             .frame(width: settingsLabelWidth, alignment: .leading)
@@ -217,10 +217,10 @@ struct GeneralSettingsView: View {
 
                     HStack(spacing: 10) {
 
-                        Button("Change Vault Folder") {
+                        Button("Change Workspace Folder") {
                             SecurityScopedBookmarkManager.shared.requestFolderAccess(
                                 message:
-                                    "Select a folder to contain your Ferrufi vault (select Home to use ~/.ferrufi/)",
+                                    "Select a folder to contain your Ferrufi workspace (select Home to use ~/.ferrufi/)",
                                 defaultDirectory: homeURL,
                                 showHidden: true
                             ) { selectedURL in
@@ -235,22 +235,54 @@ struct GeneralSettingsView: View {
                                         } else {
                                             ferrufiDir = parentURL
                                         }
-                                        let scriptsDir = ferrufiDir.appendingPathComponent(
-                                            "scripts")
+
+                                        // Create the chosen folder (or ~/.ferrufi when Home was selected)
                                         try FileManager.default.createDirectory(
                                             at: ferrufiDir, withIntermediateDirectories: true,
                                             attributes: nil
                                         )
-                                        try FileManager.default.createDirectory(
-                                            at: scriptsDir, withIntermediateDirectories: true,
-                                            attributes: nil
-                                        )
 
-                                        // Reinitialize Ferrufi storage to point at the new vault
-                                        try await ferrufiApp.initialize(vaultPath: scriptsDir.path)
+                                        // Reinitialize Ferrufi storage to point at the new workspace (use the folder itself)
+                                        try await ferrufiApp.initialize(
+                                            workspacePath: ferrufiDir.path)
 
-                                        vaultInfoMessage = "Vault folder updated."
-                                        showVaultInfoAlert = true
+                                        // Persist trust for the selected parent folder so the app-level
+                                        // trust mechanic stays consistent with user expectations.
+                                        await MainActor.run {
+                                            let canonicalParent = URL(
+                                                fileURLWithPath: (parentURL.path as NSString)
+                                                    .expandingTildeInPath
+                                            ).standardizedFileURL.path
+                                            ferrufiApp.configuration.updateConfiguration { config in
+                                                var arr = config.trustedVaultPaths ?? []
+                                                if !arr.contains(canonicalParent) {
+                                                    arr.append(canonicalParent)
+                                                    config.trustedVaultPaths = arr
+                                                }
+                                            }
+
+                                            // Refresh explorer selection using the shared navigation model so the
+                                            // sidebar updates correctly across windows
+                                            FerrufiApp.sharedNavigationModel?.selectFolder(
+                                                ferrufiApp.folderManager.rootFolder,
+                                                ferrufiApp: ferrufiApp
+                                            )
+                                            if let welcome = ferrufiApp.notes.first(where: {
+                                                $0.title == "Welcome"
+                                            }) {
+                                                FerrufiApp.sharedNavigationModel?.selectNote(
+                                                    welcome, ferrufiApp: ferrufiApp)
+                                            }
+
+                                            // Debug: log workspace change for diagnostics
+                                            print(
+                                                "✅ Workspace changed to: \(ferrufiDir.path). notes: \(ferrufiApp.notes.count), root: \(ferrufiApp.folderManager.rootFolder.path)"
+                                            )
+
+                                            workspaceInfoMessage =
+                                                "Workspace folder updated and trusted."
+                                            showWorkspaceInfoAlert = true
+                                        }
                                     } catch {
                                         errorMessage = error.localizedDescription
                                         showErrorAlert = true
@@ -261,22 +293,22 @@ struct GeneralSettingsView: View {
                         .controlSize(.small)
 
                         // Trust / Untrust controls
-                        if (ferrufiApp.configuration.trustedVaultPaths ?? []).contains(where: {
-                            vaultPath.path.hasPrefix($0)
+                        if (ferrufiApp.configuration.trustedWorkspacePaths ?? []).contains(where: {
+                            workspacePath.path.hasPrefix($0)
                         }) {
-                            Button("Untrust Vault") {
-                                // Find the trusted entry that covers the current vault and remove it
-                                let trusted = ferrufiApp.configuration.trustedVaultPaths ?? []
+                            Button("Untrust Workspace") {
+                                // Find the trusted entry that covers the current workspace and remove it
+                                let trusted = ferrufiApp.configuration.trustedWorkspacePaths ?? []
                                 if let parentToRemove = trusted.first(where: {
-                                    vaultPath.path.hasPrefix($0)
+                                    workspacePath.path.hasPrefix($0)
                                 }) {
                                     ferrufiApp.configuration.updateConfiguration { config in
-                                        var arr = config.trustedVaultPaths ?? []
+                                        var arr = config.trustedWorkspacePaths ?? []
                                         arr.removeAll(where: { $0 == parentToRemove })
-                                        config.trustedVaultPaths = arr.isEmpty ? nil : arr
+                                        config.trustedWorkspacePaths = arr.isEmpty ? nil : arr
                                     }
-                                    vaultInfoMessage = "Vault untrusted: \(parentToRemove)"
-                                    showVaultInfoAlert = true
+                                    workspaceInfoMessage = "Workspace untrusted: \(parentToRemove)"
+                                    showWorkspaceInfoAlert = true
                                 } else {
                                     errorMessage = "No trusted path found to untrust."
                                     showErrorAlert = true
@@ -284,25 +316,25 @@ struct GeneralSettingsView: View {
                             }
                             .controlSize(.small)
                         } else {
-                            Button("Trust Vault") {
+                            Button("Trust Workspace") {
                                 // If there's already a bookmarked parent, trust it; otherwise ask for folder access first
                                 if let existingParent = SecurityScopedBookmarkManager.shared
                                     .allBookmarkedPaths()
-                                    .first(where: { vaultPath.path.hasPrefix($0) })
+                                    .first(where: { workspacePath.path.hasPrefix($0) })
                                 {
                                     ferrufiApp.configuration.updateConfiguration { config in
-                                        var arr = config.trustedVaultPaths ?? []
+                                        var arr = config.trustedWorkspacePaths ?? []
                                         if !arr.contains(existingParent) {
                                             arr.append(existingParent)
-                                            config.trustedVaultPaths = arr
+                                            config.trustedWorkspacePaths = arr
                                         }
                                     }
-                                    vaultInfoMessage = "Vault trusted: \(existingParent)"
-                                    showVaultInfoAlert = true
+                                    workspaceInfoMessage = "Workspace trusted: \(existingParent)"
+                                    showWorkspaceInfoAlert = true
                                 } else {
                                     SecurityScopedBookmarkManager.shared.requestFolderAccess(
                                         message:
-                                            "Select a folder to trust for Ferrufi (select Home to use ~/.ferrufi/)",
+                                            "Select a folder to trust for Ferrufi workspace (select Home to use ~/.ferrufi/)",
                                         defaultDirectory: homeURL,
                                         showHidden: true
                                     ) { sel in
@@ -314,8 +346,8 @@ struct GeneralSettingsView: View {
                                                 config.trustedVaultPaths = arr
                                             }
                                         }
-                                        vaultInfoMessage = "Vault trusted: \(sel.path)"
-                                        showVaultInfoAlert = true
+                                        workspaceInfoMessage = "Workspace trusted: \(sel.path)"
+                                        showWorkspaceInfoAlert = true
                                     }
                                 }
                             }
@@ -329,8 +361,8 @@ struct GeneralSettingsView: View {
                                 showHidden: true
                             ) { url in
                                 if url != nil {
-                                    vaultInfoMessage = "Permission repaired."
-                                    showVaultInfoAlert = true
+                                    workspaceInfoMessage = "Permission repaired."
+                                    showWorkspaceInfoAlert = true
                                 } else {
                                     errorMessage = "Repair cancelled."
                                     showErrorAlert = true
@@ -354,13 +386,13 @@ struct GeneralSettingsView: View {
                                 }
 
                                 if removed.isEmpty {
-                                    vaultInfoMessage = "No broken bookmarks found."
+                                    workspaceInfoMessage = "No broken bookmarks found."
                                 } else {
-                                    vaultInfoMessage =
+                                    workspaceInfoMessage =
                                         "Removed broken bookmarks:\n"
                                         + removed.joined(separator: "\n")
                                 }
-                                showVaultInfoAlert = true
+                                showWorkspaceInfoAlert = true
                             }
                         }
                         .controlSize(.small)
@@ -368,31 +400,31 @@ struct GeneralSettingsView: View {
                         Button("Revoke Permission") {
                             if let parent = SecurityScopedBookmarkManager.shared
                                 .allBookmarkedPaths()
-                                .first(where: { vaultPath.path.hasPrefix($0) })
+                                .first(where: { workspacePath.path.hasPrefix($0) })
                             {
                                 SecurityScopedBookmarkManager.shared.removeBookmark(forPath: parent)
-                                vaultInfoMessage =
+                                workspaceInfoMessage =
                                     "Permission revoked. App will prompt again on next initialization."
-                                showVaultInfoAlert = true
+                                showWorkspaceInfoAlert = true
                             } else {
-                                errorMessage = "No vault permission found to revoke."
+                                errorMessage = "No workspace permission found to revoke."
                                 showErrorAlert = true
                             }
                         }
                         .controlSize(.small)
 
-                        Button("Open in Finder") {
-                            NSWorkspace.shared.open(vaultPath)
+                        Button("Open Workspace in Finder") {
+                            NSWorkspace.shared.open(workspacePath)
                         }
                         .controlSize(.small)
                     }  // HStack
                 }  // VStack
             }  // GroupBox
             .padding(.vertical, 8)
-            .alert("Vault", isPresented: $showVaultInfoAlert) {
+            .alert("Workspace", isPresented: $showWorkspaceInfoAlert) {
                 Button("OK") {}
             } message: {
-                Text(vaultInfoMessage)
+                Text(workspaceInfoMessage)
             }
 
             ScrollView(.vertical) {
@@ -517,15 +549,15 @@ struct GeneralSettingsView: View {
                         .padding(8)
                     }
 
-                    GroupBox(label: Label("Vault", systemImage: "folder")) {
+                    GroupBox(label: Label("Workspace", systemImage: "folder")) {
                         VStack(spacing: 12) {
-                            SettingsRow("Vault Location:") {
+                            SettingsRow("Workspace Location:") {
                                 HStack(spacing: 8) {
-                                    Text(ferrufiApp.configuration.vault.defaultVaultPath)
+                                    Text(ferrufiApp.configuration.workspace.defaultWorkspacePath)
                                         .foregroundColor(.secondary)
                                         .truncationMode(.middle)
                                     Button("Change") {
-                                        // TODO: Implement vault location picker
+                                        // TODO: Implement workspace location picker
                                     }
                                 }
                             }
@@ -533,10 +565,10 @@ struct GeneralSettingsView: View {
                             Toggle(
                                 "Watch for external changes",
                                 isOn: Binding(
-                                    get: { ferrufiApp.configuration.vault.fileWatchingEnabled },
+                                    get: { ferrufiApp.configuration.workspace.fileWatchingEnabled },
                                     set: { newValue in
                                         ferrufiApp.configuration.updateConfiguration { config in
-                                            config.vault.fileWatchingEnabled = newValue
+                                            config.workspace.fileWatchingEnabled = newValue
                                         }
                                     }
                                 )
@@ -549,12 +581,12 @@ struct GeneralSettingsView: View {
                                         "Seconds",
                                         value: Binding(
                                             get: {
-                                                ferrufiApp.configuration.vault.autoSaveInterval
+                                                ferrufiApp.configuration.workspace.autoSaveInterval
                                             },
                                             set: { newValue in
                                                 ferrufiApp.configuration.updateConfiguration {
                                                     config in
-                                                    config.vault.autoSaveInterval = newValue
+                                                    config.workspace.autoSaveInterval = newValue
                                                 }
                                             }
                                         ), format: .number
