@@ -50,6 +50,7 @@ Options:
   --local <file>   Install from a local zip archive instead of fetching release
   --install-dir DIR Install dir (defaults to /Applications)
   --no-quarantine  Skip xattr -cr step
+  --allow-gatekeeper  Add the app to Gatekeeper's allowed list (may require sudo)
   --uninstall      Remove installed app from the install directory
   --no-sudo        Do not use sudo when copying (useful if you already have permissions)
 EOF
@@ -62,6 +63,7 @@ INSTALL_DIR="$DEFAULT_INSTALL_DIR"
 SKIP_QUARANTINE=0
 UNINSTALL=0
 USE_SUDO=1
+ALLOW_GATEKEEPER=0
 
 # parse args
 while [[ $# -gt 0 ]]; do
@@ -73,6 +75,7 @@ while [[ $# -gt 0 ]]; do
     --no-quarantine) SKIP_QUARANTINE=1; shift ;;
     --uninstall) UNINSTALL=1; shift ;;
     --no-sudo) USE_SUDO=0; shift ;;
+    --allow-gatekeeper) ALLOW_GATEKEEPER=1; shift ;;
     *) err "Unknown argument: $1"; usage; exit 1 ;;
   esac
 done
@@ -260,6 +263,35 @@ fi
 
 succ "Installation complete!"
 
+# Optionally add to Gatekeeper allowed list (interactive by default; use --allow-gatekeeper to auto-apply)
+DO_ADD=0
+if [[ "${ALLOW_GATEKEEPER:-0}" -eq 1 ]]; then
+  DO_ADD=1
+else
+  # Only prompt interactively (don't auto-add during --yes non-interactive installs unless explicitly requested)
+  if [[ "${AUTO_YES:-0}" -eq 0 ]]; then
+    if confirm "Add Ferrufi to Gatekeeper allowed list (recommended to avoid Gatekeeper prompts)?"; then
+      DO_ADD=1
+    fi
+  fi
+fi
+
+if [[ $DO_ADD -eq 1 ]]; then
+  if command -v spctl >/dev/null 2>&1; then
+    info "Adding Ferrufi to Gatekeeper allowed list (label: Ferrufi)..."
+    if [[ $USE_SUDO -eq 1 ]]; then
+      sudo spctl --add --label "Ferrufi" "$TARGET" 2>/dev/null || warn "spctl --add failed (you may need to run this manually)"
+      sudo spctl --enable --label "Ferrufi" 2>/dev/null || true
+    else
+      spctl --add --label "Ferrufi" "$TARGET" 2>/dev/null || warn "spctl --add failed (requires sudo)"
+      spctl --enable --label "Ferrufi" 2>/dev/null || true
+    fi
+    succ "Added Ferrufi to Gatekeeper allowed list (label: Ferrufi)"
+  else
+    warn "spctl not available; cannot add to Gatekeeper automatically. You can run manually: sudo spctl --add --label \"Ferrufi\" \"$TARGET\""
+  fi
+fi
+
 # Optionally launch
 if confirm "Open Ferrufi now?"; then
   open "$TARGET" || warn "Failed to open app"
@@ -267,6 +299,8 @@ fi
 
 echo
 info "If you prefer manual install, you can run:"
-echo "  cp -R \"$APP_BUNDLE\" \"$INSTALL_DIR/\" && xattr -cr \"$INSTALL_DIR/$APP_NAME\""
+info "  cp -R \"$APP_BUNDLE\" \"$INSTALL_DIR/\" && xattr -cr \"$INSTALL_DIR/$APP_NAME\""
+info "  Or add to Gatekeeper manually (requires sudo):"
+info "    sudo spctl --add --label \"Ferrufi\" \"$INSTALL_DIR/$APP_NAME\""
 echo
 info "Installer finished."

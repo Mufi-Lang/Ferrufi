@@ -150,6 +150,23 @@ if command -v xattr >/dev/null 2>&1; then
   sudo xattr -dr com.apple.quarantine "$DEST_APP" 2>/dev/null || true
 fi
 
+# Optionally add to Gatekeeper allowed list if requested via ALLOW_GATEKEEPER=1.
+# This is non-default for the non-interactive release installer; set ALLOW_GATEKEEPER=1
+# in the environment if you want the installer to perform this step automatically.
+if [ "${ALLOW_GATEKEEPER:-0}" = "1" ]; then
+  if command -v spctl >/dev/null 2>&1; then
+    echo "Adding Ferrufi to Gatekeeper allowed list (label: Ferrufi); you may be prompted for your password..."
+    if sudo spctl --add --label "Ferrufi" "$DEST_APP" 2>/dev/null; then
+      sudo spctl --enable --label "Ferrufi" 2>/dev/null || true
+      echo "Added Ferrufi to Gatekeeper allowed list."
+    else
+      echo "Failed to add to Gatekeeper allowed list. You can run manually: sudo spctl --add --label \"Ferrufi\" \"$DEST_APP\"" >&2
+    fi
+  else
+    echo "spctl not available; cannot add to Gatekeeper automatically." >&2
+  fi
+fi
+
 # Ensure /Applications contains a symlink pointing to the installed app
 if [ -L "/Applications/Ferrufi.app" ] || [ -e "/Applications/Ferrufi.app" ]; then
   sudo rm -rf "/Applications/Ferrufi.app"

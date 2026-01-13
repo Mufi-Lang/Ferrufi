@@ -58,6 +58,7 @@ info() {
 USER_INSTALL=0
 FORCE=0
 SRC=""
+ALLOW_GATEKEEPER=0
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -74,10 +75,15 @@ while [ "$#" -gt 0 ]; do
       exit 0
       ;;
     -*)
-      err "Unknown option: $1"
-      usage
-      exit 2
-      ;;
+      --no-sudo) USE_SUDO=0; shift ;;
+      --allow-gatekeeper)
+        ALLOW_GATEKEEPER=1
+        shift
+        ;;
+      -*) err "Unknown option: $1"
+        usage
+        exit 2
+        ;;
     *)
       if [ -z "$SRC" ]; then
         SRC="$1"
@@ -202,4 +208,34 @@ else
 fi
 
 info "Installation complete! You can run the app from Finder or via CLI: ${BIN_NAME}"
+
+# Gatekeeper allow-list prompt/auto-add (interactive prompt unless --allow-gatekeeper was passed)
+DO_ADD=0
+if [ "${ALLOW_GATEKEEPER:-0}" -eq 1 ]; then
+  DO_ADD=1
+else
+  # Ask the user interactively (default No)
+  read -r -p "Add Ferrufi to Gatekeeper allowed list (recommended so it opens without extra prompts)? [y/N] " _resp
+  case "$_resp" in
+    [Yy]* ) DO_ADD=1 ;;
+    *) DO_ADD=0 ;;
+  esac
+fi
+
+if [ "$DO_ADD" -eq 1 ]; then
+  if command -v spctl >/dev/null 2>&1; then
+    info "Adding Ferrufi to Gatekeeper allowed list (label: Ferrufi)..."
+    if [ "$(id -u)" -ne 0 ]; then
+      sudo spctl --add --label "Ferrufi" "$TARGET_PATH" 2>/dev/null || warn "spctl --add failed (you may need to run it manually)"
+      sudo spctl --enable --label "Ferrufi" 2>/dev/null || true
+    else
+      spctl --add --label "Ferrufi" "$TARGET_PATH" 2>/dev/null || warn "spctl --add failed"
+      spctl --enable --label "Ferrufi" 2>/dev/null || true
+    fi
+    succ "Added Ferrufi to Gatekeeper allowed list (label: Ferrufi)"
+  else
+    warn "spctl not available; cannot add to Gatekeeper automatically. You can manually run:\n  sudo spctl --add --label \"Ferrufi\" \"$TARGET_PATH\""
+  fi
+fi
+
 exit 0

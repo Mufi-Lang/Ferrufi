@@ -22,7 +22,12 @@ Recommended: inspect before running any remote script.
 
 - One-liner (downloads the latest release; falls back to `experimental` prerelease if no official `latest` exists):
 ```bash
+# Run the release installer (downloads and installs latest release)
 curl -fsSL https://raw.githubusercontent.com/Mufi-Lang/Ferrufi/main/scripts/install_release.sh | sh
+
+# Optional: to automatically add Ferrufi to Gatekeeper's allowed list (so the app won't be blocked on first open),
+# set the environment variable `ALLOW_GATEKEEPER=1` when running the installer:
+ALLOW_GATEKEEPER=1 curl -fsSL https://raw.githubusercontent.com/Mufi-Lang/Ferrufi/main/scripts/install_release.sh | sh
 ```
 
 - Safer: download first, inspect, then run:
