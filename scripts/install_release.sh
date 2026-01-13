@@ -1,65 +1,94 @@
 #!/usr/bin/env sh
-# install_release.sh
-# Minimal installer: download latest Ferrufi release (Mufi-Lang/Ferrufi),
-# install Ferrufi.app into /Applications, and create /usr/local/bin/ferrufi
 #
-# Usage:
+# install_release.sh
+#
+# Installs Ferrufi.app into /Applications, clears quarantine, optionally
+# adds the app to Gatekeeper's allowed list, creates a CLI launcher in
+# /usr/local/bin, and attempts to trigger macOS file/folder permission
+# dialogs by launching the app and asking it to open protected folders.
+#
+# Usage (one-liner):
 #   curl -fsSL https://raw.githubusercontent.com/Mufi-Lang/Ferrufi/main/scripts/install_release.sh | sh
 #
-# This script is intentionally simple and opinionated:
-#  - Always installs the latest GitHub release for Mufi-Lang/Ferrufi
-#  - Installs Ferrufi.app to /Applications (overwrites if present)
-#  - Creates/overwrites /usr/local/bin/ferrufi -> Ferrufi.app/Contents/MacOS/<executable>
+# Environment:
+#   ALLOW_GATEKEEPER=0     Skip spctl whitelist step (default: 1 / enabled)
+#   GITHUB_TOKEN=...       Optional token to increase GitHub API rate limits
 #
 set -euo pipefail
 IFS='
 '
 
 REPO="Mufi-Lang/Ferrufi"
-API_URL="https://api.github.com/repos/$REPO/releases/latest"
-TMPDIR="$(mktemp -d /tmp/ferrufi.XXXX)"
+FALLBACK_TAG="experimental"
+PRIMARY_INSTALL="/Applications/Ferrufi.app"
+CLI_SYMLINK="/usr/local/bin/ferrufi"
+TMPDIR="$(mktemp -d /tmp/ferrufi.install.XXXX)"
 trap 'rm -rf "$TMPDIR"' EXIT
 
-# Ensure required commands are available
-for cmd in curl ditto ln chmod; do
-  if ! command -v "$cmd" >/dev/null 2>&1; then
-    printf "Required command '%s' not found. Please install it and re-run.\n" "$cmd" >&2
+info()  { printf "\033[1;34mℹ\033[0m %s\n" "$*"; }
+succ()  { printf "\033[1;32m✔\033[0m %s\n" "$*"; }
+warn()  { printf "\033[1;33m⚠\033[0m %s\n" "$*"; }
+err()   { printf "\033[1;31m✖\033[0m %s\n" "$*" >&2; }
+
+# Ensure basic tools
+for c in curl unzip ditto find ln sudo xattr; do
+  if ! command -v "$c" >/dev/null 2>&1; then
+    err "Required command '$c' not found. Please install it and re-run."
     exit 1
   fi
 done
 
-echo "Fetching latest release metadata for $REPO..."
-# Check the latest release endpoint silently (suppress curl stderr). If it's not available,
-# fall back to the 'experimental' prerelease.
-HTTP_STATUS="$(curl -sSL -o /dev/null -w "%{http_code}" "$API_URL" 2>/dev/null || true)"
-
-if [ "$HTTP_STATUS" = "200" ]; then
-  RELEASE_JSON="$(curl -sSL "$API_URL" 2>/dev/null)" || {
-    echo "Failed to fetch release metadata from GitHub (latest)." >&2
-    exit 1
-  }
-else
-  echo "Latest release not available (HTTP ${HTTP_STATUS:-unknown}). Trying 'experimental' release tag..."
-  TAG_API_URL="https://api.github.com/repos/$REPO/releases/tags/experimental"
-  HTTP_STATUS_TAG="$(curl -sSL -o /dev/null -w "%{http_code}" "$TAG_API_URL" 2>/dev/null || true)"
-
-  if [ "$HTTP_STATUS_TAG" = "200" ]; then
-    RELEASE_JSON="$(curl -sSL "$TAG_API_URL" 2>/dev/null)" || {
-      echo "Failed to fetch 'experimental' release metadata from GitHub." >&2
-      exit 1
-    }
-    echo "Using 'experimental' release"
-  else
-    echo "Failed to fetch release metadata from GitHub (latest: ${HTTP_STATUS:-unknown}, experimental: ${HTTP_STATUS_TAG:-unknown})." >&2
-    exit 1
+# Helper: fetch release JSON, preferring latest then fallback tag
+fetch_release_json() {
+  API_LATEST="https://api.github.com/repos/${REPO}/releases/latest"
+  HTTP_STATUS="$(curl -sSL -o /dev/null -w "%{http_code}" "$API_LATEST" 2>/dev/null || true)"
+  if [ "$HTTP_STATUS" = "200" ]; then
+    curl -sSL "$API_LATEST" 2>/dev/null || return 1
+    return 0
   fi
+
+  info "Latest release not available (HTTP ${HTTP_STATUS:-unknown}); trying tag: ${FALLBACK_TAG}"
+  API_TAG="https://api.github.com/repos/${REPO}/releases/tags/${FALLBACK_TAG}"
+  HTTP_STATUS_TAG="$(curl -sSL -o /dev/null -w "%{http_code}" "$API_TAG" 2>/dev/null || true)"
+  if [ "$HTTP_STATUS_TAG" = "200" ]; then
+    curl -sSL "$API_TAG" 2>/dev/null || return 1
+    return 0
+  fi
+
+  return 1
+}
+
+# Prefer deterministic experimental asset name when present
+choose_asset_url() {
+  RELEASE_JSON="$1"
+  TARGET_NAME="Ferrufi-experimental.zip"
+
+  # look for exact match first
+  echo "$RELEASE_JSON" \
+    | awk -F\" -v target="$TARGET_NAME" '/"name"/ { name=$4 } /browser_download_url/ { if (name == target) { print $4; exit } }' \
+    | grep -E -i '\.(zip|dmg|tar\.gz)$' || true
+
+  if [ -n "$RETVAL" ]; then
+    return 0
+  fi
+
+  # fallback: first downloadable macOS-like asset
+  echo "$RELEASE_JSON" \
+    | awk -F\" '/browser_download_url/{print $4}' \
+    | grep -E -i '\.(dmg|zip|tar\.gz)$' \
+    | head -n1 || true
+}
+
+info "Fetching release metadata for ${REPO}..."
+if ! RELEASE_JSON="$(fetch_release_json)"; then
+  err "Failed to fetch release metadata for ${REPO} (tried latest and ${FALLBACK_TAG})."
+  exit 1
 fi
 
-# Pick first asset that looks like macOS release: prefer dmg, then zip, then tar.gz
-# Prefer a stable experimental asset name first (Ferrufi-experimental.zip) for deterministic installs
-EXPERIMENTAL_ASSET_NAME="Ferrufi-experimental.zip"
+# Determine asset URL
 ASSET_URL="$(printf '%s\n' "$RELEASE_JSON" \
-  | awk -F\" -v target=\"$EXPERIMENTAL_ASSET_NAME\" '/"name"/ { name=$4 } /browser_download_url/ { if (name == target) { print $4; exit } }' || true)"
+  | awk -F\" -v target=\"Ferrufi-experimental.zip\" '/"name"/ { name=$4 } /browser_download_url/ { if (name == target) { print $4; exit } }' || true)"
+
 if [ -z "$ASSET_URL" ]; then
   ASSET_URL="$(printf '%s\n' "$RELEASE_JSON" \
     | awk -F\" '/browser_download_url/{print $4}' \
@@ -68,129 +97,155 @@ if [ -z "$ASSET_URL" ]; then
 fi
 
 if [ -z "$ASSET_URL" ]; then
-  echo "No suitable release asset (.dmg, .zip, .tar.gz) found for $REPO." >&2
+  err "No suitable release asset (.dmg, .zip, .tar.gz) found in the release."
   exit 1
 fi
 
 ASSET_NAME="$(basename "$ASSET_URL")"
 ASSET_PATH="$TMPDIR/$ASSET_NAME"
 
-echo "Downloading asset: $ASSET_NAME ..."
-if ! curl -L --fail -o "$ASSET_PATH" "$ASSET_URL" 2>/dev/null; then
-  echo "Download failed (HTTP error or asset not accessible): $ASSET_URL" >&2
+info "Downloading asset: $ASSET_NAME ..."
+if ! curl -L --fail -o "$ASSET_PATH" "$ASSET_URL"; then
+  err "Failed to download asset: $ASSET_URL"
   exit 1
 fi
+succ "Downloaded $ASSET_NAME"
 
-# Helper: find .app inside path
-find_app() {
-  find "$1" -maxdepth 4 -type d -name 'Ferrufi.app' -print -quit 2>/dev/null || true
+# Extract and find the .app bundle
+find_app_in_dir() {
+  find "$1" -maxdepth 6 -type d -name 'Ferrufi.app' -print -quit 2>/dev/null || true
 }
 
 APP_SOURCE=""
 case "$ASSET_PATH" in
   *.zip)
-    mkdir -p "$TMPDIR/extracted"
-    unzip -q "$ASSET_PATH" -d "$TMPDIR/extracted" || {
-      echo "Failed to unzip archive." >&2
-      exit 1
-    }
-    APP_SOURCE="$(find_app "$TMPDIR/extracted")"
-    [ -z "$APP_SOURCE" ] && APP_SOURCE="$(find "$TMPDIR/extracted" -maxdepth 4 -type d -name '*.app' -print -quit || true)"
+    unzip -q -o "$ASSET_PATH" -d "$TMPDIR/extracted" || { err "Unzip failed"; exit 1; }
+    APP_SOURCE="$(find_app_in_dir "$TMPDIR/extracted")"
     ;;
   *.dmg)
-    # Mount dmg into a temp mountpoint if possible, fall back to scanning /Volumes
-    MOUNT_DIR="$TMPDIR/mnt"
-    mkdir -p "$MOUNT_DIR"
-    if hdiutil attach "$ASSET_PATH" -nobrowse -mountpoint "$MOUNT_DIR" >/dev/null 2>&1; then
-      APP_SOURCE="$(find_app "$MOUNT_DIR")"
+    MOUNT="$TMPDIR/mnt"
+    mkdir -p "$MOUNT"
+    if hdiutil attach "$ASSET_PATH" -nobrowse -mountpoint "$MOUNT" >/dev/null 2>&1; then
+      APP_SOURCE="$(find_app_in_dir "$MOUNT")"
+      hdiutil detach "$MOUNT" >/dev/null 2>&1 || true
     else
-      # Fallback: attach without mountpoint and try to find under /Volumes
+      # fallback: attach and search /Volumes
       hdiutil attach "$ASSET_PATH" -nobrowse >/dev/null 2>&1 || true
       APP_SOURCE="$(find /Volumes -maxdepth 2 -type d -name 'Ferrufi.app' -print -quit 2>/dev/null || true)"
     fi
     ;;
   *.tar.gz|*.tgz)
     mkdir -p "$TMPDIR/extracted"
-    tar -xzf "$ASSET_PATH" -C "$TMPDIR/extracted" || {
-      echo "Failed to extract tarball." >&2
-      exit 1
-    }
-    APP_SOURCE="$(find_app "$TMPDIR/extracted")"
-    [ -z "$APP_SOURCE" ] && APP_SOURCE="$(find "$TMPDIR/extracted" -maxdepth 4 -type d -name '*.app' -print -quit || true)"
+    tar -xzf "$ASSET_PATH" -C "$TMPDIR/extracted" || { err "Failed to extract tarball"; exit 1; }
+    APP_SOURCE="$(find_app_in_dir "$TMPDIR/extracted")"
     ;;
   *)
-    echo "Unsupported asset type: $ASSET_PATH" >&2
+    err "Unsupported asset type: $ASSET_PATH"
     exit 1
     ;;
 esac
 
 if [ -z "$APP_SOURCE" ]; then
-  echo "Could not locate Ferrufi.app inside the downloaded asset." >&2
+  err "Could not locate Ferrufi.app inside the downloaded asset."
   exit 1
 fi
 
-DEST_APP="/usr/local/bin/Ferrufi.app"
+info "Found app bundle at: $APP_SOURCE"
 
-echo "Installing Ferrufi.app to $DEST_APP ..."
-# Ensure /usr/local/bin exists
-if [ ! -d "/usr/local/bin" ]; then
-  sudo mkdir -p /usr/local/bin
-fi
-# Remove existing app if present
-if [ -d "$DEST_APP" ]; then
-  echo "Removing existing app at $DEST_APP ..."
-  sudo rm -rf "$DEST_APP"
+# Install to /Applications (required for consistent macOS TCC behavior)
+info "Installing Ferrufi to ${PRIMARY_INSTALL} ..."
+if [ ! -d "/Applications" ]; then
+  sudo mkdir -p /Applications
 fi
 
-# Copy the app bundle into /usr/local/bin (use sudo)
-sudo ditto -v "$APP_SOURCE" "$DEST_APP"
+if [ -d "$PRIMARY_INSTALL" ]; then
+  info "Removing existing installation at ${PRIMARY_INSTALL} ..."
+  sudo rm -rf "$PRIMARY_INSTALL"
+fi
 
-# Clear Gatekeeper quarantine if possible (non-fatal)
+sudo ditto -v "$APP_SOURCE" "$PRIMARY_INSTALL"
+succ "Copied app to ${PRIMARY_INSTALL}"
+
+# Remove quarantine attribute so Gatekeeper dialogs are reduced
 if command -v xattr >/dev/null 2>&1; then
-  sudo xattr -dr com.apple.quarantine "$DEST_APP" 2>/dev/null || true
+  info "Removing com.apple.quarantine attribute..."
+  sudo xattr -dr com.apple.quarantine "$PRIMARY_INSTALL" 2>/dev/null || warn "xattr removal failed (non-fatal)"
 fi
 
-# Optionally add to Gatekeeper allowed list if requested via ALLOW_GATEKEEPER=1.
-# This is non-default for the non-interactive release installer; set ALLOW_GATEKEEPER=1
-# in the environment if you want the installer to perform this step automatically.
-if [ "${ALLOW_GATEKEEPER:-0}" = "1" ]; then
+# Optionally add to Gatekeeper's allowed list (spctl); opt-out via ALLOW_GATEKEEPER=0
+if [ "${ALLOW_GATEKEEPER:-1}" != "0" ]; then
   if command -v spctl >/dev/null 2>&1; then
-    echo "Adding Ferrufi to Gatekeeper allowed list (label: Ferrufi); you may be prompted for your password..."
-    if sudo spctl --add --label "Ferrufi" "$DEST_APP" 2>/dev/null; then
+    info "Adding Ferrufi to Gatekeeper allowed list (label: Ferrufi). Sudo may be required."
+    if sudo spctl --add --label "Ferrufi" "$PRIMARY_INSTALL" 2>/dev/null; then
       sudo spctl --enable --label "Ferrufi" 2>/dev/null || true
-      echo "Added Ferrufi to Gatekeeper allowed list."
+      succ "Ferrufi added to Gatekeeper allowed list (label: Ferrufi)."
     else
-      echo "Failed to add to Gatekeeper allowed list. You can run manually: sudo spctl --add --label \"Ferrufi\" \"$DEST_APP\"" >&2
+      warn "spctl --add failed. You can add manually: sudo spctl --add --label \"Ferrufi\" \"$PRIMARY_INSTALL\""
     fi
   else
-    echo "spctl not available; cannot add to Gatekeeper automatically." >&2
+    warn "spctl not available on this system."
   fi
+else
+  info "Skipping Gatekeeper whitelist step (ALLOW_GATEKEEPER=0)."
 fi
 
-# Ensure /Applications contains a symlink pointing to the installed app
-if [ -L "/Applications/Ferrufi.app" ] || [ -e "/Applications/Ferrufi.app" ]; then
-  sudo rm -rf "/Applications/Ferrufi.app"
-fi
-sudo ln -sfn "$DEST_APP" "/Applications/Ferrufi.app"
-
-# Find main executable inside the installed app
-EXEC_NAME="$(ls "$DEST_APP/Contents/MacOS" 2>/dev/null | head -n1 || true)"
+# Create CLI symlink
+info "Creating CLI launcher at ${CLI_SYMLINK} ..."
+EXEC_NAME="$(ls "$PRIMARY_INSTALL/Contents/MacOS" 2>/dev/null | head -n1 || true)"
 if [ -z "$EXEC_NAME" ]; then
-  echo "Failed to find the app executable inside $DEST_APP/Contents/MacOS" >&2
+  err "Cannot find app executable inside ${PRIMARY_INSTALL}/Contents/MacOS"
   exit 1
 fi
-EXEC_PATH="$DEST_APP/Contents/MacOS/$EXEC_NAME"
+EXEC_PATH="$PRIMARY_INSTALL/Contents/MacOS/$EXEC_NAME"
 
-# Create CLI symlink in /usr/local/bin
-SYMLINK="/usr/local/bin/ferrufi"
 if [ ! -d "/usr/local/bin" ]; then
   sudo mkdir -p /usr/local/bin
 fi
-sudo ln -sf "$EXEC_PATH" "$SYMLINK"
-sudo chmod +x "$SYMLINK" || true
+sudo ln -sf "$EXEC_PATH" "$CLI_SYMLINK"
+sudo chmod +x "$CLI_SYMLINK" || true
+succ "CLI launcher created: $CLI_SYMLINK"
 
-echo "Installed Ferrufi to $DEST_APP (app symlink at /Applications/Ferrufi.app)"
-echo "CLI launcher available at $SYMLINK"
-echo "Run 'ferrufi /path/to/folder' to open a folder in Ferrufi."
+succ "Installation finished."
+
+#
+# Trigger permission dialogs:
+# An installer cannot grant TCC (Privacy) permissions. The app must request them,
+# or the user must add the app manually in System Settings -> Privacy & Security.
+#
+# To make it easy for users, we:
+#  - Launch the app so it can present standard NSOpenPanel dialogs when needed
+#  - Ask the app to open common protected folders (Documents/Downloads/Desktop)
+#    which should cause macOS to show permission dialogs for that app when it
+#    attempts to access those locations.
+#  - Open the Security & Privacy preference pane so the user can manually allow access.
+#
+if command -v open >/dev/null 2>&1; then
+  info "Launching Ferrufi to allow it to request file/folder access..."
+  open "$PRIMARY_INSTALL" >/dev/null 2>&1 || warn "Failed to launch Ferrufi automatically; please open /Applications/Ferrufi.app"
+
+  info "Requesting access to common protected folders (approve any prompts that appear)..."
+  # 'open -a <app> <path>' asks the app to open the path which should trigger
+  # the app's open-file handling (and any permission dialogs it presents).
+  open -a "$PRIMARY_INSTALL" "$HOME/Documents" >/dev/null 2>&1 || true
+  open -a "$PRIMARY_INSTALL" "$HOME/Downloads" >/dev/null 2>&1 || true
+  open -a "$PRIMARY_INSTALL" "$HOME/Desktop" >/dev/null 2>&1 || true
+
+  # Also try calling the CLI helper to open Documents (if the app supports CLI open)
+  if [ -x "$CLI_SYMLINK" ]; then
+    "$CLI_SYMLINK" "$HOME/Documents" >/dev/null 2>&1 || true
+  fi
+
+  # Open the Security & Privacy preference pane (Privacy tab) to help the user
+  if [ -e "/System/Library/PreferencePanes/Security.prefPane" ]; then
+    info "Opening System Preferences -> Security & Privacy (Privacy tab). Add Ferrufi to Full Disk Access / Files and Folders if required."
+    open "/System/Library/PreferencePanes/Security.prefPane" >/dev/null 2>&1 || true
+  else
+    info "Please open System Settings -> Privacy & Security to grant Ferrufi access if needed."
+  fi
+
+  info "If you don't see permission dialogs, open Ferrufi and use File > Open... to select the folders you want it to access. Approve the macOS dialogs to grant access."
+else
+  warn "Cannot open GUI applications from this environment. Please open /Applications/Ferrufi.app manually and grant file/folder access via the dialogs or System Settings -> Privacy & Security."
+fi
 
 exit 0

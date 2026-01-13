@@ -16,6 +16,44 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
 
+        // If the installer or user invoked the app with --request-permissions, prompt
+        // the user to grant access to common protected folders. The app must present
+        // the NSOpenPanel and persist security-scoped bookmarks (handled by the
+        // SecurityScopedBookmarkManager). We still initialize runtime below.
+        if CommandLine.arguments.contains("--request-permissions") {
+            // Run on main queue to present UI
+            DispatchQueue.main.async {
+                let mgr = SecurityScopedBookmarkManager.shared
+                let fm = FileManager.default
+                let home = fm.homeDirectoryForCurrentUser
+
+                // Common user folders to request access to. The manager will present the panel
+                // and persist bookmarks if the user approves.
+                let candidates = [
+                    home.appendingPathComponent("Documents"),
+                    home.appendingPathComponent("Downloads"),
+                    home.appendingPathComponent("Desktop"),
+                ]
+
+                for folderURL in candidates {
+                    // Provide a helpful message and default directory for the panel
+                    let message = "Grant Ferrufi access to: \(folderURL.path)"
+                    mgr.requestFolderAccess(
+                        presentingWindow: nil,
+                        message: message,
+                        defaultDirectory: folderURL,
+                        showHidden: false
+                    ) { url in
+                        if let url = url {
+                            print("✅ Permission granted and bookmark stored for: \(url.path)")
+                        } else {
+                            print("⚠️ Permission NOT granted for: \(folderURL.path)")
+                        }
+                    }
+                }
+            }
+        }
+
         // Initialize Mufi runtime once at app startup
         Task {
             do {
