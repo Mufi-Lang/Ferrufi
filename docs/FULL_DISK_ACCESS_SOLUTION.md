@@ -224,8 +224,8 @@ VS Code, Terminal, and other developer tools.
 
 ### Why Full Disk Access?
 
-Ferrufi stores your notes in `~/.ferrufi/scripts/`, a hidden folder in 
-your home directory. macOS requires Full Disk Access for apps to read 
+Ferrufi stores your notes in `~/.ferrufi/` (or your selected workspace), a hidden folder in
+your home directory. macOS requires Full Disk Access for apps to read
 and write to these locations, even for files the app creates itself.
 ```
 

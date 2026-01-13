@@ -339,14 +339,19 @@ struct GeneralSettingsView: View {
                                         showHidden: true
                                     ) { sel in
                                         guard let sel = sel else { return }
+                                        // Canonicalize selected path so it matches how we compare current workspace
+                                        let canonicalSel = URL(
+                                            fileURLWithPath: (sel.path as NSString)
+                                                .expandingTildeInPath
+                                        ).standardizedFileURL.path
                                         ferrufiApp.configuration.updateConfiguration { config in
-                                            var arr = config.trustedVaultPaths ?? []
-                                            if !arr.contains(sel.path) {
-                                                arr.append(sel.path)
-                                                config.trustedVaultPaths = arr
+                                            var arr = config.trustedWorkspacePaths ?? []
+                                            if !arr.contains(canonicalSel) {
+                                                arr.append(canonicalSel)
+                                                config.trustedWorkspacePaths = arr
                                             }
                                         }
-                                        workspaceInfoMessage = "Workspace trusted: \(sel.path)"
+                                        workspaceInfoMessage = "Workspace trusted: \(canonicalSel)"
                                         showWorkspaceInfoAlert = true
                                     }
                                 }

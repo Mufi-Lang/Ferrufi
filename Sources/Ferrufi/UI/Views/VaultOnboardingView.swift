@@ -6,11 +6,11 @@ import SwiftUI
 ///  - Skip and use App Support (fallback)
 ///
 /// The parent view (typically `ContentView`) should present this sheet when no
-/// security-scoped bookmark for the vault exists yet. Callers provide closures:
+/// security-scoped bookmark for the workspace exists yet. Callers provide closures:
 ///  - `onSelectFolder` should open the Open Panel (NSOpenPanel) to let the user pick a folder.
 ///  - `onSkip` should create a safe fallback (e.g., ~/Library/Application Support/Ferrufi/scripts)
 @MainActor
-public struct VaultOnboardingView: View {
+public struct WorkspaceOnboardingView: View {
     public let onSelectFolder: () -> Void
     public let onSkip: () -> Void
     public let onLearnMore: (() -> Void)?
@@ -32,7 +32,7 @@ public struct VaultOnboardingView: View {
                     .font(.system(size: 36))
                     .foregroundColor(.accentColor)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Where should I store your vault?")
+                    Text("Where should I store your workspace?")
                         .font(.title2)
                         .bold()
                     Text(
@@ -49,7 +49,7 @@ public struct VaultOnboardingView: View {
                 Text("Recommended")
                     .font(.headline)
                 Text("• Select your Home folder to use the default location `~/.ferrufi/`.")
-                Text("• You can also choose any folder you want as your vault.")
+                Text("• You can also choose any folder you want as your workspace.")
                 Text("• Hidden folders (like `.ferrufi`) are visible in the picker.")
                     .font(.footnote)
                     .foregroundColor(.secondary)
@@ -64,7 +64,7 @@ public struct VaultOnboardingView: View {
                     Button(action: {
                         onSelectFolder()
                     }) {
-                        Text("Select Vault Folder")
+                        Text("Select Workspace Folder")
                             .frame(minWidth: 180)
                     }
                     .buttonStyle(.borderedProminent)
@@ -104,10 +104,10 @@ public struct VaultOnboardingView: View {
 }
 
 #if DEBUG
-    struct VaultOnboardingView_Previews: PreviewProvider {
+    struct WorkspaceOnboardingView_Previews: PreviewProvider {
         static var previews: some View {
             Group {
-                VaultOnboardingView(
+                WorkspaceOnboardingView(
                     onSelectFolder: { print("Select pressed") },
                     onSkip: { print("Skip pressed") },
                     onLearnMore: { print("Learn more") }

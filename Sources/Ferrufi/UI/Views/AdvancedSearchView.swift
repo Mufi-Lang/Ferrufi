@@ -90,7 +90,7 @@ public struct AdvancedSearchView: View {
                     .textFieldStyle(.plain)
                     .font(.system(size: 16))
                     .foregroundColor(themeManager.currentTheme.colors.foreground)
-                    .onChange(of: searchText) { _, newValue in
+                    .onChange(of: searchText) { newValue in
                         searchDebouncer.send(newValue)
                     }
                     .onSubmit {

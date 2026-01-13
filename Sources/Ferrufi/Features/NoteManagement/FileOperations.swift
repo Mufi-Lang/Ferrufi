@@ -61,8 +61,15 @@ class FileOperations {
         return importedNotes
     }
 
-    /// Import Obsidian vault
+    /// Import Obsidian workspace
+    @available(*, deprecated, message: "Use importObsidianWorkspace(from:to:) instead")
     static func importObsidianVault(from vaultURL: URL, to targetFolder: Folder) throws
+        -> ImportResult
+    {
+        return try importObsidianWorkspace(from: vaultURL, to: targetFolder)
+    }
+
+    static func importObsidianWorkspace(from workspaceURL: URL, to targetFolder: Folder) throws
         -> ImportResult
     {
         var importedNotes: [Note] = []
@@ -121,7 +128,7 @@ class FileOperations {
             }
         }
 
-        try processDirectory(at: vaultURL)
+        try processDirectory(at: workspaceURL)
 
         return ImportResult(notes: importedNotes, attachments: importedAttachments)
     }

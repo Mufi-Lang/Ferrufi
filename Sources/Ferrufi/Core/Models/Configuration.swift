@@ -568,7 +568,11 @@ public class ConfigurationManager: ObservableObject {
 
     /// Updates configuration and saves automatically
     public func updateConfiguration(_ updater: (inout FerrufiConfiguration) -> Void) {
-        updater(&configuration)
+        // Make a temporary copy and assign it back to the @Published property
+        // so observers are notified of the change.
+        var c = configuration
+        updater(&c)
+        configuration = c
         saveConfiguration()
     }
 

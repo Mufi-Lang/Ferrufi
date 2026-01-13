@@ -349,23 +349,30 @@ public class SecurityScopedBookmarkManager: ObservableObject {
 
     /// Migrates existing vault path to use security-scoped bookmarks
     /// Call this once on app startup to ensure existing users get prompted
-    /// - Parameter vaultPath: The current vault path
-    /// - Returns: True if bookmark exists or was created, false if user denied
+    @available(*, deprecated, message: "Use migrateWorkspacePath instead")
     public func migrateVaultPath(_ vaultPath: String, completion: @escaping (Bool) -> Void) {
+        // Deprecated compatibility shim that calls the new API.
+        migrateWorkspacePath(vaultPath, completion: completion)
+    }
+
+    /// - Parameter workspacePath: The current workspace path
+    /// - Returns: True if bookmark exists or was created, false if user denied
+    public func migrateWorkspacePath(_ workspacePath: String, completion: @escaping (Bool) -> Void)
+    {
         // Check if we already have a bookmark
-        if hasBookmark(forPath: vaultPath) {
+        if hasBookmark(forPath: workspacePath) {
             completion(true)
             return
         }
 
         // Check if the path exists
-        guard FileManager.default.fileExists(atPath: vaultPath) else {
+        guard FileManager.default.fileExists(atPath: workspacePath) else {
             completion(false)
             return
         }
 
         // Request access to the folder
-        ensureAccess(toPath: vaultPath, requestIfNeeded: true) { url in
+        ensureAccess(toPath: workspacePath, requestIfNeeded: true) { url in
             completion(url != nil)
         }
     }

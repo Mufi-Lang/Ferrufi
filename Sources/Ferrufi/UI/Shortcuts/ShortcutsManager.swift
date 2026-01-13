@@ -21,7 +21,7 @@ public final class ShortcutsManager: ObservableObject {
         "newNote": "New Note",
         "newFolder": "New Folder",
         "importNotes": "Import Notes",
-        "exportVault": "Export Vault",
+        "exportVault": "Export Workspace",
         "find": "Find in Notes",
         "findAndReplace": "Find and Replace",
         "toggleSidebar": "Toggle Sidebar",

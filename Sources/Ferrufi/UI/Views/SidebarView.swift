@@ -24,6 +24,36 @@ struct SidebarView: View {
     @State private var noteCounter = 1
     @State private var showingDirectoryPicker = false
 
+    // Workspace lock/trust UI (no trust confirmation dialog here)
+    @State private var showUntrustConfirm: Bool = false
+    @State private var lockPulse: Bool = false
+
+    // Computed convenience properties for current workspace path & trust state
+    private var currentWorkspacePathString: String {
+        let rawWorkspacePath =
+            ferrufiApp.currentWorkspacePath
+            ?? ferrufiApp.configuration.workspace.defaultWorkspacePath
+        return (rawWorkspacePath as NSString).expandingTildeInPath
+    }
+
+    private var isCurrentWorkspaceTrusted: Bool {
+        // Canonicalize stored trusted entries and the current workspace path so comparison
+        // works robustly regardless of tilde/relative/standardized path formatting.
+        let trusted = ferrufiApp.configuration.trustedWorkspacePaths ?? []
+        let canonicalTrusted = trusted.map { t in
+            URL(fileURLWithPath: (t as NSString).expandingTildeInPath)
+                .standardizedFileURL.path
+        }
+
+        let rawWorkspace =
+            ferrufiApp.currentWorkspacePath
+            ?? ferrufiApp.configuration.workspace.defaultWorkspacePath
+        let current = URL(fileURLWithPath: (rawWorkspace as NSString).expandingTildeInPath)
+            .standardizedFileURL.path
+
+        return canonicalTrusted.contains(where: { current.hasPrefix($0) })
+    }
+
     var body: some View {
         ScrollView {
             VStack(spacing: 0) {
@@ -66,8 +96,14 @@ struct SidebarView: View {
             ThemeSelector()
                 .environmentObject(themeManager)
         }
-        .onChange(of: navigationModel.searchText) { _, newValue in
+        .onChange(of: navigationModel.searchText) { oldValue, newValue in
             searchText = newValue
+        }
+        .onChange(of: ferrufiApp.currentWorkspacePath) { oldPath, newPath in
+            pulseLock()
+        }
+        .onChange(of: ferrufiApp.configuration.trustedWorkspacePaths) { oldTrusted, newTrusted in
+            pulseLock()
         }
 
     }
@@ -140,7 +176,7 @@ struct SidebarView: View {
                 .font(.system(size: 12))
                 .foregroundColor(themeManager.currentTheme.colors.foreground)
                 .textFieldStyle(.plain)
-                .onChange(of: searchText) { _, newValue in
+                .onChange(of: searchText) { oldValue, newValue in
                     navigationModel.searchText = newValue
                     navigationModel.search(newValue)
                 }
@@ -224,6 +260,123 @@ struct SidebarView: View {
 
                 Spacer()
 
+                // Lock / Trust button for the current workspace (with badge + pulse)
+                Button {
+                    if isCurrentWorkspaceTrusted {
+                        // Ask for confirmation before untrusting
+                        showUntrustConfirm = true
+                    } else {
+                        // Trust the current workspace immediately (no confirmation dialog)
+                        trustCurrentWorkspaceFromSidebar()
+                    }
+                } label: {
+                    ZStack(alignment: .topTrailing) {
+                        Image(
+                            systemName: isCurrentWorkspaceTrusted ? "lock.open.fill" : "lock.fill"
+                        )
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(
+                            isCurrentWorkspaceTrusted
+                                ? Color.green : themeManager.currentTheme.colors.accent
+                        )
+                        .scaleEffect(lockPulse ? 1.18 : 1.0)
+                        .animation(.easeOut(duration: 0.28), value: lockPulse)
+                        Circle()
+                            .fill(isCurrentWorkspaceTrusted ? Color.green : Color.clear)
+                            .frame(width: 8, height: 8)
+                            .offset(x: 6, y: -6)
+                    }
+                }
+                .buttonStyle(.plain)
+                .help(isCurrentWorkspaceTrusted ? "Untrust workspace" : "Trust workspace")
+                /* Removed: pulse logic now handled when workspace or trusted paths change */
+                .alert("Untrust workspace?", isPresented: $showUntrustConfirm) {
+                    Button("Untrust & Revoke Permission") {
+                        // Find and remove the canonical trusted entry that covers the current vault,
+                        // then optionally remove the stored OS-level bookmark.
+                        let trustedPaths = ferrufiApp.configuration.trustedVaultPaths ?? []
+                        // Canonicalize trusted entries
+                        let canonicalTrusted = trustedPaths.map { t in
+                            URL(fileURLWithPath: (t as NSString).expandingTildeInPath)
+                                .standardizedFileURL.path
+                        }
+                        let rawCurrent =
+                            ferrufiApp.currentVaultPath
+                            ?? ferrufiApp.configuration.vault.defaultVaultPath
+                        let canonicalCurrent = URL(
+                            fileURLWithPath: (rawCurrent as NSString).expandingTildeInPath
+                        ).standardizedFileURL.path
+
+                        if let parentToRemoveCanonical = canonicalTrusted.first(where: {
+                            canonicalCurrent.hasPrefix($0)
+                        }) {
+                            // Remove matching canonical entries from stored trusted list
+                            ferrufiApp.configuration.updateConfiguration { config in
+                                var arr = config.trustedVaultPaths ?? []
+                                arr.removeAll(where: {
+                                    URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath)
+                                        .standardizedFileURL.path == parentToRemoveCanonical
+                                })
+                                config.trustedVaultPaths = arr.isEmpty ? nil : arr
+                            }
+
+                            // Revoke the stored OS-level bookmark for the canonical path
+                            SecurityScopedBookmarkManager.shared.removeBookmark(
+                                forPath: parentToRemoveCanonical)
+
+                            FerrufiApp.sharedNavigationModel?.showInfo(
+                                "Workspace untrusted and permission revoked: \(parentToRemoveCanonical)"
+                            )
+                        } else {
+                            FerrufiApp.sharedNavigationModel?.showError(
+                                NSError(
+                                    domain: "com.ferrufi", code: -1,
+                                    userInfo: [
+                                        NSLocalizedDescriptionKey:
+                                            "No trusted path found to untrust."
+                                    ]))
+                        }
+                    }
+                    Button("Untrust", role: .destructive) {
+                        // Similar to above but only remove the app-level trust flag
+                        let trustedPaths = ferrufiApp.configuration.trustedVaultPaths ?? []
+                        let canonicalTrusted = trustedPaths.map { t in
+                            URL(fileURLWithPath: (t as NSString).expandingTildeInPath)
+                                .standardizedFileURL.path
+                        }
+                        let rawCurrent =
+                            ferrufiApp.currentVaultPath
+                            ?? ferrufiApp.configuration.vault.defaultVaultPath
+                        let canonicalCurrent = URL(
+                            fileURLWithPath: (rawCurrent as NSString).expandingTildeInPath
+                        ).standardizedFileURL.path
+
+                        if let parentToRemoveCanonical = canonicalTrusted.first(where: {
+                            canonicalCurrent.hasPrefix($0)
+                        }) {
+                            ferrufiApp.configuration.updateConfiguration { config in
+                                var arr = config.trustedVaultPaths ?? []
+                                arr.removeAll(where: {
+                                    URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath)
+                                        .standardizedFileURL.path == parentToRemoveCanonical
+                                })
+                                config.trustedVaultPaths = arr.isEmpty ? nil : arr
+                            }
+                            FerrufiApp.sharedNavigationModel?.showInfo(
+                                "Workspace untrusted: \(parentToRemoveCanonical)")
+                        } else {
+                            FerrufiApp.sharedNavigationModel?.showError(
+                                NSError(
+                                    domain: "com.ferrufi", code: -1,
+                                    userInfo: [
+                                        NSLocalizedDescriptionKey:
+                                            "No trusted path found to untrust."
+                                    ]))
+                        }
+                    }
+                    Button("Cancel", role: .cancel) {}
+                }
+
                 Button {
                     openDirectoryPicker()
                 } label: {
@@ -247,7 +400,7 @@ struct SidebarView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(currentDirectoryName)
+                    Text(ferrufiApp.folderManager.rootFolder.name)
                         .font(.system(size: 11, weight: .medium))
                         .foregroundColor(themeManager.currentTheme.colors.foreground)
                         .lineLimit(1)
@@ -433,22 +586,60 @@ struct SidebarView: View {
 
     private func openDirectoryPicker() {
         #if os(macOS)
-            let panel = NSOpenPanel()
-            panel.canChooseDirectories = true
-            panel.canChooseFiles = false
-            panel.allowsMultipleSelection = false
-            panel.canCreateDirectories = true
-            panel.prompt = "Select Directory"
-            panel.message = "Choose where to create new notes"
+            let homeURL = FileManager.default.homeDirectoryForCurrentUser
+            let defaultDir = navigationModel.currentWorkingDirectory ?? homeURL
 
-            if let currentDir = navigationModel.currentWorkingDirectory {
-                panel.directoryURL = currentDir
-            }
+            SecurityScopedBookmarkManager.shared.requestFolderAccess(
+                message:
+                    "Select a folder to contain your Ferrufi workspace (select Home to use ~/.ferrufi/)",
+                defaultDirectory: defaultDir,
+                showHidden: true
+            ) { selectedURL in
+                guard let parentURL = selectedURL else { return }
+                Task {
+                    do {
+                        // If the user picked Home, create ~/.ferrufi inside it
+                        let ferrufiDir: URL
+                        if parentURL.path == homeURL.path {
+                            ferrufiDir = parentURL.appendingPathComponent(".ferrufi")
+                        } else {
+                            ferrufiDir = parentURL
+                        }
 
-            panel.begin { result in
-                if result == .OK, let url = panel.url {
-                    DispatchQueue.main.async {
-                        navigationModel.setWorkingDirectory(url)
+                        try FileManager.default.createDirectory(
+                            at: ferrufiDir, withIntermediateDirectories: true, attributes: nil)
+
+                        // Reinitialize Ferrufi storage to point at the new workspace
+                        try await ferrufiApp.initialize(workspacePath: ferrufiDir.path)
+
+                        await MainActor.run {
+                            // Persist trust for the selected parent folder so the app-level trust remains consistent
+                            let canonicalParent = URL(
+                                fileURLWithPath: (parentURL.path as NSString).expandingTildeInPath
+                            ).standardizedFileURL.path
+                            ferrufiApp.configuration.updateConfiguration { config in
+                                var arr = config.trustedVaultPaths ?? []
+                                if !arr.contains(canonicalParent) {
+                                    arr.append(canonicalParent)
+                                    config.trustedVaultPaths = arr
+                                }
+                            }
+
+                            // Refresh explorer selection
+                            FerrufiApp.sharedNavigationModel?.selectFolder(
+                                ferrufiApp.folderManager.rootFolder, ferrufiApp: ferrufiApp)
+
+                            if let welcome = ferrufiApp.notes.first(where: { $0.title == "Welcome" }
+                            ) {
+                                FerrufiApp.sharedNavigationModel?.selectNote(
+                                    welcome, ferrufiApp: ferrufiApp)
+                            }
+
+                            FerrufiApp.sharedNavigationModel?.showInfo(
+                                "Workspace folder updated: \(ferrufiDir.path)")
+                        }
+                    } catch {
+                        FerrufiApp.sharedNavigationModel?.showError(error as NSError)
                     }
                 }
             }
@@ -457,6 +648,138 @@ struct SidebarView: View {
 
     private func createNoteInWorkingDirectory() {
         navigationModel.showingNoteCreation = true
+    }
+
+    /// Trigger a small pulse on the lock icon to indicate a workspace/trust change
+    private func pulseLock() {
+        lockPulse = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.28) {
+            lockPulse = false
+        }
+    }
+
+    // MARK: - Trust helpers
+
+    /// Trust the current workspace from the sidebar lock button.
+    /// If there is an already-bookmarked parent that covers the current workspace
+    /// this will persist the app-level trusted entry immediately.
+    /// Otherwise it presents the folder picker to request OS-level access and
+    /// persists the bookmark + trust when granted.
+    private func trustCurrentWorkspaceFromSidebar() {
+        let homeURL = FileManager.default.homeDirectoryForCurrentUser
+        let rawWorkspacePath =
+            ferrufiApp.currentWorkspacePath
+            ?? ferrufiApp.configuration.workspace.defaultWorkspacePath
+        let workspacePath = (rawWorkspacePath as NSString).expandingTildeInPath
+        print(
+            "ℹ️ trustCurrentWorkspaceFromSidebar: requested workspace = \(workspacePath) — bookmarks: \(SecurityScopedBookmarkManager.shared.allBookmarkedPaths())"
+        )
+
+        // If there's already a bookmarked parent that covers the workspace, trust it directly
+        if let existingParent = SecurityScopedBookmarkManager.shared
+            .allBookmarkedPaths()
+            .first(where: { workspacePath.hasPrefix($0) })
+        {
+            // Persist app-level trust for the bookmarked parent
+            ferrufiApp.configuration.updateConfiguration { config in
+                var arr = config.trustedWorkspacePaths ?? []
+                if !arr.contains(existingParent) {
+                    arr.append(existingParent)
+                    config.trustedWorkspacePaths = arr
+                }
+            }
+            FerrufiApp.sharedNavigationModel?.showInfo("Workspace trusted: \(existingParent)")
+
+            // Ensure the bookmarked parent is resolved (activates its security scope).
+            // Then reinitialize the app using the requested workspace path so UI and explorer update.
+            if SecurityScopedBookmarkManager.shared.resolveBookmark(forPath: existingParent) != nil
+            {
+                Task {
+                    do {
+                        try await ferrufiApp.initialize(workspacePath: workspacePath)
+                        await MainActor.run {
+                            // Refresh explorer selection to the new initialized root
+                            FerrufiApp.sharedNavigationModel?.selectFolder(
+                                ferrufiApp.folderManager.rootFolder,
+                                ferrufiApp: ferrufiApp
+                            )
+                        }
+                    } catch {
+                        FerrufiApp.sharedNavigationModel?.showError(error as NSError)
+                    }
+                }
+            } else {
+                FerrufiApp.sharedNavigationModel?.showError(
+                    NSError(
+                        domain: "com.ferrufi",
+                        code: -1,
+                        userInfo: [
+                            NSLocalizedDescriptionKey:
+                                "Failed to activate permission for \(existingParent). Please try again."
+                        ]))
+            }
+
+            return
+        }
+
+        // Otherwise ask the user to select a folder to trust
+        SecurityScopedBookmarkManager.shared.requestFolderAccess(
+            message:
+                "Select a folder to trust for Ferrufi workspace (select Home to use ~/.ferrufi/)",
+            defaultDirectory: homeURL,
+            showHidden: true
+        ) { selectedURL in
+            guard let selectedURL = selectedURL else { return }
+
+            // Resolve and activate the bookmark; persist the selected path as trusted
+            if SecurityScopedBookmarkManager.shared.resolveBookmark(forPath: selectedURL.path)
+                != nil
+            {
+                // Use a canonical standardized path so it matches how we compare the current workspace
+                let canonicalSel = URL(
+                    fileURLWithPath: (selectedURL.path as NSString).expandingTildeInPath
+                )
+                .standardizedFileURL.path
+
+                ferrufiApp.configuration.updateConfiguration { config in
+                    var arr = config.trustedWorkspacePaths ?? []
+                    if !arr.contains(canonicalSel) {
+                        arr.append(canonicalSel)
+                        config.trustedWorkspacePaths = arr
+                    }
+                }
+                FerrufiApp.sharedNavigationModel?.showInfo("Workspace trusted: \(canonicalSel)")
+
+                // Ensure the bookmarked path is resolved and reinitialize the workspace
+                if SecurityScopedBookmarkManager.shared.resolveBookmark(forPath: canonicalSel)
+                    != nil
+                {
+                    Task {
+                        do {
+                            try await ferrufiApp.initialize(workspacePath: workspacePath)
+                            await MainActor.run {
+                                FerrufiApp.sharedNavigationModel?.selectFolder(
+                                    ferrufiApp.folderManager.rootFolder,
+                                    ferrufiApp: ferrufiApp
+                                )
+                            }
+                        } catch {
+                            FerrufiApp.sharedNavigationModel?.showError(error as NSError)
+                        }
+                    }
+                }
+
+            } else {
+                let err = NSError(
+                    domain: "com.ferrufi", code: -1,
+                    userInfo: [
+                        NSLocalizedDescriptionKey:
+                            "Failed to activate bookmark for the selected folder. Please try again."
+                    ]
+                )
+                FerrufiApp.sharedNavigationModel?.showError(err)
+            }
+        }
     }
 
 }

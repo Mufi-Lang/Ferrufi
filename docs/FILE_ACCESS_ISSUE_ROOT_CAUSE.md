@@ -46,7 +46,7 @@ Even with these entitlements, macOS enforces the following rules:
 
 ### The Missing Piece
 
-Our app automatically creates and uses `~/.ferrufi/scripts` as the vault folder, but it **never asks the user to select this folder** via `NSOpenPanel`. 
+Our app automatically creates and uses `~/.ferrufi` as the vault folder, but it **never asks the user to select this folder** via `NSOpenPanel`.
 
 Without explicit user selection through the system dialog:
 - No security-scoped bookmark is created
@@ -101,7 +101,7 @@ We had **Layer 1** (entitlements) but were missing **Layers 2 & 3** (user consen
 2. **First-Launch Folder Selection** - Modified `ContentView.swift` to:
    - Check if a bookmark exists for the vault folder
    - If not, show a dialog requesting folder access
-   - Present `NSOpenPanel` for the user to select `~/.ferrufi/scripts`
+   - Present `NSOpenPanel` for the user to select `~/.ferrufi` (or the selected workspace)
    - Create and store a security-scoped bookmark
 
 3. **Persistent Access** - On subsequent launches:
@@ -114,7 +114,7 @@ We had **Layer 1** (entitlements) but were missing **Layers 2 & 3** (user consen
 ```swift
 // On first launch or when bookmark is missing:
 1. App starts
-2. Checks: Do we have a bookmark for ~/.ferrufi/scripts?
+2. Checks: Do we have a bookmark for ~/.ferrufi?
 3. If NO → Show NSOpenPanel asking user to select the folder
 4. User selects folder → Create security-scoped bookmark
 5. Store bookmark in UserDefaults
@@ -135,7 +135,7 @@ We had **Layer 1** (entitlements) but were missing **Layers 2 & 3** (user consen
 ### Before (Broken)
 
 ```
-App → Creates ~/.ferrufi/scripts automatically
+App → Creates ~/.ferrufi automatically
     → Tries to write file
     → macOS: "No user consent recorded"
     → ❌ Permission denied
@@ -144,7 +144,7 @@ App → Creates ~/.ferrufi/scripts automatically
 ### After (Fixed)
 
 ```
-App → Creates ~/.ferrufi/scripts automatically
+App → Creates ~/.ferrufi automatically
     → Checks for bookmark
     → If none, shows NSOpenPanel
     → User selects folder via system dialog
@@ -167,7 +167,7 @@ Having `com.apple.security.files.all = true` does NOT automatically grant file a
 
 ### 2. User Consent Is Required
 
-Even for folders the app creates itself (like `~/.ferrufi/scripts`), you need explicit user consent through:
+Even for folders the app creates itself (like `~/.ferrufi`), you need explicit user consent through:
 - `NSOpenPanel` / `NSSavePanel`
 - Security-scoped bookmarks
 - Full Disk Access (manual user approval in System Settings)
@@ -230,10 +230,10 @@ brew install --cask ferrufi
 open /Applications/Ferrufi.app
 
 # First launch: System shows folder selection dialog
-→ "Ferrufi needs access to: ~/.ferrufi/scripts"
+→ "Ferrufi needs access to: ~/.ferrufi"
 → User clicks "Grant Access"
 → NSOpenPanel appears
-→ User navigates to and selects ~/.ferrufi/scripts
+→ User navigates to and selects ~/.ferrufi
 → Bookmark created and stored
 
 # Try to create/edit note
@@ -258,9 +258,9 @@ On first launch after this fix is deployed, users will see:
 
 2. **System Dialog** (NSOpenPanel):
    - Title: "Grant Access"
-   - Message: "Ferrufi needs access to: /Users/username/.ferrufi/scripts"
+   - Message: "Ferrufi needs access to: /Users/username/.ferrufi"
    - The dialog shows the filesystem
-   - User navigates to and selects `~/.ferrufi/scripts`
+   - User navigates to and selects `~/.ferrufi`
    - Clicks "Grant Access"
 
 3. **Done!**
@@ -326,7 +326,7 @@ codesign -d --entitlements - /Applications/Ferrufi.app
 ### Check Bookmark Storage (New)
 ```bash
 defaults read com.ferrufi.Ferrufi com.ferrufi.securityScopedBookmarks
-# Should show bookmark data for ~/.ferrufi/scripts
+# Should show bookmark data for ~/.ferrufi
 ```
 
 ### Test File Operations (Should Work Now)

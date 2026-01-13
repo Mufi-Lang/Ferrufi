@@ -286,7 +286,7 @@ public struct SmoothScrollView<Content: View>: View {
         .onAppear {
             setupRenderer(size: contentSize)
         }
-        .onChange(of: contentSize) { _, newSize in
+        .onChange(of: contentSize) { newSize in
             scrollRenderer?.setContentSize(newSize)
         }
     }

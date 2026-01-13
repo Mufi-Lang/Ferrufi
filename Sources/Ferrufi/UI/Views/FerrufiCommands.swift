@@ -52,7 +52,7 @@ public struct FerrufiCommands: Commands {
 
             Divider()
 
-            Button("Change Vault Folder...") {
+            Button("Change Workspace Folder...") {
                 changeVaultFolderAction()
             }
             .keyboardShortcut(KeyboardShortcut(KeyEquivalent("v"), modifiers: [.command, .shift]))
@@ -204,8 +204,8 @@ public struct FerrufiCommands: Commands {
                 shortcuts.keyboardShortcut(for: "runScript")
                     ?? KeyboardShortcut(KeyEquivalent("r"), modifiers: [.command]))
 
-            Button("Trust Current Vault") {
-                trustCurrentVaultAction()
+            Button("Trust Current Workspace") {
+                trustCurrentWorkspaceAction()
             }
 
             Divider()
@@ -259,33 +259,35 @@ public struct FerrufiCommands: Commands {
     ///  - Otherwise present the folder picker so the user can select the folder to trust,
     ///  - Resolve and activate a security-scoped bookmark for the chosen folder,
     ///  - Persist the trusted path in configuration.
-    private func trustCurrentVaultAction() {
+    private func trustCurrentWorkspaceAction() {
         let homeURL = FileManager.default.homeDirectoryForCurrentUser
         guard let app = ferrufiApp else { return }
 
-        // Resolve the actual vault path (use currently initialized path if available)
-        let rawVaultPath = app.currentVaultPath ?? app.configuration.vault.defaultVaultPath
-        let vaultPath = (rawVaultPath as NSString).expandingTildeInPath
+        // Resolve the actual workspace path (use currently initialized path if available)
+        let rawWorkspacePath =
+            app.currentWorkspacePath ?? app.configuration.workspace.defaultWorkspacePath
+        let workspacePath = (rawWorkspacePath as NSString).expandingTildeInPath
 
-        // If there's already a bookmarked parent that covers the vault, trust it directly
+        // If there's already a bookmarked parent that covers the workspace, trust it directly
         if let existingParent = SecurityScopedBookmarkManager.shared
             .allBookmarkedPaths()
-            .first(where: { vaultPath.hasPrefix($0) })
+            .first(where: { workspacePath.hasPrefix($0) })
         {
             app.configuration.updateConfiguration { config in
-                var arr = config.trustedVaultPaths ?? []
+                var arr = config.trustedWorkspacePaths ?? []
                 if !arr.contains(existingParent) {
                     arr.append(existingParent)
-                    config.trustedVaultPaths = arr
+                    config.trustedWorkspacePaths = arr
                 }
             }
-            FerrufiApp.sharedNavigationModel?.showInfo("Vault trusted: \(existingParent)")
+            FerrufiApp.sharedNavigationModel?.showInfo("Workspace trusted: \(existingParent)")
             return
         }
 
         // Otherwise ask the user to select a folder to trust
         SecurityScopedBookmarkManager.shared.requestFolderAccess(
-            message: "Select a folder to trust for Ferrufi (select Home to use ~/.ferrufi/)",
+            message:
+                "Select a folder to trust for Ferrufi workspace (select Home to use ~/.ferrufi/)",
             defaultDirectory: homeURL,
             showHidden: true
         ) { url in
@@ -295,14 +297,20 @@ public struct FerrufiCommands: Commands {
             if SecurityScopedBookmarkManager.shared.resolveBookmark(forPath: selectedURL.path)
                 != nil
             {
+                // Persist a canonicalized path so later prefix checks are robust
+                let canonicalSelected = URL(
+                    fileURLWithPath: (selectedURL.path as NSString).expandingTildeInPath
+                ).standardizedFileURL.path
+
                 app.configuration.updateConfiguration { config in
-                    var arr = config.trustedVaultPaths ?? []
-                    if !arr.contains(selectedURL.path) {
-                        arr.append(selectedURL.path)
-                        config.trustedVaultPaths = arr
+                    var arr = config.trustedWorkspacePaths ?? []
+                    if !arr.contains(canonicalSelected) {
+                        arr.append(canonicalSelected)
+                        config.trustedWorkspacePaths = arr
                     }
                 }
-                FerrufiApp.sharedNavigationModel?.showInfo("Vault trusted: \(selectedURL.path)")
+                FerrufiApp.sharedNavigationModel?.showInfo(
+                    "Workspace trusted: \(canonicalSelected)")
             } else {
                 // Show an error if we couldn't activate the bookmark
                 let err = NSError(
@@ -357,7 +365,7 @@ public struct FerrufiCommands: Commands {
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
-        panel.title = "Select destination folder for vault export"
+        panel.title = "Select destination folder for workspace export"
 
         panel.begin { response in
             guard response == .OK, let destURL = panel.url else { return }
@@ -373,7 +381,8 @@ public struct FerrufiCommands: Commands {
                     }
                     try FileManager.default.copyItem(at: item, to: target)
                 }
-                showAlert(title: "Export Completed", message: "Vault exported to \(destURL.path)")
+                showAlert(
+                    title: "Export Completed", message: "Workspace exported to \(destURL.path)")
             } catch {
                 print("Export failed: \(error)")
                 showAlert(title: "Export Failed", message: "\(error.localizedDescription)")
@@ -386,7 +395,7 @@ public struct FerrufiCommands: Commands {
 
         SecurityScopedBookmarkManager.shared.requestFolderAccess(
             message:
-                "Select a folder to contain your Ferrufi vault (select Home to use ~/.ferrufi/)",
+                "Select a folder to contain your Ferrufi workspace (select Home to use ~/.ferrufi/)",
             defaultDirectory: homeURL,
             showHidden: true
         ) { url in
@@ -409,23 +418,20 @@ public struct FerrufiCommands: Commands {
                     } else {
                         ferrufiDir = parentURL
                     }
-                    let scriptsDir = ferrufiDir.appendingPathComponent("scripts")
 
-                    // Create the necessary directories under the active security scope
+                    // Create the necessary directory under the active security scope
                     try FileManager.default.createDirectory(
                         at: ferrufiDir, withIntermediateDirectories: true, attributes: nil)
-                    try FileManager.default.createDirectory(
-                        at: scriptsDir, withIntermediateDirectories: true, attributes: nil)
 
-                    // Reinitialize Ferrufi with the new vault location
+                    // Reinitialize Ferrufi with the new vault location (use the selected folder directly)
                     if let app = ferrufiApp {
-                        try await app.initialize(vaultPath: scriptsDir.path)
+                        try await app.initialize(workspacePath: ferrufiDir.path)
                     }
 
                     // Show a confirmation message via the shared navigation model (if available)
                     await MainActor.run {
                         FerrufiApp.sharedNavigationModel?.showInfo(
-                            "Vault folder updated: \(scriptsDir.path)")
+                            "Workspace folder updated: \(ferrufiDir.path)")
                     }
                 } catch {
                     print("Failed to change vault folder: \(error)")
@@ -550,12 +556,12 @@ public struct FerrufiCommands: Commands {
     private func showStatistics() {
         guard let app = ferrufiApp else { return }
         let message = """
-            Notes: \(app.vaultStats.totalNotes)
-            Words: \(app.vaultStats.totalWords)
-            Tags: \(app.vaultStats.totalTags)
+            Notes: \(app.workspaceStats.totalNotes)
+            Words: \(app.workspaceStats.totalWords)
+            Tags: \(app.workspaceStats.totalTags)
             Indexing: \(app.isIndexing ? "in progress" : "idle")
             """
-        showAlert(title: "Vault Statistics", message: message)
+        showAlert(title: "Workspace Statistics", message: message)
     }
 
     private func exportCurrentNoteAsPDF() {

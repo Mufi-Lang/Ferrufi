@@ -253,6 +253,45 @@ mkdir -p "$MACOS_DIR"
 mkdir -p "$FRAMEWORKS_DIR"
 mkdir -p "$RESOURCES_DIR"
 
+# Add/copy/generate an app icon (AppIcon.icns) if present.
+# Priority:
+# 1) Resources/AppIcon.icns
+# 2) AppIcon.icns at repo root
+# 3) Ferrufi.png (generate .icns from the single PNG)
+if [ -f "$REPO_ROOT/Resources/AppIcon.icns" ]; then
+  info "Copying Resources/AppIcon.icns -> app bundle"
+  cp "$REPO_ROOT/Resources/AppIcon.icns" "$RESOURCES_DIR/AppIcon.icns"
+elif [ -f "$REPO_ROOT/AppIcon.icns" ]; then
+  info "Copying AppIcon.icns -> app bundle"
+  cp "$REPO_ROOT/AppIcon.icns" "$RESOURCES_DIR/AppIcon.icns"
+elif [ -f "$REPO_ROOT/Ferrufi.png" ]; then
+  info "Generating AppIcon.icns from Ferrufi.png"
+  ICONSET_DIR="$(mktemp -d -t ferrufi-iconset-XXXX)"
+  # 16
+  sips -z 16 16  "$REPO_ROOT/Ferrufi.png" --out "$ICONSET_DIR/icon_16x16.png" >/dev/null 2>&1 || true
+  sips -z 32 32  "$REPO_ROOT/Ferrufi.png" --out "$ICONSET_DIR/icon_16x16@2x.png" >/dev/null 2>&1 || true
+  # 32
+  sips -z 32 32  "$REPO_ROOT/Ferrufi.png" --out "$ICONSET_DIR/icon_32x32.png" >/dev/null 2>&1 || true
+  sips -z 64 64  "$REPO_ROOT/Ferrufi.png" --out "$ICONSET_DIR/icon_32x32@2x.png" >/dev/null 2>&1 || true
+  # 128
+  sips -z 128 128 "$REPO_ROOT/Ferrufi.png" --out "$ICONSET_DIR/icon_128x128.png" >/dev/null 2>&1 || true
+  sips -z 256 256 "$REPO_ROOT/Ferrufi.png" --out "$ICONSET_DIR/icon_128x128@2x.png" >/dev/null 2>&1 || true
+  # 256
+  sips -z 256 256 "$REPO_ROOT/Ferrufi.png" --out "$ICONSET_DIR/icon_256x256.png" >/dev/null 2>&1 || true
+  sips -z 512 512 "$REPO_ROOT/Ferrufi.png" --out "$ICONSET_DIR/icon_256x256@2x.png" >/dev/null 2>&1 || true
+  # 512
+  sips -z 512 512 "$REPO_ROOT/Ferrufi.png" --out "$ICONSET_DIR/icon_512x512.png" >/dev/null 2>&1 || true
+  sips -z 1024 1024 "$REPO_ROOT/Ferrufi.png" --out "$ICONSET_DIR/icon_512x512@2x.png" >/dev/null 2>&1 || true
+
+  if command -v iconutil >/dev/null 2>&1; then
+    iconutil -c icns "$ICONSET_DIR" -o "$RESOURCES_DIR/AppIcon.icns" >/dev/null 2>&1 || true
+    success "Generated AppIcon.icns in resources"
+  else
+    warn "iconutil not available; skipping AppIcon.icns generation"
+  fi
+  rm -rf "$ICONSET_DIR"
+fi
+
 # Copy executable
 info "Copying executable"
 cp "$EXECUTABLE" "$MACOS_DIR/$APP_NAME"
@@ -291,6 +330,8 @@ cat > "$CONTENTS_DIR/Info.plist" <<EOF
     <string>$VERSION</string>
     <key>CFBundleShortVersionString</key>
     <string>$VERSION</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleSignature</key>
