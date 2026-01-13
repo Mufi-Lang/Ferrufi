@@ -13,8 +13,8 @@ public enum FerrufiError: Error, LocalizedError, CustomStringConvertible, Sendab
     case fileNotFound(String)
     case fileAccessDenied(String)
     case fileCorrupted(String)
-    case vaultNotFound(String)
-    case invalidVaultStructure(String)
+    case workspaceNotFound(String)
+    case invalidWorkspaceStructure(String)
     case fileSystem(FileSystemError)
 
     // Note errors
@@ -57,10 +57,10 @@ public enum FerrufiError: Error, LocalizedError, CustomStringConvertible, Sendab
             return "Access denied for file: \(path)"
         case .fileCorrupted(let path):
             return "File is corrupted: \(path)"
-        case .vaultNotFound(let path):
-            return "Vault not found at: \(path)"
-        case .invalidVaultStructure(let reason):
-            return "Invalid vault structure: \(reason)"
+        case .workspaceNotFound(let path):
+            return "Workspace not found at: \(path)"
+        case .invalidWorkspaceStructure(let reason):
+            return "Invalid workspace structure: \(reason)"
         case .fileSystem(let error):
             return "File system error: \(error.localizedDescription)"
 
@@ -139,7 +139,7 @@ public enum FerrufiError: Error, LocalizedError, CustomStringConvertible, Sendab
             return .low
         case .fileCorrupted, .invalidNoteFormat, .noteParsingFailed, .configurationInvalid:
             return .medium
-        case .vaultNotFound, .invalidVaultStructure, .searchIndexCorrupted,
+        case .workspaceNotFound, .invalidWorkspaceStructure, .searchIndexCorrupted,
             .metalInitializationFailed, .insufficientMemory, .diskSpaceFull:
             return .high
         case .unknown:

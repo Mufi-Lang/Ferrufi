@@ -632,10 +632,10 @@ public struct WorkingMarkdownView: View {
     public var body: some View {
         WebView(htmlContent: renderer.renderedHTML)
             .opacity(renderer.isRendering ? 0.7 : 1.0)
-            .onChange(of: content) { _, newContent in
+            .onChange(of: content) { newContent in
                 renderer.content = newContent
             }
-            .onChange(of: themeManager.currentTheme) { _, _ in
+            .onChange(of: themeManager.currentTheme) {
                 renderer.themeManager = themeManager
                 renderer.forceRender()
             }

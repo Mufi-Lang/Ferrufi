@@ -11,7 +11,7 @@
 
 Instead of complex bookmark management or moving folders, we now:
 
-1. **Keep `~/.ferrufi/scripts` as the vault location** (no changes to folder structure)
+1. **Keep `~/.ferrufi` as the workspace location** (no changes to folder structure)
 2. **On first launch**: Prompt user to select their home folder via NSOpenPanel
 3. **macOS automatically grants permission** when user selects the folder
 4. **All file operations work** - no more permission errors!
@@ -243,8 +243,8 @@ This is how professional macOS apps handle file access:
 - [x] Local build succeeds
 - [x] Entitlements verified
 - [x] Auto-show Open Folder picker on first launch (if no vault bookmark)
-- [x] Add "Change Vault Folder..." command to File menu
-- [x] Add Vault management UI in Settings (Change / Repair / Revoke / Open in Finder)
+- [x] Add "Change Workspace Folder..." command to File menu
+- [x] Add Workspace management UI in Settings (Change / Repair / Revoke / Open in Finder)
 - [x] Onboarding guide updated (shows .ferrufi & how to show hidden files)
 - [ ] Test local installation in /Applications (manual verification recommended)
 - [x] Commit and push to main
@@ -263,7 +263,7 @@ Follow-ups implemented (where to look):
 
 Notes:
 - The app now prompts the user to select a folder on first launch if no bookmark is present. Selecting Home grants the app access to `~/.ferrufi/` and the app creates the `scripts` subfolder there.
-- Users can change, repair, or revoke vault permissions from Settings (or use the new File → Change Vault Folder... command).
+- Users can change, repair, or revoke workspace permissions from Settings (or use the new File → Change Workspace Folder... command).
 - This uses the standard "Open Folder / security-scoped bookmark" pattern (no Full Disk Access required).
 
 ---
@@ -275,9 +275,9 @@ Notes:
 ```markdown
 ## First Launch
 
-When you first launch Ferrufi, it will ask you to grant access to your 
-home folder. This is required for Ferrufi to store your notes in 
-`~/.ferrufi/scripts/`.
+When you first launch Ferrufi, it will ask you to grant access to your
+home folder. This is required for Ferrufi to store your notes in
+`~/.ferrufi/`.
 
 1. Click "Grant Access" when prompted
 2. Select your home folder (e.g., `/Users/yourusername`)

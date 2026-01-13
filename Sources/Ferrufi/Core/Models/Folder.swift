@@ -120,7 +120,24 @@ public class FolderManager: ObservableObject {
 
     /// Sets the root folder for the manager
     public func setRootFolder(path: String) {
-        _rootFolder = Folder(name: "Ferrufi", path: path)
+        // Attempt to resolve an existing security-scoped bookmark for this path.
+        // If found, use the resolved access-granted URL's path as the root so that
+        // subsequent file operations will work with the active security scope.
+        if let resolved = SecurityScopedBookmarkManager.shared.resolveBookmark(forPath: path) {
+            // Use the actual folder name (last path component) for the root label.
+            // If the last path component is empty (e.g., "/") fall back to "/".
+            let rawName = URL(fileURLWithPath: resolved.path).lastPathComponent
+            let name = rawName.isEmpty ? "/" : rawName
+            _rootFolder = Folder(name: name, path: resolved.path)
+            print(
+                "ℹ️ Using resolved security-scoped path for root folder: \(resolved.path) (name: \(name))"
+            )
+        } else {
+            let expanded = (path as NSString).expandingTildeInPath
+            let rawName = URL(fileURLWithPath: expanded).lastPathComponent
+            let name = rawName.isEmpty ? expanded : rawName
+            _rootFolder = Folder(name: name, path: expanded)
+        }
         addFolder(_rootFolder!)
 
         // Discover existing subdirectories as folders

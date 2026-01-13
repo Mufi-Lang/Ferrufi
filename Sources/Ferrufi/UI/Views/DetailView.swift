@@ -46,7 +46,7 @@ struct DetailView: View {
                 editingText = note.content
             }
         }
-        .onChange(of: navigationModel.selectedNote) { _, newNote in
+        .onChange(of: navigationModel.selectedNote) { newNote in
             if let note = newNote {
                 editingText = note.content
             }

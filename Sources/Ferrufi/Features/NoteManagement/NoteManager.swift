@@ -381,8 +381,8 @@ class NoteManager: ObservableObject {
 
     private func setupFileWatcher() {
         // Watch for external file changes
-        if let vaultURL = configManager.configuration.vaultURL {
-            fileWatcher = FileWatcher(url: vaultURL) { [weak self] changedURLs in
+        if let workspaceURL = configManager.configuration.workspaceURL {
+            fileWatcher = FileWatcher(url: workspaceURL) { [weak self] changedURLs in
                 Task { @MainActor in
                     await self?.handleExternalFileChanges(changedURLs)
                 }

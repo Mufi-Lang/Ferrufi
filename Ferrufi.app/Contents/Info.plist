@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleExecutable</key>
+    <string>Ferrufi</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.ferrufi.Ferrufi</string>
+    <key>CFBundleName</key>
+    <string>Ferrufi</string>
+    <key>CFBundleDisplayName</key>
+    <string>Ferrufi</string>
+    <key>CFBundleVersion</key>
+    <string>0.0.0</string>
+    <key>CFBundleShortVersionString</key>
+    <string>0.0.0</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleSignature</key>
+    <string>????</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>14.0</string>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>LSApplicationCategoryType</key>
+    <string>public.app-category.productivity</string>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>Ferrufi needs access to store your notes and scripts in ~/.ferrufi/</string>
+</dict>
+</plist>

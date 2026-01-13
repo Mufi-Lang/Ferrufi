@@ -8,11 +8,9 @@ public struct ContentView: View {
     @EnvironmentObject private var themeManager: ThemeManager
     @State private var showingFolderPermissionRequest = false
     @State private var vaultFolderURL: URL?
-    @State private var showingVaultOnboarding = false
+    // Onboarding removed: default to Application Support vault on first run
 
-    // Pending trust flow: store the selected folder here until user confirms trust
-    @State private var pendingVaultURL: URL? = nil
-    @State private var showTrustVaultAlert: Bool = false
+    // Trust selection is now applied immediately when the user selects a folder.
 
     @StateObject private var bookmarkManager = SecurityScopedBookmarkManager()
 
@@ -36,8 +34,8 @@ public struct ContentView: View {
             navigationModel.ferrufiApp = ferrufiApp
             FerrufiApp.registerNavigationModel(navigationModel)
             Task {
-                // If the app was launched with a vault path argument (e.g. `ferrufi /path`),
-                // use it to initialize Ferrufi directly and skip the onboarding flow.
+                // If the app was launched with a workspace path argument (e.g. `ferrufi /path`),
+                // use it to initialize Ferrufi directly and skip the one-time onboarding flow.
                 if let rawVaultArg = vaultPathFromCommandLineArgs() {
                     // Normalize tilde and `.` to an absolute path
                     var normalized = (rawVaultArg as NSString).expandingTildeInPath
@@ -65,7 +63,7 @@ public struct ContentView: View {
                     }
 
                     do {
-                        try await ferrufiApp.initialize(vaultPath: vaultURL.path)
+                        try await ferrufiApp.initialize(workspacePath: vaultURL.path)
 
                         // Ensure a welcome note exists when initializing via CLI.
                         // If it does not exist, create it. Failures are non-fatal.
@@ -78,7 +76,7 @@ public struct ContentView: View {
                                 // Non-fatal: surface an informational message but continue startup.
                                 await MainActor.run {
                                     navigationModel.showInfo(
-                                        "Vault initialized at \(vaultURL.path). Failed to create Welcome note: \(error.localizedDescription)"
+                                        "Workspace initialized at \(vaultURL.path). Failed to create Welcome note: \(error.localizedDescription)"
                                     )
                                 }
                             }
@@ -193,15 +191,15 @@ public struct ContentView: View {
                 .environmentObject(navigationModel)
                 .environmentObject(themeManager)
         }
-        .onChange(of: navigationModel.showingFolderCreation) { _, newValue in
+        .onChange(of: navigationModel.showingFolderCreation) { newValue in
             print("ContentView: showingFolderCreation changed to: \(newValue)")
         }
         .alert("Folder Access Required", isPresented: $showingFolderPermissionRequest) {
             Button("Select Folder") {
-                // Ask user to select a folder that should contain the vault.
+                // Ask user to select a folder that should contain the workspace.
                 // The selected folder will be used as the parent where Ferrufi
                 // creates a `.ferrufi` directory (select Home to use ~/.ferrufi).
-                presentVaultFolderPicker()
+                presentWorkspaceFolderPicker()
             }
             Button("Cancel", role: .cancel) {
                 showingFolderPermissionRequest = false
@@ -209,109 +207,14 @@ public struct ContentView: View {
         } message: {
             Text(
                 """
-                Ferrufi needs access to a folder to store your vault (e.g. ~/.ferrufi/).
+                Ferrufi needs access to a folder to store your workspace (e.g. ~/.ferrufi/).
                 Please select the parent folder when prompted. To use the default location
                 `~/.ferrufi/`, select your Home folder.
                 """)
         }
-        .sheet(isPresented: $showingVaultOnboarding) {
-            VaultOnboardingView(
-                onSelectFolder: {
-                    // Dismiss the onboarding sheet before presenting the system picker
-                    showingVaultOnboarding = false
-                    DispatchQueue.main.async {
-                        presentVaultFolderPicker()
-                    }
-                },
-                onSkip: { Task { await createAppSupportVaultAndInitialize() } }
-            )
-        }
-        .alert("Trust this workspace?", isPresented: $showTrustVaultAlert) {
-            Button("Trust") {
-                Task {
-                    await trustSelectedVault()
-                }
-            }
-            Button("Cancel", role: .cancel) {
-                if let url = pendingVaultURL {
-                    url.stopAccessingSecurityScopedResource()
-                }
-                pendingVaultURL = nil
-            }
-        } message: {
-            Text(
-                "Do you trust this folder to be used as your Ferrufi vault? Trusting it will allow Ferrufi persistent access to files in this folder."
-            )
-        }
-    }
-
-    @MainActor private func trustSelectedVault() async {
-        guard let url = pendingVaultURL else { return }
-
-        // Ensure the security scope is active (it should already be active from selection)
-        if !url.startAccessingSecurityScopedResource() {
-            let err = NSError(
-                domain: "com.ferrufi", code: -1,
-                userInfo: [
-                    NSLocalizedDescriptionKey:
-                        "Failed to activate folder permission. Please try again."
-                ]
-            )
-            FerrufiApp.sharedNavigationModel?.showError(err)
-            pendingVaultURL = nil
-            showTrustVaultAlert = false
-            return
-        }
-
-        // Persist the bookmark
-        guard bookmarkManager.createBookmark(for: url) else {
-            let err = NSError(
-                domain: "com.ferrufi", code: -1,
-                userInfo: [
-                    NSLocalizedDescriptionKey: "Failed to persist bookmark. Please try again."
-                ]
-            )
-            FerrufiApp.sharedNavigationModel?.showError(err)
-            url.stopAccessingSecurityScopedResource()
-            pendingVaultURL = nil
-            showTrustVaultAlert = false
-            return
-        }
-
-        // Determine vault directories (if Home was selected, create ~/.ferrufi inside it)
-        let homeURL = FileManager.default.homeDirectoryForCurrentUser
-        let ferrufiDir: URL
-        if url.path == homeURL.path {
-            ferrufiDir = url.appendingPathComponent(".ferrufi")
-        } else {
-            ferrufiDir = url
-        }
-        let scriptsDir = ferrufiDir.appendingPathComponent("scripts")
-
-        do {
-            try FileManager.default.createDirectory(
-                at: ferrufiDir, withIntermediateDirectories: true, attributes: nil)
-            try FileManager.default.createDirectory(
-                at: scriptsDir, withIntermediateDirectories: true, attributes: nil)
-
-            // Continue initialization now that bookmark is stored and folders exist
-            await initializeApp()
-
-            await MainActor.run {
-                navigationModel.showInfo("Vault ready — storing data at \(scriptsDir.path)")
-            }
-        } catch {
-            await MainActor.run {
-                FerrufiApp.sharedNavigationModel?.showError(
-                    NSError(
-                        domain: "com.ferrufi", code: -1,
-                        userInfo: [NSLocalizedDescriptionKey: error.localizedDescription]))
-            }
-            url.stopAccessingSecurityScopedResource()
-        }
-
-        pendingVaultURL = nil
-        showTrustVaultAlert = false
+        // Startup onboarding removed: app now defaults to the Application Support workspace
+        // on first run (no interactive startup dialog).
+        // Trust confirmation dialog removed: trust is now applied immediately on folder selection.
     }
 
     private func initializeApp() async {
@@ -335,11 +238,10 @@ public struct ContentView: View {
         }
 
         if bookmarkedParent == nil {
-            // Show a friendly onboarding sheet and prompt the user to select a folder (one-time)
-            await MainActor.run {
-                showingVaultOnboarding = true
-            }
-            return  // Wait for user to pick folder and restart initialization
+            // No bookmarked parent found: default to using Application Support instead of showing onboarding.
+            // This simplifies first-run behavior and avoids startup prompts.
+            await createAppSupportVaultAndInitialize()
+            return
         }
 
         do {
@@ -347,7 +249,9 @@ public struct ContentView: View {
             guard let parentPath = bookmarkedParent else {
                 throw NSError(
                     domain: "com.ferrufi", code: -1,
-                    userInfo: [NSLocalizedDescriptionKey: "No permitted folder selected for vault."]
+                    userInfo: [
+                        NSLocalizedDescriptionKey: "No permitted folder selected for workspace."
+                    ]
                 )
             }
 
@@ -356,14 +260,12 @@ public struct ContentView: View {
                 // The stored bookmark is invalid or access could not be started.
                 // Remove the invalid bookmark and show onboarding so the user can re-select a folder.
                 bookmarkManager.removeBookmark(forPath: parentPath)
-                await MainActor.run {
-                    showingVaultOnboarding = true
-                }
+                // No bookmarked parent found: default to Application Support fallback (no interactive onboarding)
+                await createAppSupportVaultAndInitialize()
                 return
             }
 
             let ferrufiDir = parentURL.appendingPathComponent(".ferrufi")
-            let scriptsDir = ferrufiDir.appendingPathComponent("scripts")
 
             try FileManager.default.createDirectory(
                 at: ferrufiDir,
@@ -371,20 +273,14 @@ public struct ContentView: View {
                 attributes: nil
             )
 
-            try FileManager.default.createDirectory(
-                at: scriptsDir,
-                withIntermediateDirectories: true,
-                attributes: nil
-            )
-
-            // Create welcome script if this is first run
-            let welcomeScriptPath = scriptsDir.appendingPathComponent("Welcome.md")
+            // Create welcome note if this is first run
+            let welcomeScriptPath = ferrufiDir.appendingPathComponent("Welcome.md")
             if !FileManager.default.fileExists(atPath: welcomeScriptPath.path) {
                 try createWelcomeNote(at: welcomeScriptPath)
             }
 
-            // Initialize Ferrufi with the scripts directory
-            try await ferrufiApp.initialize(vaultPath: scriptsDir.path)
+            // Initialize Ferrufi with the workspace directory
+            try await ferrufiApp.initialize(workspacePath: ferrufiDir.path)
 
             // Apply configured startup behavior (restore last session, open welcome, or open a specific note)
             await MainActor.run {
@@ -456,7 +352,7 @@ public struct ContentView: View {
         return nil
     }
 
-    private func presentVaultFolderPicker() {
+    private func presentWorkspaceFolderPicker() {
         #if os(macOS)
             // Present the open panel asynchronously so any open menus are dismissed first
             DispatchQueue.main.async {
@@ -467,7 +363,7 @@ public struct ContentView: View {
                 panel.canCreateDirectories = true
                 panel.prompt = "Select"
                 panel.message =
-                    "Select the folder that should contain your Ferrufi vault. To use ~/.ferrufi/, select your Home folder. Hidden folders (like .ferrufi) will be shown."
+                    "Select the folder that should contain your Ferrufi workspace. To use ~/.ferrufi/, select your Home folder. Hidden folders (like .ferrufi) will be shown."
 
                 // Default to ~/.ferrufi if it exists, otherwise default to the Home folder
                 let homeURL = FileManager.default.homeDirectoryForCurrentUser
@@ -484,18 +380,92 @@ public struct ContentView: View {
 
                 panel.begin { response in
                     if response == .OK, let selectedURL = panel.url {
-                        // Immediately dismiss any onboarding/permission UI so the menu and sheets go away
-                        showingVaultOnboarding = false
+                        // Dismiss any permission UI so the menu and sheets go away
                         showingFolderPermissionRequest = false
-                        // Bring Ferrufi to the front to ensure the app is visible after selection
                         NSApp.activate(ignoringOtherApps: true)
 
-                        // Start security-scoped access and prompt the user to confirm trust before persisting
-                        // (fail-fast pattern: if access cannot be started, inform user and re-prompt)
+                        // Start security-scoped access and persist trust automatically (no confirmation dialog)
                         if selectedURL.startAccessingSecurityScopedResource() {
-                            // Hold the selected URL until the user confirms trust
-                            pendingVaultURL = selectedURL
-                            showTrustVaultAlert = true
+                            // Persist bookmark (fail-fast)
+                            if bookmarkManager.createBookmark(for: selectedURL) {
+                                // Determine vault directory (use ~/.ferrufi if Home was selected)
+                                let homeURL = FileManager.default.homeDirectoryForCurrentUser
+                                let ferrufiDir: URL
+                                if selectedURL.path == homeURL.path {
+                                    ferrufiDir = selectedURL.appendingPathComponent(".ferrufi")
+                                } else {
+                                    ferrufiDir = selectedURL
+                                }
+
+                                do {
+                                    try FileManager.default.createDirectory(
+                                        at: ferrufiDir, withIntermediateDirectories: true,
+                                        attributes: nil)
+                                } catch {
+                                    FerrufiApp.sharedNavigationModel?.showError(error as NSError)
+                                    DispatchQueue.main.async {
+                                        presentWorkspaceFolderPicker()
+                                    }
+                                    return
+                                }
+
+                                // Persist app-level trusted flag
+                                let canonicalSelected = URL(
+                                    fileURLWithPath: (selectedURL.path as NSString)
+                                        .expandingTildeInPath
+                                ).standardizedFileURL.path
+                                ferrufiApp.configuration.updateConfiguration { config in
+                                    var arr = config.trustedVaultPaths ?? []
+                                    if !arr.contains(canonicalSelected) {
+                                        arr.append(canonicalSelected)
+                                        config.trustedVaultPaths = arr
+                                    }
+                                }
+
+                                // Initialize and refresh UI asynchronously
+                                Task {
+                                    do {
+                                        try await ferrufiApp.initialize(
+                                            workspacePath: ferrufiDir.path)
+                                        await MainActor.run {
+                                            navigationModel.showInfo(
+                                                "Workspace ready — storing data at \(ferrufiDir.path)"
+                                            )
+                                            print(
+                                                "✅ Workspace initialized at: \(ferrufiDir.path). notes: \(ferrufiApp.notes.count), root: \(ferrufiApp.folderManager.rootFolder.path)"
+                                            )
+                                            // Force UI refresh: reload folders/notes and re-select root so explorer updates
+                                            ferrufiApp.folderManager.refreshNotes()
+                                            FerrufiApp.sharedNavigationModel?.selectFolder(
+                                                ferrufiApp.folderManager.rootFolder,
+                                                ferrufiApp: ferrufiApp)
+                                            if let welcome = ferrufiApp.notes.first(where: {
+                                                $0.title == "Welcome"
+                                            }) {
+                                                FerrufiApp.sharedNavigationModel?.selectNote(
+                                                    welcome, ferrufiApp: ferrufiApp)
+                                            }
+                                        }
+                                    } catch {
+                                        await MainActor.run {
+                                            FerrufiApp.sharedNavigationModel?.showError(
+                                                error as NSError)
+                                        }
+                                    }
+                                }
+                            } else {
+                                let err = NSError(
+                                    domain: "com.ferrufi", code: -1,
+                                    userInfo: [
+                                        NSLocalizedDescriptionKey:
+                                            "Failed to create bookmark for the selected folder. Please try again."
+                                    ]
+                                )
+                                FerrufiApp.sharedNavigationModel?.showError(err)
+                                DispatchQueue.main.async {
+                                    presentWorkspaceFolderPicker()
+                                }
+                            }
                         } else {
                             let err = NSError(
                                 domain: "com.ferrufi", code: -1,
@@ -506,7 +476,7 @@ public struct ContentView: View {
                             )
                             FerrufiApp.sharedNavigationModel?.showError(err)
                             DispatchQueue.main.async {
-                                presentVaultFolderPicker()
+                                presentWorkspaceFolderPicker()
                             }
                         }
                     } else {
@@ -527,12 +497,11 @@ public struct ContentView: View {
             for: .applicationSupportDirectory, in: .userDomainMask
         ).first!
         let ferrufiAppSupport = appSupportBase.appendingPathComponent("Ferrufi")
-        let scriptsDir = ferrufiAppSupport.appendingPathComponent("scripts")
 
         do {
             try FileManager.default.createDirectory(
-                at: scriptsDir, withIntermediateDirectories: true, attributes: nil)
-            try await ferrufiApp.initialize(vaultPath: scriptsDir.path)
+                at: ferrufiAppSupport, withIntermediateDirectories: true, attributes: nil)
+            try await ferrufiApp.initialize(workspacePath: ferrufiAppSupport.path)
         } catch {
             await MainActor.run {
                 navigationModel.currentError = error
@@ -545,7 +514,7 @@ public struct ContentView: View {
         let welcomeContent = """
             # Welcome to Ferrufi - Mufi IDE
 
-            This is your Mufi development environment. Your scripts are stored in `~/.ferrufi/scripts/`.
+            This is your Mufi development environment. Your scripts are stored in `~/.ferrufi/` (or your selected workspace folder).
 
             ## Getting Started
 

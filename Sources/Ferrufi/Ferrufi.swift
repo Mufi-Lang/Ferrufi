@@ -32,6 +32,15 @@ public class FerrufiApp: ObservableObject {
 
     // MARK: - State
     @Published public private(set) var isInitialized = false
+    @Published public private(set) var currentWorkspacePath: String? {
+        didSet {
+            // Keep deprecated `currentVaultPath` in sync for backward compatibility.
+            if currentVaultPath != currentWorkspacePath {
+                currentVaultPath = currentWorkspacePath
+            }
+        }
+    }
+    @available(*, deprecated, message: "Use 'currentWorkspacePath' instead")
     @Published public private(set) var currentVaultPath: String?
     @Published public private(set) var notes: [Note] = []
     @Published public private(set) var isIndexing = false
@@ -58,41 +67,88 @@ public class FerrufiApp: ObservableObject {
         sharedNavigationModel = model
     }
 
-    /// Initializes the Ferrufi app with a vault path
-    public func initialize(vaultPath: String) async throws {
+    /// Initializes the Ferrufi app with a workspace path
+    public func initialize(workspacePath: String) async throws {
         do {
-            // Initialize file storage
-            self.fileStorage = try FileStorage(vaultPath: vaultPath)
-            self.currentVaultPath = vaultPath
+            // Debug: log the requested workspace path and the currently-known bookmarks
+            print("ℹ️ FerrufiApp.initialize — requested workspacePath: \(workspacePath)")
+            print("ℹ️ Known bookmarks: \(SecurityScopedBookmarkManager.shared.allBookmarkedPaths())")
 
-            // Initialize folder manager with notes directory
-            folderManager.setRootFolder(path: vaultPath)
+            // Resolve any stored security-scoped bookmark for this workspace path so that
+            // file operations use the resolved, access-granted URL (if available).
+            let resolvedURL = SecurityScopedBookmarkManager.shared.resolveBookmark(
+                forPath: workspacePath)
+            if let resolved = resolvedURL {
+                print("✅ Resolved bookmark for workspacePath: \(workspacePath) -> \(resolved.path)")
+            } else {
+                print("⚠️ No bookmark resolved for workspacePath: \(workspacePath)")
+                // Also attempt to find a bookmarked parent for diagnostics
+                if let parent = SecurityScopedBookmarkManager.shared
+                    .allBookmarkedPaths()
+                    .first(where: { workspacePath.hasPrefix($0) })
+                {
+                    print("ℹ️ Found bookmarked parent '\(parent)' that covers \(workspacePath)")
+                } else {
+                    print("ℹ️ No bookmarked parent found for \(workspacePath)")
+                }
+            }
 
-            // Update configuration
+            // Always use the requested workspace path as the canonical pathToUse (so the
+            // stored configuration reflects the user's selected path), but keep any
+            // resolved security-scoped URL for access and permission handling.
+            let pathToUse = workspacePath
+            print(
+                "ℹ️ Using requested pathToUse: \(pathToUse) (resolved bookmark: \(String(describing: resolvedURL?.path)))"
+            )
+
+            // Initialize file storage using the requested path and the resolved security-scoped URL (if present)
+            // Use workspace naming for FileStorage initializer
+            self.fileStorage = try FileStorage(
+                workspacePath: pathToUse, resolvedWorkspaceURL: resolvedURL)
+            self.currentWorkspacePath = pathToUse
+
+            // Keep folder manager and configuration aligned with the requested path
+            folderManager.setRootFolder(path: pathToUse)
+
+            // Persist the requested workspace path as the default in configuration
             configuration.updateConfiguration { config in
-                config.vault.defaultVaultPath = vaultPath
+                config.workspace.defaultWorkspacePath = pathToUse
             }
 
             // Load existing notes
             await loadNotes()
+            print(
+                "ℹ️ Loaded \(notes.count) notes and found \(folderManager.rootFolders.count) root folder(s) for \(pathToUse)"
+            )
 
             // Set up file watching
             setupFileWatching()
 
             self.isInitialized = true
+            print("✅ FerrufiApp initialization complete — workspace: \(pathToUse)")
 
         } catch {
+            // Log error for diagnostics and keep existing error handling behavior
+            print(
+                "❌ FerrufiApp.initialize failed for workspacePath: \(workspacePath) — error: \(error)"
+            )
             let ferrufiError = error as? FerrufiError ?? FerrufiError.unknown(error)
             let (errorWithContext, context) = FerrufiError.withContext(
                 ferrufiError,
                 component: "FerrufiApp",
                 operation: "initialize",
-                additionalInfo: ["vaultPath": vaultPath]
+                additionalInfo: ["workspacePath": workspacePath]
             )
 
             errorHandler.handle(errorWithContext, context: context)
             throw errorWithContext
         }
+    }
+
+    // Backwards-compatible wrapper for the legacy API
+    @available(*, deprecated, message: "Use initialize(workspacePath:) instead")
+    public func initialize(vaultPath: String) async throws {
+        try await initialize(workspacePath: vaultPath)
     }
 
     // MARK: - Note Management
@@ -102,7 +158,7 @@ public class FerrufiApp: ObservableObject {
         async throws -> Note
     {
         guard isInitialized else {
-            throw FerrufiError.vaultNotFound("No vault initialized")
+            throw FerrufiError.workspaceNotFound("No workspace initialized")
         }
 
         do {
@@ -144,7 +200,7 @@ public class FerrufiApp: ObservableObject {
     /// Updates an existing note
     public func updateNote(_ note: Note) async throws {
         guard let storage = fileStorage else {
-            throw FerrufiError.vaultNotFound("No vault initialized")
+            throw FerrufiError.workspaceNotFound("No workspace initialized")
         }
 
         do {
@@ -217,7 +273,7 @@ public class FerrufiApp: ObservableObject {
     /// Renames a note
     public func renameNote(_ note: Note, to newName: String) async throws {
         guard fileStorage != nil else {
-            throw FerrufiError.vaultNotFound("No vault initialized")
+            throw FerrufiError.workspaceNotFound("No workspace initialized")
         }
 
         guard let sourceURL = note.url else {
@@ -248,7 +304,7 @@ public class FerrufiApp: ObservableObject {
     /// Moves a note to a different folder
     public func moveNote(_ note: Note, to folder: Folder?) async throws {
         guard fileStorage != nil else {
-            throw FerrufiError.vaultNotFound("No vault initialized")
+            throw FerrufiError.workspaceNotFound("No workspace initialized")
         }
 
         guard let sourceURL = note.url else {
@@ -418,9 +474,9 @@ extension FerrufiApp {
         return notes.reduce(0) { $0 + $1.wordCount }
     }
 
-    /// Gets statistics about the current vault
-    public var vaultStats: VaultStats {
-        return VaultStats(
+    /// Gets statistics about the current workspace
+    public var workspaceStats: WorkspaceStats {
+        return WorkspaceStats(
             totalNotes: notes.count,
             totalWords: totalWordCount,
             totalTags: allTags.count,
@@ -430,7 +486,7 @@ extension FerrufiApp {
 }
 
 /// Statistics about the current vault
-public struct VaultStats: Sendable {
+public struct WorkspaceStats: Sendable {
     public let totalNotes: Int
     public let totalWords: Int
     public let totalTags: Int
