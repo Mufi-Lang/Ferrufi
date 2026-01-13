@@ -3,23 +3,13 @@
 <plist version="1.0">
 <dict>
     <!-- Non-sandboxed app (required for flexible file access) -->
-    <!-- Note: Non-sandboxed apps don't get automatic TCC dialogs -->
-    <!-- They need to use NSOpenPanel for user-selected folders -->
+    <!-- Non-sandboxed apps must use NSOpenPanel and security-scoped bookmarks
+         to obtain and persist user-granted TCC access. The installer and app
+         will prompt the user; the installer cannot silently grant these rights. -->
     <key>com.apple.security.app-sandbox</key>
     <false/>
 
-    <!-- Allow reading and writing files chosen by the user -->
-    <key>com.apple.security.files.user-selected.read-write</key>
-    <true/>
-
-    <!-- Allow reading and writing to Downloads -->
-    <key>com.apple.security.files.downloads.read-write</key>
-    <true/>
-
-    <!-- Allow broad file access (non-sandboxed apps can use this) -->
-    <key>com.apple.security.files.all</key>
-    <true/>
-
+    <!-- Persist security-scoped bookmarks created by the app (used to retain user-granted access) -->
     <key>com.apple.security.files.bookmark.app-scope</key>
     <true/>
 
