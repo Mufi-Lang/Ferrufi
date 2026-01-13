@@ -390,6 +390,11 @@ info "Copying app bundle to: $OUTPUT_DIR"
 cp -R "$BUNDLE_DIR" "$OUTPUT_DIR/"
 
 if [ -d "$FINAL_APP_PATH" ]; then
+  # Remove quarantine attribute so Finder/Gatekeeper does not block launching
+  if command -v xattr >/dev/null 2>&1; then
+    info "Removing quarantine attribute (if present) from: $FINAL_APP_PATH"
+    xattr -dr com.apple.quarantine "$FINAL_APP_PATH" 2>/dev/null || true
+  fi
   success "App bundle copied successfully"
 else
   error "Failed to copy app bundle to output directory"
