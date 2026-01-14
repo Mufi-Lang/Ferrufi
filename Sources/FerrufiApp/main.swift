@@ -129,6 +129,40 @@ struct IronApplication: App {
                             window.styleMask.insert(.fullSizeContentView)
                         }
                     }
+
+                    // If the installer placed a pending workspace for installation/migration,
+                    // consume it here: attempt to migrate (create bookmarks or request access)
+                    // and then initialize the FerrufiApp with that workspace.
+                    if let pending = UserDefaults.standard.string(
+                        forKey: "com.ferrufi.pendingInstallWorkspace")
+                    {
+                        print("ℹ️ Detected pending install workspace: \(pending)")
+                        Task {
+                            // Attempt to migrate workspace path (this will prompt the user if needed)
+                            let migrated = await withCheckedContinuation {
+                                (cont: CheckedContinuation<Bool, Never>) in
+                                SecurityScopedBookmarkManager.shared.migrateWorkspacePath(pending) {
+                                    ok in
+                                    cont.resume(returning: ok)
+                                }
+                            }
+
+                            if migrated {
+                                do {
+                                    try await ferrufiApp.initialize(workspacePath: pending)
+                                    print("✅ Initialized workspace: \(pending)")
+                                    UserDefaults.standard.removeObject(
+                                        forKey: "com.ferrufi.pendingInstallWorkspace")
+                                } catch {
+                                    print("❌ Failed to initialize workspace: \(error)")
+                                }
+                            } else {
+                                print(
+                                    "⚠️ Migration or permission grant failed for workspace: \(pending)"
+                                )
+                            }
+                        }
+                    }
                 }
         }
         .commands {

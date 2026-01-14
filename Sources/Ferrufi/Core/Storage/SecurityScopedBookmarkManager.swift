@@ -49,8 +49,11 @@ public class SecurityScopedBookmarkManager: ObservableObject {
     @discardableResult
     public func createBookmark(for url: URL) -> Bool {
         do {
+            // Create a security-scoped bookmark that allows read/write access.
+            // Omitting `.securityScopeAllowOnlyReadAccess` ensures the bookmark
+            // can be used for write operations when the OS grants the scope.
             let bookmarkData = try url.bookmarkData(
-                options: .withSecurityScope,
+                options: [.withSecurityScope],
                 includingResourceValuesForKeys: nil,
                 relativeTo: nil
             )
@@ -78,7 +81,7 @@ public class SecurityScopedBookmarkManager: ObservableObject {
         // Try normalized key first, then raw path lookup as a fallback
         var bookmarkData = bookmarks[normalizedKey] ?? bookmarks[path]
 
-        // Fallback: try to find any stored key whose normalized form matches the normalizedKey.
+        // Fallback: try to find any stored key whose normalized form exactly matches the normalizedKey.
         // This handles cases where a bookmark was stored under a previously non-normalized key.
         if bookmarkData == nil {
             for (storedKey, data) in bookmarks {
@@ -93,6 +96,36 @@ public class SecurityScopedBookmarkManager: ObservableObject {
                     print("ℹ️ Migrated bookmark key '\(storedKey)' -> '\(normalizedKey)'")
                     break
                 }
+            }
+        }
+
+        // If no exact match found, try to locate a parent bookmark that covers the requested path.
+        // Choose the longest storedNormalized that is a prefix of normalizedKey (i.e., the closest parent).
+        if bookmarkData == nil {
+            var bestMatchData: Data? = nil
+            var bestMatchKey: String? = nil
+            for (storedKey, data) in bookmarks {
+                let storedNormalized = canonicalKey(forPath: storedKey)
+                if normalizedKey.hasPrefix(storedNormalized) {
+                    if let bestKey = bestMatchKey {
+                        if storedNormalized.count > bestKey.count {
+                            bestMatchKey = storedNormalized
+                            bestMatchData = data
+                        }
+                    } else {
+                        bestMatchKey = storedNormalized
+                        bestMatchData = data
+                    }
+                }
+            }
+            if let chosen = bestMatchData, let chosenKey = bestMatchKey {
+                // We can optionally migrate the chosen parent's bookmark to a normalized mapping
+                // for clarity, but keep the original mapping too (avoid deleting parent's original entry).
+                var updated = bookmarks
+                updated[chosenKey] = chosen
+                saveBookmarks(updated)
+                bookmarkData = chosen
+                print("ℹ️ Using parent bookmark '\(chosenKey)' for path '\(normalizedKey)'")
             }
         }
 
