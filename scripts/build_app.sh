@@ -318,6 +318,7 @@ cat > "$CONTENTS_DIR/Info.plist" <<EOF
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+    <!-- Basic bundle identity -->
     <key>CFBundleExecutable</key>
     <string>$APP_NAME</string>
     <key>CFBundleIdentifier</key>
@@ -330,8 +331,11 @@ cat > "$CONTENTS_DIR/Info.plist" <<EOF
     <string>$VERSION</string>
     <key>CFBundleShortVersionString</key>
     <string>$VERSION</string>
+
+    <!-- Icon -->
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
+
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleSignature</key>
@@ -342,8 +346,46 @@ cat > "$CONTENTS_DIR/Info.plist" <<EOF
     <true/>
     <key>LSApplicationCategoryType</key>
     <string>public.app-category.productivity</string>
+
+    <!-- Privacy/help text -->
     <key>NSAppleEventsUsageDescription</key>
     <string>Ferrufi needs access to store your notes and scripts in ~/.ferrufi/</string>
+
+    <!-- Document type associations: folders and markdown/mufi files -->
+    <key>CFBundleDocumentTypes</key>
+    <array>
+      <!-- Folders: allow Finder to offer Ferrufi as an Open With candidate for folders -->
+      <dict>
+        <key>CFBundleTypeName</key>
+        <string>Folders</string>
+        <key>CFBundleTypeRole</key>
+        <string>Editor</string>
+        <key>LSHandlerRank</key>
+        <string>Owner</string>
+        <key>LSItemContentTypes</key>
+        <array>
+          <string>public.directory</string>
+        </array>
+      </dict>
+
+      <!-- Markdown + Ferrufi workspace files -->
+      <dict>
+        <key>CFBundleTypeName</key>
+        <string>Markdown</string>
+        <key>CFBundleTypeRole</key>
+        <string>Editor</string>
+        <key>CFBundleTypeExtensions</key>
+        <array>
+          <string>md</string>
+          <string>markdown</string>
+          <string>txt</string>
+          <string>mufi</string>
+        </array>
+        <key>CFBundleTypeIconFile</key>
+        <string>AppIcon.icns</string>
+      </dict>
+    </array>
+
 </dict>
 </plist>
 EOF

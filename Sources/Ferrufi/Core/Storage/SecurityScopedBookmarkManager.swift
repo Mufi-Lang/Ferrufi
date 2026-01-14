@@ -49,7 +49,7 @@ public class SecurityScopedBookmarkManager: ObservableObject {
     @discardableResult
     public func createBookmark(for url: URL) -> Bool {
         do {
-            // Create a security-scoped bookmark that allows read/write access.
+            // Create a security-scoped bookmark that allows full security scope.
             // Omitting `.securityScopeAllowOnlyReadAccess` ensures the bookmark
             // can be used for write operations when the OS grants the scope.
             let bookmarkData = try url.bookmarkData(
@@ -64,9 +64,12 @@ public class SecurityScopedBookmarkManager: ObservableObject {
             saveBookmarks(bookmarks)
 
             print("✅ Created security-scoped bookmark for: \(url.path)")
+            DiagnosticsLogger.shared.logBookmarkEvent(
+                "create", key: key, success: true, details: "created bookmark for \(url.path)")
             return true
         } catch {
             print("❌ Failed to create bookmark for \(url.path): \(error)")
+            DiagnosticsLogger.shared.logError("Failed to create bookmark for \(url.path): \(error)")
             return false
         }
     }
@@ -94,6 +97,9 @@ public class SecurityScopedBookmarkManager: ObservableObject {
                     updated.removeValue(forKey: storedKey)
                     saveBookmarks(updated)
                     print("ℹ️ Migrated bookmark key '\(storedKey)' -> '\(normalizedKey)'")
+                    DiagnosticsLogger.shared.logBookmarkEvent(
+                        "migrate", key: storedKey, success: true,
+                        details: "migrated -> \(normalizedKey)")
                     break
                 }
             }
@@ -126,48 +132,79 @@ public class SecurityScopedBookmarkManager: ObservableObject {
                 saveBookmarks(updated)
                 bookmarkData = chosen
                 print("ℹ️ Using parent bookmark '\(chosenKey)' for path '\(normalizedKey)'")
+                DiagnosticsLogger.shared.logBookmarkEvent(
+                    "use_parent", key: chosenKey, success: true,
+                    details: "used parent for \(normalizedKey)")
             }
         }
 
-        guard let bookmarkData = bookmarkData else {
+        guard let bookmarkDataUnwrapped = bookmarkData else {
             print("⚠️ No bookmark found for path: \(path) (normalized: \(normalizedKey))")
+            DiagnosticsLogger.shared.logPermissionEvent(
+                "no_bookmark", path: path, details: "normalized=\(normalizedKey)")
             return nil
         }
 
         do {
             var isStale = false
-            let url = try URL(
-                resolvingBookmarkData: bookmarkData,
+            let baseURL = try URL(
+                resolvingBookmarkData: bookmarkDataUnwrapped,
                 options: .withSecurityScope,
                 relativeTo: nil,
                 bookmarkDataIsStale: &isStale
             )
 
-            // Start accessing the security-scoped resource
-            let accessed = url.startAccessingSecurityScopedResource()
+            // Start accessing the resolved (base) security-scoped resource
+            let accessed = baseURL.startAccessingSecurityScopedResource()
             if accessed {
-                activeResources[url] = true
-                print("✅ Resolved and accessing bookmark for: \(path)")
+                activeResources[baseURL] = true
+                print(
+                    "✅ Resolved and accessing bookmark base: \(baseURL.path) for requested path: \(path)"
+                )
+                DiagnosticsLogger.shared.logBookmarkEvent(
+                    "resolve", key: baseURL.path, success: true, details: "resolved for \(path)")
             } else {
-                print("⚠️ Failed to start accessing security-scoped resource: \(path)")
+                print("⚠️ Failed to start accessing security-scoped resource base: \(baseURL.path)")
+                DiagnosticsLogger.shared.logBookmarkEvent(
+                    "resolve", key: baseURL.path, success: false,
+                    details: "failed to startAccessing for \(path)")
                 return nil
             }
 
-            // If bookmark is stale, recreate it
-            if isStale {
-                print("⚠️ Bookmark is stale, recreating for: \(path)")
-                createBookmark(for: url)
+            // If the stored bookmark corresponds to a parent directory of the requested path,
+            // return a child URL under the base so callers can operate against the exact
+            // workspace path while the active security scope lives on the parent.
+            let baseNormalized = canonicalKey(forPath: baseURL.path)
+            if normalizedKey.hasPrefix(baseNormalized) {
+                // compute relative suffix
+                var relative = String(path.dropFirst(baseNormalized.count))
+                if relative.hasPrefix("/") { relative.removeFirst() }
+                if relative.isEmpty {
+                    return baseURL
+                } else {
+                    let child = baseURL.appendingPathComponent(relative)
+                    // Note: we keep the active scope on baseURL; child operations should succeed
+                    // while the parent scope is active.
+                    return child
+                }
             }
 
-            return url
+            // Otherwise return the base URL directly
+            if isStale {
+                DiagnosticsLogger.shared.logBookmarkEvent(
+                    "stale", key: baseURL.path, success: false,
+                    details: "bookmark stale for \(path)")
+            }
+            return baseURL
         } catch {
             print("❌ Failed to resolve bookmark for \(path): \(error)")
+            DiagnosticsLogger.shared.logError("Failed to resolve bookmark for \(path): \(error)")
 
-            // If the bookmark data is corrupt (e.g. NSCocoaErrorDomain code 259),
-            // remove the stored bookmark so the app will prompt the user to re-grant access.
             let nsError = error as NSError
             if nsError.domain == NSCocoaErrorDomain && nsError.code == 259 {
                 print("⚠️ Corrupt bookmark detected for path \(path), removing bookmark")
+                DiagnosticsLogger.shared.logBookmarkEvent(
+                    "corrupt", key: path, success: false, details: "corrupt bookmark")
                 removeBookmark(forPath: path)
             }
 
@@ -309,6 +346,8 @@ public class SecurityScopedBookmarkManager: ObservableObject {
                 guard let self = self else { return }
 
                 if response == .OK, let url = panel.url {
+                    DiagnosticsLogger.shared.logPermissionEvent(
+                        "panel_accept", path: url.path, details: "user approved in NSOpenPanel")
                     // Start security-scoped access immediately (fail fast)
                     if url.startAccessingSecurityScopedResource() {
                         // Persist bookmark using existing helper (keeps canonical keys)
@@ -317,17 +356,27 @@ public class SecurityScopedBookmarkManager: ObservableObject {
                             // Track the active resource so stopAccessing() can clean it up later
                             self.activeResources[url] = true
                             print("✅ Granted and stored security-scoped bookmark for: \(url.path)")
+                            DiagnosticsLogger.shared.logBookmarkEvent(
+                                "request_grant", key: url.path, success: true,
+                                details: "user granted via panel")
                             completion(url)
                         } else {
                             // Failed to persist bookmark; stop access and report failure
+                            DiagnosticsLogger.shared.logError(
+                                "Failed to persist bookmark after user approved for \(url.path)")
                             url.stopAccessingSecurityScopedResource()
                             completion(nil)
                         }
                     } else {
                         // Could not start security scope (user denied or OS blocked)
+                        DiagnosticsLogger.shared.logPermissionEvent(
+                            "start_access_failed", path: url.path,
+                            details: "startAccessingSecurityScopedResource failed")
                         completion(nil)
                     }
                 } else {
+                    DiagnosticsLogger.shared.logPermissionEvent(
+                        "panel_cancel", details: "user cancelled NSOpenPanel or no url")
                     completion(nil)
                 }
             }
