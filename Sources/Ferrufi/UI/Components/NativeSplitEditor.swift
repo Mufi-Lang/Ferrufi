@@ -15,6 +15,8 @@ struct NativeSplitEditor: View {
     let placeholder: String
     let onTextChange: (String) -> Void
 
+    @State private var isEditing = false
+
     @State private var isPreviewVisible = true
     @State private var isREPLVisible = false
     @State private var splitRatio: CGFloat = 0.5
@@ -41,7 +43,8 @@ struct NativeSplitEditor: View {
 
     private var isMarkdownFile: Bool {
         guard let note = note else { return false }
-        return note.filePath.lowercased().hasSuffix(".md")
+        let path = note.filePath.lowercased()
+        return path.hasSuffix(".md") || path.hasSuffix(".markdown") || path.hasSuffix(".mufi")
     }
 
     public var body: some View {
@@ -51,14 +54,27 @@ struct NativeSplitEditor: View {
 
             // Main split view
             HStack(spacing: 0) {
-                // Left: Raw markdown editor
-                MufiScriptEditor(
-                    text: $text,
-                    placeholder: placeholder,
-                    onTextChange: onTextChange
-                )
-                .environmentObject(themeManager)
-                .frame(maxWidth: .infinity)
+                // Left: Editor (Markdown for .md/.mufi files, otherwise MufiScriptEditor)
+                if isMarkdownFile {
+                    MarkdownEditor(
+                        text: $text,
+                        isEditing: $isEditing,
+                        onTextChange: onTextChange,
+                        onSave: {
+                            // Ensure any save hooks run when the Markdown editor triggers save.
+                            onTextChange(text)
+                        }
+                    )
+                    .frame(maxWidth: .infinity)
+                } else {
+                    MufiScriptEditor(
+                        text: $text,
+                        placeholder: placeholder,
+                        onTextChange: onTextChange
+                    )
+                    .environmentObject(themeManager)
+                    .frame(maxWidth: .infinity)
+                }
 
                 if isPreviewVisible && isMarkdownFile {
                     // Splitter

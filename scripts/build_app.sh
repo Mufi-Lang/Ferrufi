@@ -313,82 +313,83 @@ fi
 
 # Create Info.plist
 info "Creating Info.plist"
-cat > "$CONTENTS_DIR/Info.plist" <<EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <!-- Basic bundle identity -->
-    <key>CFBundleExecutable</key>
-    <string>$APP_NAME</string>
-    <key>CFBundleIdentifier</key>
-    <string>com.ferrufi.$APP_NAME</string>
-    <key>CFBundleName</key>
-    <string>$APP_NAME</string>
-    <key>CFBundleDisplayName</key>
-    <string>Ferrufi</string>
-    <key>CFBundleVersion</key>
-    <string>$VERSION</string>
-    <key>CFBundleShortVersionString</key>
-    <string>$VERSION</string>
+cp "Info.plist" "$CONTENTS_DIR/Info.plist"
+# cat > "$CONTENTS_DIR/Info.plist" <<EOF
+# <?xml version="1.0" encoding="UTF-8"?>
+# <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+# <plist version="1.0">
+# <dict>
+#     <!-- Basic bundle identity -->
+#     <key>CFBundleExecutable</key>
+#     <string>$APP_NAME</string>
+#     <key>CFBundleIdentifier</key>
+#     <string>com.ferrufi.$APP_NAME</string>
+#     <key>CFBundleName</key>
+#     <string>$APP_NAME</string>
+#     <key>CFBundleDisplayName</key>
+#     <string>Ferrufi</string>
+#     <key>CFBundleVersion</key>
+#     <string>$VERSION</string>
+#     <key>CFBundleShortVersionString</key>
+#     <string>$VERSION</string>
 
-    <!-- Icon -->
-    <key>CFBundleIconFile</key>
-    <string>AppIcon</string>
+#     <!-- Icon -->
+#     <key>CFBundleIconFile</key>
+#     <string>AppIcon</string>
 
-    <key>CFBundlePackageType</key>
-    <string>APPL</string>
-    <key>CFBundleSignature</key>
-    <string>????</string>
-    <key>LSMinimumSystemVersion</key>
-    <string>14.0</string>
-    <key>NSHighResolutionCapable</key>
-    <true/>
-    <key>LSApplicationCategoryType</key>
-    <string>public.app-category.productivity</string>
+#     <key>CFBundlePackageType</key>
+#     <string>APPL</string>
+#     <key>CFBundleSignature</key>
+#     <string>????</string>
+#     <key>LSMinimumSystemVersion</key>
+#     <string>14.0</string>
+#     <key>NSHighResolutionCapable</key>
+#     <true/>
+#     <key>LSApplicationCategoryType</key>
+#     <string>public.app-category.productivity</string>
 
-    <!-- Privacy/help text -->
-    <key>NSAppleEventsUsageDescription</key>
-    <string>Ferrufi needs access to store your notes and scripts in ~/.ferrufi/</string>
+#     <!-- Privacy/help text -->
+#     <key>NSAppleEventsUsageDescription</key>
+#     <string>Ferrufi needs access to store your notes and scripts in ~/.ferrufi/</string>
 
-    <!-- Document type associations: folders and markdown/mufi files -->
-    <key>CFBundleDocumentTypes</key>
-    <array>
-      <!-- Folders: allow Finder to offer Ferrufi as an Open With candidate for folders -->
-      <dict>
-        <key>CFBundleTypeName</key>
-        <string>Folders</string>
-        <key>CFBundleTypeRole</key>
-        <string>Editor</string>
-        <key>LSHandlerRank</key>
-        <string>Owner</string>
-        <key>LSItemContentTypes</key>
-        <array>
-          <string>public.directory</string>
-        </array>
-      </dict>
+#     <!-- Document type associations: folders and markdown/mufi files -->
+#     <key>CFBundleDocumentTypes</key>
+#     <array>
+#       <!-- Folders: allow Finder to offer Ferrufi as an Open With candidate for folders -->
+#       <dict>
+#         <key>CFBundleTypeName</key>
+#         <string>Folders</string>
+#         <key>CFBundleTypeRole</key>
+#         <string>Editor</string>
+#         <key>LSHandlerRank</key>
+#         <string>Owner</string>
+#         <key>LSItemContentTypes</key>
+#         <array>
+#           <string>public.directory</string>
+#         </array>
+#       </dict>
 
-      <!-- Markdown + Ferrufi workspace files -->
-      <dict>
-        <key>CFBundleTypeName</key>
-        <string>Markdown</string>
-        <key>CFBundleTypeRole</key>
-        <string>Editor</string>
-        <key>CFBundleTypeExtensions</key>
-        <array>
-          <string>md</string>
-          <string>markdown</string>
-          <string>txt</string>
-          <string>mufi</string>
-        </array>
-        <key>CFBundleTypeIconFile</key>
-        <string>AppIcon.icns</string>
-      </dict>
-    </array>
+#       <!-- Markdown + Ferrufi workspace files -->
+#       <dict>
+#         <key>CFBundleTypeName</key>
+#         <string>Markdown</string>
+#         <key>CFBundleTypeRole</key>
+#         <string>Editor</string>
+#         <key>CFBundleTypeExtensions</key>
+#         <array>
+#           <string>md</string>
+#           <string>markdown</string>
+#           <string>txt</string>
+#           <string>mufi</string>
+#         </array>
+#         <key>CFBundleTypeIconFile</key>
+#         <string>AppIcon.icns</string>
+#       </dict>
+#     </array>
 
-</dict>
-</plist>
-EOF
+# </dict>
+# </plist>
+# EOF
 
 success "App bundle created in build directory"
 

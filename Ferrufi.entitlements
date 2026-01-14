@@ -1,36 +1,25 @@
+// Entitlements.plist
+
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <!-- Non-sandboxed app (required for flexible file access) -->
-    <!-- Non-sandboxed apps must use NSOpenPanel and security-scoped bookmarks
-         to obtain and persist user-granted TCC access. The installer and app
-         will prompt the user; the installer cannot silently grant these rights. -->
+    <!-- Intentionally not sandboxed -->
     <key>com.apple.security.app-sandbox</key>
     <false/>
 
-    <!-- Persist security-scoped bookmarks created by the app (used to retain user-granted access) -->
-    <key>com.apple.security.files.bookmark.app-scope</key>
-    <true/>
-
-    <!-- Disable library validation (needed for libmufiz.dylib) -->
+    <!-- Only if absolutely necessary -->
     <key>com.apple.security.cs.disable-library-validation</key>
     <true/>
 
-    <!-- Allow loading unsigned libraries -->
-    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
-    <true/>
 
-    <!-- Allow dyld environment variables -->
-    <key>com.apple.security.cs.allow-dyld-environment-variables</key>
-    <true/>
-
-    <!-- Network access -->
-    <key>com.apple.security.network.client</key>
-    <true/>
-
-    <!-- Allow JIT compilation -->
+    <!-- Hardened Runtime: only the minimum needed -->
+    <!-- Keep JIT only if truly required -->
     <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+
+    <!-- Networking (harmless if unsandboxed; may omit if you prefer) -->
+    <key>com.apple.security.network.client</key>
     <true/>
 </dict>
 </plist>

@@ -1,0 +1,111 @@
+<!-- Info.plist -->
+
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Identity -->
+    <key>CFBundleName</key>
+    <string>Ferrufi</string>
+    <key>CFBundleDisplayName</key>
+    <string>Ferrufi</string>
+    <key>CFBundleExecutable</key>
+    <string>Ferrufi</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.ferrufi.Ferrufi</string>
+
+    <!-- Versioning: marketing vs build -->
+    <key>CFBundleShortVersionString</key>
+    <string>0.0.0</string>
+    <key>CFBundleVersion</key>
+    <string>000</string>
+
+    <!-- Icon (use .icns or asset catalog). If using .icns: -->
+    <key>CFBundleIconFile</key>
+    <string>AppIcon.icns</string>
+
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+
+    <!-- Minimum OS (optional; usually set via deployment target in build settings) -->
+    <key>LSMinimumSystemVersion</key>
+    <string>14.0</string>
+
+    <!-- Category -->
+    <key>LSApplicationCategoryType</key>
+    <string>public.app-category.productivity</string>
+
+    <!-- High DPI (default true on modern macOS, can omit) -->
+    <key>NSHighResolutionCapable</key>
+    <true/>
+
+    <!-- Only keep NSAppleEventsUsageDescription if you actually send Apple Events to other apps -->
+    <!--
+    <key>NSAppleEventsUsageDescription</key>
+    <string>Ferrufi uses Apple Events to automate other apps you authorize.</string>
+    -->
+
+    <!-- Document types: avoid owning public.directory -->
+    <key>CFBundleDocumentTypes</key>
+    <array>
+      <!-- Markdown/plain text files -->
+      <dict>
+        <key>CFBundleTypeName</key>
+        <string>Markdown Document</string>
+        <key>CFBundleTypeRole</key>
+        <string>Editor</string>
+        <key>LSHandlerRank</key>
+        <string>Alternate</string>
+        <key>LSItemContentTypes</key>
+        <array>
+          <string>net.daringfireball.markdown</string>
+          <string>public.plain-text</string>
+          <string>public.text</string>
+        </array>
+        <key>CFBundleTypeIconFile</key>
+        <string>AppIcon.icns</string>
+      </dict>
+
+      <!-- Ferrufi workspace: custom .mufi extension -->
+      <dict>
+        <key>CFBundleTypeName</key>
+        <string>Ferrufi Workspace</string>
+        <key>CFBundleTypeRole</key>
+        <string>Editor</string>
+        <key>LSHandlerRank</key>
+        <string>Owner</string>
+        <key>LSItemContentTypes</key>
+        <array>
+          <string>org.mufi-lang.ferrufi.workspace</string>
+        </array>
+        <key>CFBundleTypeIconFile</key>
+        <string>AppIcon.icns</string>
+      </dict>
+    </array>
+
+    <!-- Export the custom UTI for .mufi -->
+    <key>UTExportedTypeDeclarations</key>
+    <array>
+      <dict>
+        <key>UTTypeIdentifier</key>
+        <string>org.mufi-lang.ferrufi.workspace</string>
+        <key>UTTypeDescription</key>
+        <string>Ferrufi Workspace</string>
+        <key>UTTypeConformsTo</key>
+        <array>
+          <string>public.data</string>
+        </array>
+        <key>UTTypeTagSpecification</key>
+        <dict>
+          <key>public.filename-extension</key>
+          <array>
+            <string>mufi</string>
+          </array>
+          <key>public.mime-type</key>
+          <string>application/x-ferrufi-workspace</string>
+        </dict>
+      </dict>
+    </array>
+
+</dict>
+</plist>
