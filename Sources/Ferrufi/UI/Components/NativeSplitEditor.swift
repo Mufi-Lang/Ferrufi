@@ -44,7 +44,7 @@ struct NativeSplitEditor: View {
     private var isMarkdownFile: Bool {
         guard let note = note else { return false }
         let path = note.filePath.lowercased()
-        return path.hasSuffix(".md") || path.hasSuffix(".markdown") || path.hasSuffix(".mufi")
+        return path.hasSuffix(".md") || path.hasSuffix(".markdown")
     }
 
     public var body: some View {
@@ -56,19 +56,26 @@ struct NativeSplitEditor: View {
             HStack(spacing: 0) {
                 // Left: Editor (Markdown for .md/.mufi files, otherwise MufiScriptEditor)
                 if isMarkdownFile {
-                    MarkdownEditor(
+                    UnifiedEditor(
                         text: $text,
                         isEditing: $isEditing,
+                        fileType: .markdown,
+                        showPreview: false,
+                        placeholder: placeholder,
                         onTextChange: onTextChange,
                         onSave: {
-                            // Ensure any save hooks run when the Markdown editor triggers save.
+                            // Ensure any save hooks run when the editor triggers save.
                             onTextChange(text)
                         }
                     )
+                    .environmentObject(themeManager)
                     .frame(maxWidth: .infinity)
                 } else {
-                    MufiScriptEditor(
+                    UnifiedEditor(
                         text: $text,
+                        isEditing: $isEditing,
+                        fileType: .mufi,
+                        showPreview: false,
                         placeholder: placeholder,
                         onTextChange: onTextChange
                     )
@@ -102,9 +109,12 @@ struct NativeSplitEditor: View {
                         )
 
                     // Right: Native preview
-                    NativeMarkdownPreview(markdown: text)
-                        .environmentObject(themeManager)
-                        .frame(maxWidth: .infinity)
+                    NativeMarkdownPreview(
+                        markdown: text,
+                        baseURL: note?.url?.deletingLastPathComponent()
+                    )
+                    .environmentObject(themeManager)
+                    .frame(maxWidth: .infinity)
                 }
 
                 if isREPLVisible {
@@ -313,123 +323,11 @@ struct NativeSplitEditor: View {
     }
 }
 
-// MARK: - Mufi Script Editor
-
-struct MufiScriptEditor: NSViewRepresentable {
-    @Binding var text: String
-    @EnvironmentObject var themeManager: ThemeManager
-
-    let placeholder: String
-    let onTextChange: (String) -> Void
-
-    func makeNSView(context: Context) -> NSScrollView {
-        let scrollView = NSScrollView()
-        let textView = NSTextView()
-
-        // Configure text view
-        textView.delegate = context.coordinator
-        textView.isEditable = true
-        textView.isSelectable = true
-        textView.isRichText = false
-        textView.allowsUndo = true
-        textView.font = NSFont.monospacedSystemFont(ofSize: 14, weight: .regular)
-        textView.textContainerInset = NSSize(width: 16, height: 16)
-        textView.isVerticallyResizable = true
-        textView.isHorizontallyResizable = false
-        textView.textContainer?.widthTracksTextView = true
-        textView.textContainer?.containerSize = NSSize(
-            width: scrollView.contentSize.width, height: .greatestFiniteMagnitude)
-
-        // Configure scroll view
-        scrollView.documentView = textView
-        scrollView.hasVerticalScroller = true
-        scrollView.hasHorizontalScroller = false
-        scrollView.autohidesScrollers = true
-
-        // Configure initial line-number ruler based on user preference
-        if let app = FerrufiApp.shared, app.configuration.editor.showLineNumbers {
-            let ruler = LineNumberRulerView(textView: textView)
-            scrollView.hasVerticalRuler = true
-            scrollView.verticalRulerView = ruler
-            scrollView.rulersVisible = true
-        } else {
-            // Ensure rulers are not visible if preference is off
-            scrollView.rulersVisible = false
-            scrollView.verticalRulerView = nil
-            scrollView.hasVerticalRuler = false
-        }
-
-        // Apply theme
-        updateTheme(textView: textView)
-
-        // Set initial text
-        textView.string = text
-
-        return scrollView
-    }
-
-    func updateNSView(_ scrollView: NSScrollView, context: Context) {
-        guard let textView = scrollView.documentView as? NSTextView else { return }
-
-        if textView.string != text {
-            let cursorPos = textView.selectedRange().location
-            textView.string = text
-            textView.setSelectedRange(NSRange(location: min(cursorPos, text.count), length: 0))
-        }
-
-        // Show or hide the line-number ruler based on current configuration.
-        if let app = FerrufiApp.shared, app.configuration.editor.showLineNumbers {
-            // Install a LineNumberRulerView if one isn't already present
-            if !(scrollView.verticalRulerView is LineNumberRulerView) {
-                let ruler = LineNumberRulerView(textView: textView)
-                scrollView.verticalRulerView = ruler
-            }
-            scrollView.hasVerticalRuler = true
-            scrollView.rulersVisible = true
-        } else {
-            scrollView.rulersVisible = false
-            scrollView.verticalRulerView = nil
-            scrollView.hasVerticalRuler = false
-        }
-
-        updateTheme(textView: textView)
-    }
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(self)
-    }
-
-    private func updateTheme(textView: NSTextView) {
-        textView.backgroundColor = NSColor(themeManager.currentTheme.colors.background)
-        textView.textColor = NSColor(themeManager.currentTheme.colors.foreground)
-        textView.insertionPointColor = NSColor(themeManager.currentTheme.colors.accent)
-        textView.selectedTextAttributes = [
-            .backgroundColor: NSColor(themeManager.currentTheme.colors.accent).withAlphaComponent(
-                0.3)
-        ]
-    }
-
-    class Coordinator: NSObject, NSTextViewDelegate {
-        let parent: MufiScriptEditor
-
-        init(_ parent: MufiScriptEditor) {
-            self.parent = parent
-        }
-
-        func textDidChange(_ notification: Notification) {
-            guard let textView = notification.object as? NSTextView else { return }
-            DispatchQueue.main.async {
-                self.parent.text = textView.string
-                self.parent.onTextChange(textView.string)
-            }
-        }
-    }
-}
-
 // MARK: - Native Markdown Preview
 
 struct NativeMarkdownPreview: View {
     let markdown: String
+    let baseURL: URL?
     @EnvironmentObject var themeManager: ThemeManager
 
     var body: some View {

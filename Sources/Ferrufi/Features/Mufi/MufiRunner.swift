@@ -319,7 +319,7 @@ public struct MufiREPLView: View {
                         .id(bottomId)
                 }
                 .background(Color(NSColor.textBackgroundColor))
-                .onChange(of: repl.output) { oldValue, newValue in
+                .onChange(of: repl.output) {
                     // Auto-scroll to bottom when new output arrives
                     withAnimation(.easeOut(duration: 0.1)) {
                         proxy.scrollTo(bottomId, anchor: .bottom)

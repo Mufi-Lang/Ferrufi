@@ -364,19 +364,13 @@ extension FolderManager {
             throw FerrufiError.fileSystem(.fileExists(filePath))
         }
 
-        // Create any intermediate directories if needed
-        let parentDirectory = fileURL.deletingLastPathComponent()
-        if !FileManager.default.fileExists(atPath: parentDirectory.path) {
-            try FileManager.default.createDirectory(
-                at: parentDirectory,
-                withIntermediateDirectories: true,
-                attributes: nil
-            )
-        }
-
-        // Write content to file with security-scoped access
-        try fileURL.withSecurityScope { url in
-            try content.write(to: url, atomically: true, encoding: .utf8)
+        // Use FileService to perform the write. FileService will ensure parent directories
+        // are created and will handle security-scoped access consistently.
+        do {
+            try await FileService.shared.writeTextFile(atPath: filePath, contents: content)
+        } catch {
+            // Wrap or rethrow as a FerrufiError to preserve domain semantics if needed.
+            throw error
         }
 
         // Create note object
@@ -445,7 +439,9 @@ extension FolderManager {
     /// Loads a single note from a file
     private func loadNoteFromFile(at url: URL) {
         do {
-            let content = try String(contentsOf: url, encoding: .utf8)
+            // Use the FileService synchronous helper to read protected locations.
+            // This keeps file access consistent with other FileService-based operations.
+            let content = try FileService.readTextFileSync(atPath: url.path)
             let title = url.deletingPathExtension().lastPathComponent
 
             let note = Note(
@@ -457,24 +453,6 @@ extension FolderManager {
             notes.append(note)
         } catch {
             // Silently skip files that can't be loaded
-        }
-    }
-
-    /// Updates the content of an existing note
-    func updateNoteContent(_ note: Note, content: String) throws {
-        let fileURL = URL(fileURLWithPath: note.filePath)
-
-        // Write the updated content to file with security-scoped access
-        try fileURL.withSecurityScope { url in
-            try content.write(to: url, atomically: true, encoding: .utf8)
-        }
-
-        // Update the note in memory
-        if let index = notes.firstIndex(where: { $0.id == note.id }) {
-            var updatedNote = note
-            updatedNote.content = content
-            updatedNote.modifiedAt = Date()
-            notes[index] = updatedNote
         }
     }
 

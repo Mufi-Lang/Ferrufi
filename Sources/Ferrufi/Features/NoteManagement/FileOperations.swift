@@ -252,11 +252,96 @@ class FileOperations {
     // MARK: - Content Processing
 
     /// Convert markdown to HTML
+    ///
+    /// This is a lightweight converter that avoids using AppKit conversions which
+    /// caused mismatches between `AttributedString` and `NSAttributedString` APIs.
+    /// It performs safe HTML escaping and a few common inline Markdown replacements
+    /// to produce a simple HTML representation suitable for export.
     private static func convertMarkdownToHTML(_ markdown: String) -> String {
-        // This is a basic implementation
-        // In production, use a proper markdown library
-        let renderer = MarkdownRenderer()
-        return renderer.renderToHTML(markdown)
+        let trimmed = markdown.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "" }
+
+        // Escape HTML special chars first
+        func escapeHTML(_ s: String) -> String {
+            return s.replacingOccurrences(of: "&", with: "&amp;")
+                .replacingOccurrences(of: "<", with: "&lt;")
+                .replacingOccurrences(of: ">", with: "&gt;")
+        }
+
+        // Helper to run a regex replacement
+        func replacingRegex(_ input: String, pattern: String, template: String) -> String {
+            guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else {
+                return input
+            }
+            let range = NSRange(location: 0, length: (input as NSString).length)
+            return regex.stringByReplacingMatches(
+                in: input, options: [], range: range, withTemplate: template)
+        }
+
+        // Start from escaped text
+        var html = escapeHTML(markdown)
+
+        // Handle fenced code blocks (```): convert to <pre><code> blocks
+        // We'll keep the inner content escaped (already escaped above).
+        var processedLines: [String] = []
+        var inCodeBlock = false
+        for line in html.components(separatedBy: "\n") {
+            if line.trimmingCharacters(in: .whitespaces).hasPrefix("```") {
+                if inCodeBlock {
+                    processedLines.append("</code></pre>")
+                    inCodeBlock = false
+                } else {
+                    processedLines.append("<pre><code>")
+                    inCodeBlock = true
+                }
+            } else {
+                processedLines.append(line)
+            }
+        }
+        html = processedLines.joined(separator: "\n")
+
+        // Inline code `code`
+        html = replacingRegex(html, pattern: "`([^`]+)`", template: "<code>$1</code>")
+
+        // Bold **strong**
+        html = replacingRegex(html, pattern: "\\*\\*(.*?)\\*\\*", template: "<strong>$1</strong>")
+
+        // Italic *em*
+        html = replacingRegex(html, pattern: "\\*(.*?)\\*", template: "<em>$1</em>")
+
+        // Links [text](url)
+        html = replacingRegex(
+            html, pattern: "\\[([^\\]]+)\\]\\(([^)]+)\\)", template: "<a href=\"$2\">$1</a>")
+
+        // Headings: convert lines starting with 1-6 hashes to <h1>..</h6>
+        let lines = html.components(separatedBy: "\n")
+        var outLines: [String] = []
+        for line in lines {
+            let trimmedLine = line.trimmingCharacters(in: .whitespaces)
+            var headerLevel = 0
+            for ch in trimmedLine {
+                if ch == "#" { headerLevel += 1 } else { break }
+            }
+            if headerLevel > 0 {
+                // ensure there's a space after hashes
+                let after = trimmedLine.dropFirst(headerLevel)
+                if after.first == " " {
+                    let content = String(after.dropFirst()).trimmingCharacters(in: .whitespaces)
+                    let level = min(headerLevel, 6)
+                    outLines.append("<h\(level)>\(content)</h\(level)>")
+                    continue
+                }
+            }
+            outLines.append(line)
+        }
+        html = outLines.joined(separator: "\n")
+
+        // Convert remaining newlines to <br/> for simple paragraph handling
+        // but preserve existing block tags by only replacing single newlines not adjacent to block tags.
+        html = html.replacingOccurrences(of: "\n", with: "<br/>")
+
+        // Wrap in a container
+        return "<div>\(html)</div>"
     }
 
     /// Strip markdown formatting

@@ -44,9 +44,12 @@ struct EnhancedEditorView: View {
                 VStack(spacing: 0) {
                     editorToolbar
 
-                    MarkdownEditor(
+                    UnifiedEditor(
                         text: $content,
                         isEditing: $isEditing,
+                        fileType: .markdown,
+                        showPreview: false,
+                        placeholder: "Start writing...",
                         onTextChange: { newText in
                             handleTextChange(newText)
                         },
@@ -62,7 +65,7 @@ struct EnhancedEditorView: View {
                     VStack(spacing: 0) {
                         previewToolbar
 
-                        MarkdownPreview(
+                        NativeMarkdownPreview(
                             markdown: content,
                             baseURL: note?.url?.deletingLastPathComponent()
                         )

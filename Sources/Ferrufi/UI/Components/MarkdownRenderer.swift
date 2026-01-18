@@ -632,10 +632,11 @@ public struct WorkingMarkdownView: View {
     public var body: some View {
         WebView(htmlContent: renderer.renderedHTML)
             .opacity(renderer.isRendering ? 0.7 : 1.0)
-            .onChange(of: content) { newContent in
+            .onChange(of: content) { _, newContent in
                 renderer.content = newContent
             }
-            .onChange(of: themeManager.currentTheme) {
+            .onChange(of: themeManager.currentTheme) { _, _ in
+                // Reassign the ThemeManager instance (not the IronTheme value)
                 renderer.themeManager = themeManager
                 renderer.forceRender()
             }

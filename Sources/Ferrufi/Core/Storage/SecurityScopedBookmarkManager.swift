@@ -176,17 +176,11 @@ public class SecurityScopedBookmarkManager: ObservableObject {
             // workspace path while the active security scope lives on the parent.
             let baseNormalized = canonicalKey(forPath: baseURL.path)
             if normalizedKey.hasPrefix(baseNormalized) {
-                // compute relative suffix
-                var relative = String(path.dropFirst(baseNormalized.count))
-                if relative.hasPrefix("/") { relative.removeFirst() }
-                if relative.isEmpty {
-                    return baseURL
-                } else {
-                    let child = baseURL.appendingPathComponent(relative)
-                    // Note: we keep the active scope on baseURL; child operations should succeed
-                    // while the parent scope is active.
-                    return child
-                }
+                // The stored bookmark covers the requested path. Return the baseURL (the
+                // access-granted root) so callers perform file operations under the same
+                // security-scoped resource. This avoids creating nested child URLs which
+                // could lead to separate access scopes and potential permission issues.
+                return baseURL
             }
 
             // Otherwise return the base URL directly

@@ -65,7 +65,7 @@ public struct EmbeddedMufiREPLView: View {
                 }
                 .background(Color(NSColor.textBackgroundColor))
                 .onChange(of: output) {
-                    // Auto-scroll to bottom when there's new output
+                    // Auto-scroll to bottom when output changes (updated API)
                     withAnimation(.easeOut(duration: 0.1)) {
                         proxy.scrollTo(bottomAnchor, anchor: .bottom)
                     }

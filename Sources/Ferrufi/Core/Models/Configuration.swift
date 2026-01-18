@@ -531,6 +531,79 @@ public class ConfigurationManager: ObservableObject {
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
 
         loadConfiguration()
+
+        // Apply dev-workspace fallback when running in dev mode or when the configured
+        // workspace is not writable. Honor FERRUFI_DEV_WORKSPACE env var when present.
+        applyDevWorkspaceFallbackIfNeeded()
+    }
+
+    /// Ensure a usable workspace during development.
+    /// If FERRUFI_DEV_WORKSPACE env var is set, use it.
+    /// Otherwise, if the configured workspace is not writable, fallback to ~/.ferrufi/dev-workspace.
+    private func applyDevWorkspaceFallbackIfNeeded() {
+        let env = ProcessInfo.processInfo.environment["FERRUFI_DEV_WORKSPACE"]
+        let homeDirectory = FileManager.default.homeDirectoryForCurrentUser
+        let devDefault = homeDirectory.appendingPathComponent(".ferrufi").appendingPathComponent(
+            "dev-workspace"
+        ).path
+
+        // If env var provided, prefer it and persist
+        if let envPath = env, !envPath.isEmpty {
+            configuration.workspace.defaultWorkspacePath = envPath
+            saveConfiguration()
+            print("ℹ️ Using dev workspace from FERRUFI_DEV_WORKSPACE: \(envPath)")
+            return
+        }
+
+        // Check if configured workspace is writable
+        let configured = configuration.workspace.defaultWorkspacePath
+        let expanded = (configured as NSString).expandingTildeInPath
+        let fm = FileManager.default
+
+        var isDir: ObjCBool = false
+        let exists = fm.fileExists(atPath: expanded, isDirectory: &isDir)
+
+        if exists {
+            // If it exists and is writable (rough heuristic), keep it.
+            // For directories, isWritableFile may be false; attempt a small writable test only if needed.
+            if fm.isWritableFile(atPath: expanded) {
+                return
+            }
+            if isDir.boolValue {
+                // Try to create a temporary file to test writability
+                let testFile = (expanded as NSString).appendingPathComponent(
+                    ".ferrufi_write_test_\(UUID().uuidString)")
+                do {
+                    try "test".write(toFile: testFile, atomically: true, encoding: .utf8)
+                    try fm.removeItem(atPath: testFile)
+                    return
+                } catch {
+                    // not writable -> fallback
+                }
+            }
+        } else {
+            // Try to create the configured directory (catch permission errors)
+            do {
+                try fm.createDirectory(
+                    atPath: expanded, withIntermediateDirectories: true, attributes: nil)
+                return
+            } catch {
+                // fallthrough to dev fallback
+            }
+        }
+
+        // Fallback to dev workspace
+        do {
+            try fm.createDirectory(
+                atPath: devDefault, withIntermediateDirectories: true, attributes: nil)
+            configuration.workspace.defaultWorkspacePath = devDefault
+            saveConfiguration()
+            print(
+                "⚠️ Configured workspace '\(configured)' is not writable. Falling back to dev workspace: \(devDefault)"
+            )
+        } catch {
+            print("Failed to create dev workspace at \(devDefault): \(error)")
+        }
     }
 
     /// Loads configuration from disk
@@ -542,10 +615,8 @@ public class ConfigurationManager: ObservableObject {
         }
 
         do {
-            // Read with security-scoped access
-            let data = try configurationURL.withSecurityScope { url in
-                try Data(contentsOf: url)
-            }
+            // Read with security-scoped access (use FileService sync helper)
+            let data = try FileService.readDataSync(atPath: configurationURL.path)
             configuration = try decoder.decode(FerrufiConfiguration.self, from: data)
         } catch {
             print("Failed to load configuration: \(error)")
@@ -557,10 +628,8 @@ public class ConfigurationManager: ObservableObject {
     public func saveConfiguration() {
         do {
             let data = try encoder.encode(configuration)
-            // Write with security-scoped access
-            try configurationURL.withSecurityScope { url in
-                try data.write(to: url)
-            }
+            // Write with security-scoped access (use FileService sync helper)
+            try FileService.writeDataSync(atPath: configurationURL.path, data: data)
         } catch {
             print("Failed to save configuration: \(error)")
         }
@@ -585,18 +654,14 @@ public class ConfigurationManager: ObservableObject {
     /// Exports configuration to a file
     public func exportConfiguration(to url: URL) throws {
         let data = try encoder.encode(configuration)
-        // Write with security-scoped access
-        try url.withSecurityScope { url in
-            try data.write(to: url)
-        }
+        // Write with security-scoped access (use FileService sync helper)
+        try FileService.writeDataSync(atPath: url.path, data: data)
     }
 
     /// Imports configuration from a file
     public func importConfiguration(from url: URL) throws {
-        // Read with security-scoped access
-        let data = try url.withSecurityScope { url in
-            try Data(contentsOf: url)
-        }
+        // Read with security-scoped access (use FileService sync helper)
+        let data = try FileService.readDataSync(atPath: url.path)
         configuration = try decoder.decode(FerrufiConfiguration.self, from: data)
         saveConfiguration()
     }

@@ -191,7 +191,7 @@ public struct ContentView: View {
                 .environmentObject(navigationModel)
                 .environmentObject(themeManager)
         }
-        .onChange(of: navigationModel.showingFolderCreation) { newValue in
+        .onChange(of: navigationModel.showingFolderCreation) { _, newValue in
             print("ContentView: showingFolderCreation changed to: \(newValue)")
         }
         .alert("Folder Access Required", isPresented: $showingFolderPermissionRequest) {

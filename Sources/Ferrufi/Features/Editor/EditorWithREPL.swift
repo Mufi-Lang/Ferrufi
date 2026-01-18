@@ -245,9 +245,12 @@ struct EditorWithREPL: View {
             .padding(.vertical, 6)
             .background(Color(NSColor.controlBackgroundColor).opacity(0.5))
 
-            MarkdownEditor(
+            UnifiedEditor(
                 text: $content,
                 isEditing: $isEditing,
+                fileType: .markdown,
+                showPreview: true,
+                placeholder: "Start writing...",
                 onTextChange: { newText in
                     handleTextChange(newText)
                 },
@@ -279,7 +282,7 @@ struct EditorWithREPL: View {
             .padding(.vertical, 6)
             .background(Color(NSColor.controlBackgroundColor).opacity(0.5))
 
-            MarkdownPreview(
+            NativeMarkdownPreview(
                 markdown: content,
                 baseURL: note?.url?.deletingLastPathComponent()
             )

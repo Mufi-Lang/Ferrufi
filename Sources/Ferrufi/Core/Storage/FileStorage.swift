@@ -88,68 +88,57 @@ public final class FileStorage: NSObject, FileStorageProtocol, ObservableObject,
     /// been granted and perform direct file operations to avoid starting/stopping
     /// the security scope (which would otherwise interfere with an already active scope).
     private func createWorkspaceDirectoryIfNeeded() throws {
-        // Prefer a resolved security-scoped URL when available
-        let baseURL = resolvedWorkspaceURL ?? URL(fileURLWithPath: workspacePath)
-        var notesURL = baseURL
-        var metadataURL = notesURL.appendingPathComponent(".metadata")
+        // Use the resolvedWorkspaceURL path when available as canonical base path,
+        // otherwise use the raw workspacePath.
+        let basePath = resolvedWorkspaceURL?.path ?? workspacePath
+        var notesPath = basePath
+        var metadataPath = (notesPath as NSString).appendingPathComponent(".metadata")
 
-        // If we have a resolved bookmark URL, access should already be active;
-        // do direct operations to avoid interfering with the existing security scope.
-        if resolvedWorkspaceURL != nil {
-            // If the resolved URL points to a parent that covers the requested workspace path
-            // compute the child notes URL under the resolved parent so we create the
-            // correct workspace directory while still using the active scope.
-            let resolvedBase = resolvedWorkspaceURL!
+        // If we have a resolved bookmark URL, prefer the resolved layout logic
+        if let resolvedBase = resolvedWorkspaceURL {
             if workspacePath.hasPrefix(resolvedBase.path) {
-                // Compute the relative suffix between the resolved base and the requested workspace path
                 var relative = String(workspacePath.dropFirst(resolvedBase.path.count))
                 if relative.hasPrefix("/") { relative.removeFirst() }
                 if relative.isEmpty {
-                    notesURL = resolvedBase
+                    notesPath = resolvedBase.path
                 } else {
-                    notesURL = resolvedBase.appendingPathComponent(relative)
+                    notesPath =
+                        URL(fileURLWithPath: resolvedBase.path).appendingPathComponent(relative)
+                        .path
                 }
-                metadataURL = notesURL.appendingPathComponent(".metadata")
+                metadataPath = (notesPath as NSString).appendingPathComponent(".metadata")
             } else {
                 // Use the resolved base directly
-                notesURL = resolvedBase
-                metadataURL = notesURL.appendingPathComponent(".metadata")
+                notesPath = resolvedBase.path
+                metadataPath = (notesPath as NSString).appendingPathComponent(".metadata")
             }
 
-            if !fileManager.fileExists(atPath: notesURL.path) {
-                try fileManager.createDirectory(
-                    at: notesURL, withIntermediateDirectories: true, attributes: nil)
+            // Ensure directories exist using FileService synchronous helpers (security-scoped aware)
+            if !fileManager.fileExists(atPath: notesPath) {
+                try FileService.createDirectorySync(atPath: notesPath)
             }
-            if !fileManager.fileExists(atPath: metadataURL.path) {
-                try fileManager.createDirectory(
-                    at: metadataURL, withIntermediateDirectories: true, attributes: nil)
+            if !fileManager.fileExists(atPath: metadataPath) {
+                try FileService.createDirectorySync(atPath: metadataPath)
             }
             return
         }
 
-        // No resolved bookmark: use security-scoped access wrapper
+        // No resolved bookmark: attempt to create directories using FileService sync helpers,
+        // which use security-scoped access under the hood. If that fails, fall back to direct FileManager ops.
         do {
-            try notesURL.withSecurityScope { url in
-                let fm = FileManager.default
-                if !fm.fileExists(atPath: url.path) {
-                    try fm.createDirectory(
-                        at: url, withIntermediateDirectories: true, attributes: nil)
-                }
-                let meta = url.appendingPathComponent(".metadata")
-                if !fm.fileExists(atPath: meta.path) {
-                    try fm.createDirectory(
-                        at: meta, withIntermediateDirectories: true, attributes: nil)
-                }
-            }
+            try FileService.createDirectorySync(atPath: notesPath)
+            try FileService.createDirectorySync(atPath: metadataPath)
         } catch {
             // Final fallback to direct ops (may fail if permissions are restricted)
-            if !fileManager.fileExists(atPath: notesURL.path) {
+            if !fileManager.fileExists(atPath: notesPath) {
                 try fileManager.createDirectory(
-                    at: notesURL, withIntermediateDirectories: true, attributes: nil)
+                    at: URL(fileURLWithPath: notesPath), withIntermediateDirectories: true,
+                    attributes: nil)
             }
-            if !fileManager.fileExists(atPath: metadataURL.path) {
+            if !fileManager.fileExists(atPath: metadataPath) {
                 try fileManager.createDirectory(
-                    at: metadataURL, withIntermediateDirectories: true, attributes: nil)
+                    at: URL(fileURLWithPath: metadataPath), withIntermediateDirectories: true,
+                    attributes: nil)
             }
         }
     }
@@ -157,193 +146,85 @@ public final class FileStorage: NSObject, FileStorageProtocol, ObservableObject,
     // MARK: - Note Operations
 
     public func saveNote(_ note: Note) async throws {
-        return try await withCheckedThrowingContinuation { continuation in
-            fileQueue.async { [weak self] in
-                guard let self = self else {
-                    continuation.resume(
-                        throwing: FileStorageError.writeError(
-                            NSError(domain: "FileStorage", code: -1)))
-                    return
-                }
-                do {
-                    let baseURL =
-                        self.resolvedWorkspaceURL ?? URL(fileURLWithPath: self.workspacePath)
-                    let noteURL = baseURL.appendingPathComponent("\(note.title).md")
+        // Use FileService to perform the content write and metadata write so security-scoped
+        // access is consistently handled in one place. Prefer a resolved workspace URL path
+        // when present so the stored configuration remains canonical.
+        let basePath = self.resolvedWorkspaceURL?.path ?? self.workspacePath
+        let notePath = URL(fileURLWithPath: basePath).appendingPathComponent("\(note.title).md")
+            .path
 
-                    // If we have a resolved security-scoped URL, assume access is active and
-                    // perform direct writes to avoid stopping an active scope. Otherwise use
-                    // the withSecurityScope wrapper to request access for the operation.
-                    if self.resolvedWorkspaceURL != nil {
-                        try note.content.write(to: noteURL, atomically: true, encoding: .utf8)
-                    } else {
-                        try noteURL.withSecurityScope { url in
-                            try note.content.write(to: url, atomically: true, encoding: .utf8)
-                        }
-                    }
-
-                    // Save metadata
-                    try self.saveNoteMetadata(note)
-
-                    continuation.resume()
-                } catch {
-                    continuation.resume(throwing: error)
-                }
-            }
+        do {
+            try await FileService.shared.writeTextFile(atPath: notePath, contents: note.content)
+            // Persist metadata (async helper)
+            try await saveNoteMetadata(note)
+        } catch {
+            throw error
         }
     }
 
     public func loadNote(from path: String) async throws -> Note {
-        return try await withCheckedThrowingContinuation { continuation in
-            fileQueue.async { [weak self] in
-                guard let self = self else {
-                    continuation.resume(
-                        throwing: FileStorageError.readError(
-                            NSError(domain: "FileStorage", code: -1)))
-                    return
-                }
-                do {
-                    let noteURL = URL(fileURLWithPath: path)
-                    let content: String
+        // Read note contents via FileService (handles security-scoped access).
+        do {
+            let content = try await FileService.shared.readTextFile(atPath: path)
+            var note = Note.fromMarkdown(filePath: path, content: content)
 
-                    // If this path lives under a resolved security-scoped workspace, read directly.
-                    if let base = self.resolvedWorkspaceURL, path.hasPrefix(base.path) {
-                        content = try String(contentsOf: noteURL, encoding: .utf8)
-                    } else {
-                        content = try noteURL.withSecurityScope { url in
-                            try String(contentsOf: url, encoding: .utf8)
-                        }
-                    }
-
-                    var note = Note.fromMarkdown(filePath: path, content: content)
-
-                    // Load metadata if it exists
-                    if let metadata = try? self.loadNoteMetadata(for: note.id) {
-                        note.metadata = metadata.metadata
-                        note.tags = metadata.tags
-                        note.createdAt = metadata.createdAt
-                        note.modifiedAt = metadata.modifiedAt
-                    }
-
-                    continuation.resume(returning: note)
-                } catch {
-                    continuation.resume(throwing: error)
-                }
+            // Load metadata if present (async helper)
+            if let metadata = try? await loadNoteMetadata(for: note.id) {
+                note.metadata = metadata.metadata
+                note.tags = metadata.tags
+                note.createdAt = metadata.createdAt
+                note.modifiedAt = metadata.modifiedAt
             }
+
+            return note
+        } catch {
+            throw error
         }
     }
 
     public func deleteNote(at path: String) async throws {
-        return try await withCheckedThrowingContinuation { continuation in
-            fileQueue.async { [weak self] in
-                guard let self = self else {
-                    continuation.resume(
-                        throwing: FileStorageError.writeError(
-                            NSError(domain: "FileStorage", code: -1)))
-                    return
-                }
-                do {
-                    let noteURL = URL(fileURLWithPath: path)
+        do {
+            try await FileService.shared.deleteItem(atPath: path)
 
-                    // If inside resolved workspace, perform direct delete so we don't stop an active scope.
-                    if let base = self.resolvedWorkspaceURL, path.hasPrefix(base.path) {
-                        try self.fileManager.removeItem(at: noteURL)
-                    } else {
-                        try noteURL.withSecurityScope { url in
-                            try self.fileManager.removeItem(at: url)
-                        }
-                    }
-
-                    // Also delete metadata
-                    let filename = noteURL.deletingPathExtension().lastPathComponent
-                    if let noteId = self.findNoteId(for: filename) {
-                        try? self.deleteNoteMetadata(for: noteId)
-                    }
-
-                    continuation.resume()
-                } catch {
-                    continuation.resume(throwing: error)
-                }
+            // Also delete metadata if we can determine the note id
+            let filename = URL(fileURLWithPath: path).deletingPathExtension().lastPathComponent
+            if let noteId = findNoteId(for: filename) {
+                try? await deleteNoteMetadata(for: noteId)
             }
+        } catch {
+            throw error
         }
     }
 
     public func moveNote(from sourcePath: String, to destinationPath: String) async throws {
-        return try await withCheckedThrowingContinuation { continuation in
-            fileQueue.async { [weak self] in
-                guard let self = self else {
-                    continuation.resume(
-                        throwing: FileStorageError.writeError(
-                            NSError(domain: "FileStorage", code: -1)))
-                    return
-                }
-                do {
-                    let sourceURL = URL(fileURLWithPath: sourcePath)
-                    let destinationURL = URL(fileURLWithPath: destinationPath)
-
-                    // If both source and destination are inside the resolved workspace, do a direct move
-                    // to avoid starting/stopping security scopes that might already be active.
-                    if let base = self.resolvedWorkspaceURL,
-                        sourcePath.hasPrefix(base.path),
-                        destinationPath.hasPrefix(base.path)
-                    {
-                        try self.fileManager.moveItem(at: sourceURL, to: destinationURL)
-                    } else {
-                        try sourceURL.withSecurityScope { source in
-                            try destinationURL.withSecurityScope { dest in
-                                try self.fileManager.moveItem(at: source, to: dest)
-                            }
-                        }
-                    }
-                    continuation.resume()
-                } catch {
-                    continuation.resume(throwing: error)
-                }
-            }
+        do {
+            try await FileService.shared.moveItem(from: sourcePath, to: destinationPath)
+        } catch {
+            throw error
         }
     }
 
     public func listNotes(in directory: String = "") async throws -> [String] {
-        return try await withCheckedThrowingContinuation { continuation in
-            fileQueue.async { [weak self] in
-                guard let self = self else {
-                    continuation.resume(
-                        throwing: FileStorageError.readError(
-                            NSError(domain: "FileStorage", code: -1)))
-                    return
-                }
-                do {
-                    let baseURL =
-                        (self.resolvedWorkspaceURL ?? URL(fileURLWithPath: self.workspacePath))
-                    let notesURL = baseURL.appendingPathComponent(directory)
-                    let contents: [URL]
+        do {
+            let basePath = (self.resolvedWorkspaceURL ?? URL(fileURLWithPath: self.workspacePath))
+                .path
+            let notesDir = (basePath as NSString).appendingPathComponent(directory)
+            let entries = try await FileService.shared.listDirectory(atPath: notesDir)
 
-                    // If the workspace has an active resolved security scope, perform direct listing.
-                    if self.resolvedWorkspaceURL != nil {
-                        contents = try self.fileManager.contentsOfDirectory(
-                            at: notesURL,
-                            includingPropertiesForKeys: [.isRegularFileKey],
-                            options: [.skipsHiddenFiles]
-                        )
-                    } else {
-                        contents = try notesURL.withSecurityScope { url in
-                            try self.fileManager.contentsOfDirectory(
-                                at: url,
-                                includingPropertiesForKeys: [.isRegularFileKey],
-                                options: [.skipsHiddenFiles]
-                            )
-                        }
-                    }
-
-                    let noteFiles = contents.compactMap { url -> String? in
-                        guard url.pathExtension == "md" else { return nil }
-                        return url.path
-                    }
-
-                    continuation.resume(returning: noteFiles)
-                } catch {
-                    continuation.resume(throwing: error)
+            let noteFiles = entries.compactMap { name -> String? in
+                // entries from FileService are directory entries (names). Filter by .md extension.
+                guard (name as NSString).pathExtension == "md" else { return nil }
+                // If an entry is absolute, return as-is; otherwise resolve relative to notesDir.
+                if name.hasPrefix("/") {
+                    return name
+                } else {
+                    return (notesDir as NSString).appendingPathComponent(name)
                 }
             }
+
+            return noteFiles
+        } catch {
+            throw error
         }
     }
 
@@ -357,7 +238,7 @@ public final class FileStorage: NSObject, FileStorageProtocol, ObservableObject,
         let modifiedAt: Date
     }
 
-    private func saveNoteMetadata(_ note: Note) throws {
+    private func saveNoteMetadata(_ note: Note) async throws {
         let metadataFile = NoteMetadataFile(
             id: note.id,
             metadata: note.metadata,
@@ -370,32 +251,26 @@ public final class FileStorage: NSObject, FileStorageProtocol, ObservableObject,
             .appendingPathComponent(".metadata")
             .appendingPathComponent("\(note.id.uuidString).json")
 
-        // Create metadata directory if it doesn't exist
-        let metadataDir = metadataURL.deletingLastPathComponent()
-        if !fileManager.fileExists(atPath: metadataDir.path) {
-            try fileManager.createDirectory(
-                at: metadataDir, withIntermediateDirectories: true, attributes: nil)
-        }
-
         let data = try encoder.encode(metadataFile)
-        try data.write(to: metadataURL)
+        // Use FileService to write metadata (creates parent directory as needed)
+        try await FileService.shared.writeData(atPath: metadataURL.path, data: data)
     }
 
-    private func loadNoteMetadata(for noteId: UUID) throws -> NoteMetadataFile {
+    private func loadNoteMetadata(for noteId: UUID) async throws -> NoteMetadataFile {
         let metadataURL = URL(fileURLWithPath: workspacePath)
             .appendingPathComponent(".metadata")
             .appendingPathComponent("\(noteId.uuidString).json")
 
-        let data = try Data(contentsOf: metadataURL)
+        let data = try await FileService.shared.readData(atPath: metadataURL.path)
         return try decoder.decode(NoteMetadataFile.self, from: data)
     }
 
-    private func deleteNoteMetadata(for noteId: UUID) throws {
+    private func deleteNoteMetadata(for noteId: UUID) async throws {
         let metadataURL = (self.resolvedWorkspaceURL ?? URL(fileURLWithPath: self.workspacePath))
             .appendingPathComponent(".metadata")
             .appendingPathComponent("\(noteId.uuidString).json")
 
-        try fileManager.removeItem(at: metadataURL)
+        try await FileService.shared.deleteItem(atPath: metadataURL.path)
     }
 
     private func findNoteId(for filename: String) -> UUID? {
@@ -438,7 +313,15 @@ public final class FileStorage: NSObject, FileStorageProtocol, ObservableObject,
             path: workspacePath,
             changeType: .modified
         )
+        // Notify local subscribers
         changeSubject.send(event)
+
+        // Forward the event into the centralized FileService publisher asynchronously.
+        // Use Task to call the actor method from this synchronous callback context.
+        Task {
+            await FileService.shared.publishFileChange(
+                path: event.path, changeType: event.changeType)
+        }
     }
 
     public func watchForChanges() -> AnyPublisher<FileChangeEvent, Never> {

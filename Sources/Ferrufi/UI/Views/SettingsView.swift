@@ -239,34 +239,18 @@ struct GeneralSettingsView: View {
                                         // Create the chosen folder (or ~/.ferrufi when Home was selected)
                                         try FileManager.default.createDirectory(
                                             at: ferrufiDir, withIntermediateDirectories: true,
-                                            attributes: nil
-                                        )
+                                            attributes: nil)
 
                                         // Reinitialize Ferrufi storage to point at the new workspace (use the folder itself)
                                         try await ferrufiApp.initialize(
                                             workspacePath: ferrufiDir.path)
 
-                                        // Persist trust for the selected parent folder so the app-level
-                                        // trust mechanic stays consistent with user expectations.
+                                        // Refresh explorer selection using the shared navigation model so the
+                                        // sidebar updates correctly across windows
                                         await MainActor.run {
-                                            let canonicalParent = URL(
-                                                fileURLWithPath: (parentURL.path as NSString)
-                                                    .expandingTildeInPath
-                                            ).standardizedFileURL.path
-                                            ferrufiApp.configuration.updateConfiguration { config in
-                                                var arr = config.trustedVaultPaths ?? []
-                                                if !arr.contains(canonicalParent) {
-                                                    arr.append(canonicalParent)
-                                                    config.trustedVaultPaths = arr
-                                                }
-                                            }
-
-                                            // Refresh explorer selection using the shared navigation model so the
-                                            // sidebar updates correctly across windows
                                             FerrufiApp.sharedNavigationModel?.selectFolder(
                                                 ferrufiApp.folderManager.rootFolder,
-                                                ferrufiApp: ferrufiApp
-                                            )
+                                                ferrufiApp: ferrufiApp)
                                             if let welcome = ferrufiApp.notes.first(where: {
                                                 $0.title == "Welcome"
                                             }) {
@@ -279,8 +263,7 @@ struct GeneralSettingsView: View {
                                                 "✅ Workspace changed to: \(ferrufiDir.path). notes: \(ferrufiApp.notes.count), root: \(ferrufiApp.folderManager.rootFolder.path)"
                                             )
 
-                                            workspaceInfoMessage =
-                                                "Workspace folder updated and trusted."
+                                            workspaceInfoMessage = "Workspace folder updated."
                                             showWorkspaceInfoAlert = true
                                         }
                                     } catch {
@@ -288,116 +271,6 @@ struct GeneralSettingsView: View {
                                         showErrorAlert = true
                                     }
                                 }
-                            }
-                        }
-                        .controlSize(.small)
-
-                        // Trust / Untrust controls
-                        if (ferrufiApp.configuration.trustedWorkspacePaths ?? []).contains(where: {
-                            workspacePath.path.hasPrefix($0)
-                        }) {
-                            Button("Untrust Workspace") {
-                                // Find the trusted entry that covers the current workspace and remove it
-                                let trusted = ferrufiApp.configuration.trustedWorkspacePaths ?? []
-                                if let parentToRemove = trusted.first(where: {
-                                    workspacePath.path.hasPrefix($0)
-                                }) {
-                                    ferrufiApp.configuration.updateConfiguration { config in
-                                        var arr = config.trustedWorkspacePaths ?? []
-                                        arr.removeAll(where: { $0 == parentToRemove })
-                                        config.trustedWorkspacePaths = arr.isEmpty ? nil : arr
-                                    }
-                                    workspaceInfoMessage = "Workspace untrusted: \(parentToRemove)"
-                                    showWorkspaceInfoAlert = true
-                                } else {
-                                    errorMessage = "No trusted path found to untrust."
-                                    showErrorAlert = true
-                                }
-                            }
-                            .controlSize(.small)
-                        } else {
-                            Button("Trust Workspace") {
-                                // If there's already a bookmarked parent, trust it; otherwise ask for folder access first
-                                if let existingParent = SecurityScopedBookmarkManager.shared
-                                    .allBookmarkedPaths()
-                                    .first(where: { workspacePath.path.hasPrefix($0) })
-                                {
-                                    ferrufiApp.configuration.updateConfiguration { config in
-                                        var arr = config.trustedWorkspacePaths ?? []
-                                        if !arr.contains(existingParent) {
-                                            arr.append(existingParent)
-                                            config.trustedWorkspacePaths = arr
-                                        }
-                                    }
-                                    workspaceInfoMessage = "Workspace trusted: \(existingParent)"
-                                    showWorkspaceInfoAlert = true
-                                } else {
-                                    SecurityScopedBookmarkManager.shared.requestFolderAccess(
-                                        message:
-                                            "Select a folder to trust for Ferrufi workspace (select Home to use ~/.ferrufi/)",
-                                        defaultDirectory: homeURL,
-                                        showHidden: true
-                                    ) { sel in
-                                        guard let sel = sel else { return }
-                                        // Canonicalize selected path so it matches how we compare current workspace
-                                        let canonicalSel = URL(
-                                            fileURLWithPath: (sel.path as NSString)
-                                                .expandingTildeInPath
-                                        ).standardizedFileURL.path
-                                        ferrufiApp.configuration.updateConfiguration { config in
-                                            var arr = config.trustedWorkspacePaths ?? []
-                                            if !arr.contains(canonicalSel) {
-                                                arr.append(canonicalSel)
-                                                config.trustedWorkspacePaths = arr
-                                            }
-                                        }
-                                        workspaceInfoMessage = "Workspace trusted: \(canonicalSel)"
-                                        showWorkspaceInfoAlert = true
-                                    }
-                                }
-                            }
-                            .controlSize(.small)
-                        }
-
-                        Button("Repair Permission") {
-                            SecurityScopedBookmarkManager.shared.requestFolderAccess(
-                                message: "Select the folder again to repair permissions",
-                                defaultDirectory: homeURL,
-                                showHidden: true
-                            ) { url in
-                                if url != nil {
-                                    workspaceInfoMessage = "Permission repaired."
-                                    showWorkspaceInfoAlert = true
-                                } else {
-                                    errorMessage = "Repair cancelled."
-                                    showErrorAlert = true
-                                }
-                            }
-                        }
-                        .controlSize(.small)
-
-                        Button("Scan & Repair Bookmarks") {
-                            Task {
-                                var removed: [String] = []
-                                let bookmarks = SecurityScopedBookmarkManager.shared
-                                    .allBookmarkedPaths()
-                                for path in bookmarks {
-                                    // Attempt to resolve each bookmark; resolveBookmark will remove corrupt ones
-                                    if SecurityScopedBookmarkManager.shared.resolveBookmark(
-                                        forPath: path) == nil
-                                    {
-                                        removed.append(path)
-                                    }
-                                }
-
-                                if removed.isEmpty {
-                                    workspaceInfoMessage = "No broken bookmarks found."
-                                } else {
-                                    workspaceInfoMessage =
-                                        "Removed broken bookmarks:\n"
-                                        + removed.joined(separator: "\n")
-                                }
-                                showWorkspaceInfoAlert = true
                             }
                         }
                         .controlSize(.small)

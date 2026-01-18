@@ -56,7 +56,7 @@ public struct MufiTerminalView: View {
                         .onAppear {
                             proxy.scrollTo("bottom", anchor: .bottom)
                         }
-                        .onChange(of: output) { oldValue, newValue in
+                        .onChange(of: output) {
                             proxy.scrollTo("bottom", anchor: .bottom)
                         }
                     }

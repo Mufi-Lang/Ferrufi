@@ -1,0 +1,791 @@
+/* Ferrufi Notebook styles
+ *
+ * - Provides a notebook-like layout (cells with In/Out prompts)
+ * - Adds theme variables and theme overrides (light, dark, ferrufi)
+ * - Styles header, controls and cell actions (run, move, delete, clear output)
+ *
+ * To switch theme in JS:
+ *   document.body.setAttribute('data-theme', 'dark' | 'light' | 'ferrufi')
+ * Themes are persisted by the JS theme selector (localStorage)
+ */
+
+/* Box sizing and sensible defaults */
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+:root {
+    /* Base palette (light theme) */
+    --bg: #f6f8fa;
+    --surface: #ffffff;
+    --muted: #6b7280;
+    --text: #0f172a;
+    --accent: #2563eb;
+    --accent-variant: #1e3a8a;
+    --cell-border: #e6e9ee;
+    --gutter-bg: #f3f4f6;
+    --code-bg: #fbfdff;
+    --output-bg: #0f172a;
+    --output-text: #e6edf3;
+    --shadow: 0 8px 20px rgba(12, 15, 20, 0.06);
+    --radius: 8px;
+    --control-bg: rgba(255, 255, 255, 0.04);
+    --danger: #ef4444;
+    --success: #10b981;
+
+    --header-height: 64px;
+    --max-width: 980px;
+
+    --transition-fast: 160ms;
+    --transition: 260ms;
+}
+
+/* Dark theme overrides */
+body[data-theme="dark"] {
+    --bg: #071224;
+    --surface: #071a28;
+    --muted: #9aa6b2;
+    --text: #e6eef6;
+    --accent: #60a5fa;
+    --accent-variant: #3b82f6;
+    --cell-border: #122433;
+    --gutter-bg: #062033;
+    --code-bg: #051826;
+    --output-bg: #021017;
+    --output-text: #cfe6ff;
+    --shadow: 0 8px 30px rgba(0, 0, 0, 0.6);
+}
+
+/* Ferrufi theme (custom accent) */
+body[data-theme="ferrufi"] {
+    --bg: #0b1020;
+    --surface: #0f1724;
+    --muted: #9aa0a6;
+    --text: #e6edf3;
+    --accent: #7c3aed; /* a pleasant purple */
+    --accent-variant: #5b21b6;
+    --cell-border: #172033;
+    --gutter-bg: #071025;
+    --code-bg: #08101a;
+    --output-bg: #070f1a;
+    --output-text: #dfe7ff;
+    --shadow: 0 10px 30px rgba(11, 13, 22, 0.7);
+}
+
+/* Page layout */
+html,
+body {
+    height: 100%;
+    margin: 0;
+    font-family:
+        Inter,
+        system-ui,
+        -apple-system,
+        "Segoe UI",
+        Roboto,
+        "Helvetica Neue",
+        Arial,
+        "Noto Sans",
+        sans-serif;
+    background: linear-gradient(180deg, var(--bg) 0%, var(--bg) 100%);
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    transition:
+        background var(--transition),
+        color var(--transition);
+}
+
+/* Header / Topbar */
+header.topbar {
+    height: var(--header-height);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 20px;
+    gap: 12px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent);
+    position: sticky;
+    top: 0;
+    z-index: 20;
+}
+
+header.topbar .left {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+header.topbar h1 {
+    font-size: 1.05rem;
+    margin: 0;
+    font-weight: 600;
+    letter-spacing: -0.2px;
+    color: var(--text);
+}
+
+.kernel-status {
+    font-size: 12px;
+    color: var(--muted);
+    padding: 6px 10px;
+    border-radius: 999px;
+    background: rgba(100, 116, 139, 0.04);
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* small indicator dot */
+.kernel-status::before {
+    content: "";
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--success);
+}
+
+/* Controls (buttons + theme selector) */
+.controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.controls button,
+.controls select {
+    height: 36px;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    padding: 0 12px;
+    font-size: 13px;
+    cursor: pointer;
+    background: rgba(255, 255, 255, 0.02);
+    color: var(--text);
+    transition:
+        background var(--transition-fast),
+        transform var(--transition-fast),
+        box-shadow var(--transition-fast);
+}
+
+.controls button:hover,
+.controls select:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow);
+}
+
+.controls button.primary {
+    background: linear-gradient(90deg, var(--accent), var(--accent-variant));
+    color: white;
+    border: none;
+}
+
+/* Notebook container */
+#notebook {
+    padding: 28px 20px;
+    max-width: var(--max-width);
+    margin: 0 auto;
+    box-sizing: border-box;
+}
+
+/* Cell layout */
+.cell {
+    background: var(--surface);
+    border: 1px solid var(--cell-border);
+    border-radius: var(--radius);
+    margin-bottom: 14px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+    transition:
+        transform var(--transition-fast),
+        box-shadow var(--transition);
+}
+
+/* Header of cell: prompt and toolbar */
+.cell-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.03);
+    gap: 12px;
+    background: linear-gradient(180deg, rgba(0, 0, 0, 0.01), transparent);
+}
+
+.cell-header .prompt {
+    font-family:
+        ui-monospace, SFMono-Regular, Menlo, Monaco, "Roboto Mono", monospace;
+    font-size: 13px;
+    color: var(--muted);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* Small badge for execution count */
+.cell-header .exec-count,
+.cell-output .exec-count {
+    min-width: 26px;
+    text-align: center;
+    display: inline-block;
+    color: var(--accent);
+    font-weight: 600;
+}
+
+/* Toolbar buttons */
+.cell-toolbar {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.cell-toolbar button {
+    height: 32px;
+    border-radius: 6px;
+    border: 1px solid rgba(0, 0, 0, 0.04);
+    padding: 0 8px;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 13px;
+}
+
+.cell-toolbar button:hover {
+    background: rgba(0, 0, 0, 0.03);
+    color: var(--text);
+}
+
+/* Body: code area */
+.cell-body {
+    padding: 12px;
+}
+
+textarea.code {
+    width: 100%;
+    min-height: 130px;
+    font-family:
+        ui-monospace, SFMono-Regular, Menlo, Monaco, "Roboto Mono", monospace;
+    font-size: 13px;
+    line-height: 1.45;
+    color: var(--text);
+    background: var(--code-bg);
+    border-radius: 6px;
+    border: 1px solid rgba(0, 0, 0, 0.04);
+    padding: 12px;
+    resize: vertical;
+    box-shadow: none;
+    outline: none;
+    transition:
+        box-shadow var(--transition-fast),
+        border-color var(--transition-fast);
+}
+
+textarea.code:focus {
+    border-color: var(--accent);
+    box-shadow: 0 6px 18px rgba(37, 99, 235, 0.08);
+}
+
+/* Output area */
+.cell-output {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px;
+    border-top: 1px solid rgba(0, 0, 0, 0.03);
+    background: linear-gradient(180deg, rgba(0, 0, 0, 0.01), transparent);
+}
+
+.cell-output .outprompt {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+    font-size: 13px;
+    color: var(--muted);
+    min-width: 76px;
+    text-align: right;
+    padding-right: 6px;
+}
+
+/* The output text box */
+pre.output {
+    background: var(--output-bg);
+    color: var(--output-text);
+    padding: 12px;
+    border-radius: 6px;
+    margin: 0;
+    white-space: pre-wrap;
+    overflow: auto;
+    flex: 1 1 auto;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+    font-size: 13px;
+}
+
+/* Smaller helper styles */
+.button-compact {
+    padding: 6px 8px;
+    font-size: 12px;
+}
+
+/* Running state modifier */
+.cell.running {
+    transform: translateY(-2px);
+    box-shadow: 0 16px 40px rgba(2, 6, 23, 0.12);
+}
+.cell.running .cell-header .prompt {
+    color: var(--accent);
+}
+
+/* Editor-ready visual hint */
+.cell.editor-ready {
+    border-left: 4px solid var(--accent);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.06);
+}
+.cell.editor-ready .cell-header::after {
+    content: "Editor";
+    background: var(--accent);
+    color: #fff;
+    font-size: 11px;
+    padding: 4px 8px;
+    border-radius: 999px;
+    margin-left: 8px;
+    display: inline-block;
+}
+
+/* Minimal mobile adjustments */
+@media (max-width: 640px) {
+    header.topbar {
+        padding: 10px;
+        align-items: flex-start;
+        gap: 8px;
+        flex-direction: column;
+        height: auto;
+    }
+
+    .controls {
+        width: 100%;
+        gap: 6px;
+        justify-content: flex-start;
+        flex-wrap: wrap;
+    }
+
+    .cell-header {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+    }
+
+    .cell-output {
+        flex-direction: column;
+    }
+
+    .cell-output .outprompt {
+        text-align: left;
+        min-width: 0;
+    }
+}
+
+/* accessibility: focus visible ring */
+button:focus,
+select:focus,
+textarea:focus {
+    outline: 3px solid rgba(99, 102, 241, 0.12);
+    outline-offset: 2px;
+}
+
+/* tiny helpers that JS might toggle */
+.hidden {
+    display: none !important;
+}
+
+/* ---------------------------
+   IDE Layout & Panels
+   --------------------------- */
+
+/* Workspace layout: left sidebar, main area, right sidebar */
+.workspace {
+    display: grid;
+    grid-template-columns: 220px 1fr 260px;
+    gap: 16px;
+    padding: 18px 20px;
+    align-items: start;
+    min-height: calc(100vh - var(--header-height) - 48px);
+    box-sizing: border-box;
+}
+
+/* Make sidebars collapsible by toggling the 'hidden' class */
+.left-sidebar,
+.right-sidebar {
+    background: linear-gradient(180deg, rgba(0, 0, 0, 0.01), transparent);
+    border: 1px solid var(--cell-border);
+    border-radius: 8px;
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-height: 200px;
+}
+
+/* Left panel specifics (cells / file explorer) */
+.left-sidebar .sidebar-header,
+.right-sidebar .sidebar-header {
+    font-weight: 600;
+    padding: 8px 6px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.03);
+    color: var(--muted);
+    font-size: 13px;
+}
+.left-sidebar .cell-list {
+    overflow: auto;
+    padding: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.left-sidebar .cell-list .cell-item {
+    padding: 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--text);
+    background: transparent;
+}
+.left-sidebar .cell-list .cell-item:hover {
+    background: rgba(0, 0, 0, 0.03);
+}
+
+/* Main area wraps the central editor / notebook content */
+.main-area {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-height: 300px;
+}
+
+/* Editor toolbar - thin bar for IDE actions */
+.editor-toolbar {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    padding: 6px 8px;
+    border-radius: 8px;
+}
+.editor-toolbar button {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(0, 0, 0, 0.04);
+    padding: 6px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    color: var(--text);
+}
+
+/* Console panel (collapsible) */
+.ide-console {
+    border-radius: 8px;
+    border: 1px solid var(--cell-border);
+    background: var(--surface);
+    padding: 8px;
+    box-shadow: var(--shadow);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    overflow: hidden;
+}
+
+/* Tabs for console */
+.console-tabs {
+    display: flex;
+    gap: 6px;
+}
+.console-tab {
+    padding: 6px 10px;
+    border-radius: 6px;
+    background: transparent;
+    border: 1px solid transparent;
+    cursor: pointer;
+    color: var(--muted);
+}
+.console-tab.active {
+    background: rgba(0, 0, 0, 0.04);
+    color: var(--text);
+    border-color: var(--cell-border);
+}
+
+/* Console body & output */
+.console-body {
+    max-height: 220px;
+    overflow: auto;
+    background: var(--code-bg);
+    border-radius: 6px;
+    padding: 10px;
+}
+.console-output {
+    margin: 0;
+    white-space: pre-wrap;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+    font-size: 13px;
+    color: var(--output-text);
+    min-height: 64px;
+}
+
+/* Status bar at bottom of the main area */
+.statusbar {
+    display: flex;
+    gap: 12px;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 10px;
+    font-size: 13px;
+    color: var(--muted);
+    border-top: 1px solid rgba(0, 0, 0, 0.03);
+    border-radius: 0 0 8px 8px;
+    background: linear-gradient(180deg, rgba(0, 0, 0, 0.01), transparent);
+}
+
+/* Kernel state fragment in header or status bar */
+#kernel-state {
+    font-weight: 600;
+    color: var(--accent);
+}
+
+/* Right sidebar inspector body */
+.inspector-content {
+    padding: 6px;
+    overflow: auto;
+    min-height: 120px;
+}
+
+/* Responsive tweaks: collapse sidebars on narrow screens */
+@media (max-width: 960px) {
+    .workspace {
+        grid-template-columns: 1fr;
+    }
+    .left-sidebar,
+    .right-sidebar {
+        display: none;
+    }
+}
+
+/* Utility: visible console */
+.ide-console.hidden {
+    display: none !important;
+}
+
+.notice {
+    padding: 8px 12px;
+    border-radius: 6px;
+    background: rgba(13, 28, 43, 0.04);
+    color: var(--muted);
+    font-size: 13px;
+    border: 1px dashed rgba(0, 0, 0, 0.03);
+}
+
+/* a small spinner used for run states (CSS-only) */
+.spinner {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.12);
+    border-left-color: var(--accent);
+    animation: spin 900ms linear infinite;
+    display: inline-block;
+    vertical-align: middle;
+}
+
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* Markdown preview rendering */
+.cell-markdown-preview {
+    padding: 14px 16px;
+    font-size: 15px;
+    line-height: 1.6;
+    color: var(--text);
+    background: linear-gradient(180deg, rgba(0, 0, 0, 0.01), transparent);
+    border-top: 1px solid rgba(0, 0, 0, 0.03);
+}
+.cell-markdown-preview h1,
+.cell-markdown-preview h2,
+.cell-markdown-preview h3 {
+    color: var(--text);
+    margin: 0.6em 0;
+}
+.cell-markdown-preview p {
+    margin: 0.5em 0;
+    color: var(--muted);
+}
+.cell-markdown-preview a {
+    color: var(--accent);
+    text-decoration: underline;
+}
+.cell-markdown-preview code {
+    background: var(--code-bg);
+    color: var(--text);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+    font-size: 0.95em;
+}
+.cell-markdown-preview pre {
+    background: var(--code-bg);
+    color: var(--text);
+    padding: 10px;
+    border-radius: 6px;
+    overflow: auto;
+    margin: 0.5em 0;
+}
+.cell-markdown-preview img {
+    max-width: 100%;
+    border-radius: 6px;
+    display: block;
+    margin: 8px 0;
+}
+.cell-markdown-preview blockquote {
+    margin: 8px 0;
+    padding-left: 12px;
+    border-left: 3px solid rgba(0, 0, 0, 0.06);
+    color: var(--muted);
+}
+
+/* Preview toggle button styling (small visual cue when active) */
+.preview-toggle {
+    border-color: transparent;
+    background: transparent;
+    color: var(--muted);
+    padding: 6px 8px;
+    border-radius: 6px;
+}
+.preview-toggle.active {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+}
+
+/* ---------------------------
+   Diagnostics & Problems styling
+   --------------------------- */
+
+/* Problems list */
+.problems-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+    font-size: 13px;
+    color: var(--muted);
+    max-height: 200px;
+    overflow: auto;
+}
+.problems-list .problem {
+    padding: 8px 10px;
+    border-radius: 6px;
+    background: linear-gradient(180deg, rgba(0, 0, 0, 0.01), transparent);
+    border: 1px solid rgba(0, 0, 0, 0.03);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+}
+.problems-list .problem:hover {
+    background: rgba(0, 0, 0, 0.03);
+}
+
+/* Severity colors */
+.problems-list .problem.error {
+    color: var(--danger);
+    border-left: 4px solid var(--danger);
+}
+.problems-list .problem.warning {
+    color: #b45309; /* amber/dark-yellow */
+    border-left: 4px solid #f59e0b;
+}
+.problems-list .problem.info {
+    color: var(--accent);
+    border-left: 4px solid var(--accent);
+}
+
+/* Small severity badge */
+.problems-list .problem::before {
+    content: "";
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex: 0 0 10px;
+    margin-right: 6px;
+    background: transparent;
+    opacity: 0.95;
+}
+.problems-list .problem.error::before {
+    background: var(--danger);
+}
+.problems-list .problem.warning::before {
+    background: #f59e0b;
+}
+.problems-list .problem.info::before {
+    background: var(--accent);
+}
+
+/* Inline diagnostics styling for editors (CodeMirror / fallback) */
+
+/* Generic inline marker used by the UI when decorating text ranges */
+.editor-diagnostic-inline {
+    background: rgba(220, 38, 38, 0.06); /* subtle red tint for errors */
+    border-left: 3px solid rgba(220, 38, 38, 0.16);
+    padding-left: 6px;
+    border-radius: 2px;
+}
+
+/* Wavy underline for diagnostic spans (works for plain textarea fallback via CSS class) */
+.cm-diagnostic {
+    text-decoration-line: underline;
+    text-decoration-style: wavy;
+    text-decoration-color: var(--danger);
+}
+
+/* Specific severity classes */
+.cm-diagnostic-error {
+    text-decoration-color: var(--danger);
+    background: rgba(239, 68, 68, 0.04);
+}
+.cm-diagnostic-warning {
+    text-decoration-color: #f59e0b;
+    background: rgba(245, 158, 11, 0.03);
+}
+.cm-diagnostic-info {
+    text-decoration-color: var(--accent);
+    background: rgba(96, 165, 250, 0.03);
+}
+
+/* Gutter marker for diagnostics (CodeMirror gutter or custom) */
+.cm-diagnostic-gutter {
+    color: var(--danger);
+    font-weight: 700;
+}
+
+/* Small helper for inline badge in editor lines */
+.editor-line-badge {
+    display: inline-block;
+    min-width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-right: 8px;
+}
+
+/* Make sure diagnostics remain readable on dark themes */
+body[data-theme="dark"] .problems-list .problem {
+    background: rgba(255, 255, 255, 0.02);
+    border-color: rgba(255, 255, 255, 0.02);
+}
+body[data-theme="ferrufi"] .problems-list .problem {
+    background: rgba(255, 255, 255, 0.02);
+    border-color: rgba(255, 255, 255, 0.02);
+}

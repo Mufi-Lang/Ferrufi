@@ -1,0 +1,333 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="utf-8" />
+        <title>Ferrufi Notebook (mufiz)</title>
+        <link rel="stylesheet" href="./styles.css" />
+    </head>
+    <body>
+        <header class="topbar">
+            <div class="left">
+                <h1>Ferrufi Notebook</h1>
+                <div id="kernel-status" class="kernel-status">
+                    Kernel: ready
+                </div>
+                <div
+                    id="editor-status"
+                    class="editor-status"
+                    title="Editor status"
+                >
+                    Editor: loading
+                </div>
+            </div>
+            <div id="controls" class="controls">
+                <button id="run-all" title="Run all cells">Run All</button>
+                <button id="add-cell">Add Cell</button>
+                <button id="add-markdown" title="Add a markdown cell">
+                    Add Markdown
+                </button>
+                <select id="theme-selector" aria-label="Select theme">
+                    <option value="light">Light</option>
+                    <option value="dark">Dark</option>
+                    <option value="ferrufi">Ferrufi</option>
+                </select>
+
+                <!-- IDE controls -->
+                <button id="restart-kernel" title="Restart kernel">
+                    Restart Kernel
+                </button>
+                <button id="toggle-console" title="Toggle console">
+                    Console
+                </button>
+
+                <button id="save-notebook" title="Save notebook">Save</button>
+                <button id="export-json" title="Export notebook (JSON)">
+                    Export JSON
+                </button>
+                <button id="export-html" title="Export notebook (HTML)">
+                    Export HTML
+                </button>
+                <button id="reload-editors" title="Reload editor (CodeMirror)">
+                    Reload Editors
+                </button>
+                <input
+                    id="interp-name"
+                    placeholder="interpreter name (eg mufiz_interpret)"
+                    style="
+                        width: 180px;
+                        padding: 6px;
+                        border-radius: 6px;
+                        border: 1px solid var(--cell-border);
+                    "
+                />
+                <button id="bind-interp" title="Try binding interpreter">
+                    Bind
+                </button>
+                <button id="inspect-module">Inspect Module</button>
+            </div>
+        </header>
+        <script>
+            (function () {
+                const edStatus = document.getElementById("editor-status");
+                if (edStatus) edStatus.textContent = "Editor: loading";
+                // allow other scripts to update the status: window.updateEditorStatus('ready'|'loading'|'error'|'reloading...')
+                window.updateEditorStatus = function (s) {
+                    try {
+                        if (edStatus) edStatus.textContent = "Editor: " + s;
+                    } catch (e) {}
+                };
+                const reloadBtn = document.getElementById("reload-editors");
+                if (reloadBtn) {
+                    reloadBtn.addEventListener("click", async () => {
+                        try {
+                            window.updateEditorStatus &&
+                                window.updateEditorStatus("reloading...");
+                            if (typeof window.loadCodeMirror === "function") {
+                                await window.loadCodeMirror();
+                            }
+                            // notify other scripts (app.js can listen for this event and refresh editors)
+                            window.dispatchEvent(
+                                new Event("ferrufi:reload-editors"),
+                            );
+                            window.updateEditorStatus &&
+                                window.updateEditorStatus("ready");
+                        } catch (err) {
+                            console.error("reload editors failed", err);
+                            window.updateEditorStatus &&
+                                window.updateEditorStatus("error");
+                        }
+                    });
+                }
+                // Optional: listen for an event when an editor is created and update status
+                window.addEventListener("ferrufi:editor-created", () => {
+                    window.updateEditorStatus &&
+                        window.updateEditorStatus("ready");
+                });
+            })();
+        </script>
+
+        <div id="workspace" class="workspace">
+            <aside id="left-sidebar" class="left-sidebar">
+                <div class="sidebar-header">
+                    <div
+                        class="view-toggle"
+                        role="tablist"
+                        aria-label="Workspace view"
+                    >
+                        <button
+                            id="view-files"
+                            class="view-btn"
+                            aria-pressed="false"
+                            title="Files view"
+                        >
+                            Files
+                        </button>
+                        <button
+                            id="view-notebook"
+                            class="view-btn active"
+                            aria-pressed="true"
+                            title="Notebook view"
+                        >
+                            Notebook
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Files area: file-like explorer (hidden by default, shown when 'Files' is active) -->
+                <div
+                    id="files-area"
+                    class="files-area hidden"
+                    aria-hidden="true"
+                >
+                    <div class="files-toolbar">
+                        <button
+                            id="new-file"
+                            class="button-compact"
+                            title="New file"
+                        >
+                            New File
+                        </button>
+                        <button
+                            id="new-folder"
+                            class="button-compact"
+                            title="New folder"
+                        >
+                            New Folder
+                        </button>
+                        <button
+                            id="upload-file"
+                            class="button-compact"
+                            title="Upload file"
+                        >
+                            Upload
+                        </button>
+                    </div>
+                    <div id="file-list" class="file-list" role="tree">
+                        <!-- Files will be populated here by JS -->
+                        <div class="file-placeholder">
+                            No files yet — create one with
+                            <strong>New File</strong>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Notebook area: shown when 'Notebook' view is active -->
+                <div id="notebook-area" class="notebook-area">
+                    <div
+                        id="cell-list"
+                        class="cell-list"
+                        aria-label="Cells list"
+                    >
+                        <!-- Cells list populated by JS -->
+                    </div>
+                    <div class="sidebar-footer">
+                        <button
+                            id="add-cell-left"
+                            class="button-compact"
+                            title="Add cell"
+                        >
+                            + Cell
+                        </button>
+                        <button
+                            id="collapse-sidebar"
+                            class="button-compact"
+                            title="Collapse sidebar"
+                        >
+                            Toggle
+                        </button>
+                    </div>
+                </div>
+            </aside>
+
+            <section id="main-area" class="main-area">
+                <main id="notebook">
+                    <!-- cells will be appended here -->
+                </main>
+
+                <!-- IDE console (collapsible) -->
+                <div
+                    id="ide-console"
+                    class="ide-console hidden"
+                    aria-hidden="true"
+                >
+                    <div class="console-tabs" role="tablist">
+                        <button class="console-tab active" data-tab="console">
+                            Console
+                        </button>
+                        <button class="console-tab" data-tab="kernel">
+                            Kernel
+                        </button>
+                        <button class="console-tab" data-tab="problems">
+                            Problems
+                        </button>
+                    </div>
+                    <div class="console-body">
+                        <div class="console-panel" data-panel="console">
+                            <pre
+                                id="console-output"
+                                class="output"
+                                aria-live="polite"
+                            ></pre>
+                        </div>
+                        <div class="console-panel hidden" data-panel="kernel">
+                            <pre
+                                id="kernel-output"
+                                class="output"
+                                aria-live="polite"
+                            ></pre>
+                        </div>
+                        <div
+                            class="console-panel hidden"
+                            data-panel="problems"
+                            role="region"
+                            aria-label="Problems"
+                        >
+                            <div id="problems-list" class="problems-list">
+                                <!-- Problems will be injected here -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Status bar -->
+                <div id="statusbar" class="statusbar">
+                    <div class="status-left">
+                        Cursor: <span id="cursor-pos">Ln 1, Col 1</span>
+                    </div>
+                    <div class="status-center">
+                        Lang: <span id="status-lang">mufiz</span>
+                    </div>
+                    <div class="status-right">
+                        Kernel: <span id="kernel-state">starting...</span>
+                    </div>
+                </div>
+            </section>
+
+            <aside id="right-sidebar" class="right-sidebar">
+                <div class="inspector">
+                    <h3>Inspector</h3>
+                    <div id="inspector-body">No info yet.</div>
+                </div>
+            </aside>
+        </div>
+
+        <template id="cell-template">
+            <section class="cell">
+                <div class="cell-header">
+                    <div
+                        class="left-header"
+                        style="display: flex; gap: 12px; align-items: center"
+                    >
+                        <div class="prompt">
+                            In [<span class="exec-count"></span>]:
+                        </div>
+                        <label
+                            class="cell-type-label"
+                            for="cell-type"
+                            style="font-size: 12px; color: var(--muted)"
+                            >Type</label
+                        >
+                        <select class="cell-type" aria-label="Cell type">
+                            <option value="code" selected>Code</option>
+                            <option value="markdown">Markdown</option>
+                        </select>
+                    </div>
+                    <div class="cell-toolbar">
+                        <button class="run" title="Run (Shift+Enter)">
+                            Run
+                        </button>
+                        <button class="move-up" title="Move up">↑</button>
+                        <button class="move-down" title="Move down">↓</button>
+                        <button class="delete" title="Delete cell">✕</button>
+                        <button class="clear-output" title="Clear output">
+                            Clear Output
+                        </button>
+                    </div>
+                </div>
+                <div class="cell-body">
+                    <div class="editor"></div>
+                    <textarea
+                        class="code fallback"
+                        spellcheck="false"
+                        style="display: none"
+                        placeholder="// enter mufiz code here"
+                    ></textarea>
+                </div>
+                <div class="cell-output">
+                    <div class="outprompt">
+                        Out [<span class="exec-count"></span>]:
+                    </div>
+                    <pre class="output" aria-live="polite"></pre>
+                </div>
+            </section>
+        </template>
+
+        <!-- client-side wasm glue removed; runtime is accessed via bun:ffi on the server -->
+        <!-- load CodeMirror (module loader) -->
+        <script type="module" src="./codemirror.js"></script>
+        <!-- Markdown renderer + sanitizer (used by markdown cells) -->
+        <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/dompurify@2.3.10/dist/purify.min.js"></script>
+        <script src="./app.js"></script>
+    </body>
+</html>
