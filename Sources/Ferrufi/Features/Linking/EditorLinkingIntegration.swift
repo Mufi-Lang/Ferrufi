@@ -368,6 +368,7 @@ private class LinkingTextViewDelegate: NSObject, NSTextViewDelegate {
 public struct LinkAutoCompletionView: View {
     @ObservedObject var integration: EditorLinkingIntegration
     let onSuggestionSelected: (String) -> Void
+    @EnvironmentObject var themeManager: ThemeManager
 
     public var body: some View {
         if integration.isShowingAutoCompletion && !integration.autoCompletionSuggestions.isEmpty {
@@ -382,7 +383,7 @@ public struct LinkAutoCompletionView: View {
                                 .foregroundColor(.secondary)
 
                             Text(suggestion)
-                                .font(.caption)
+                                .font(themeManager.monospacedCaption)
 
                             Spacer()
                         }
@@ -412,20 +413,21 @@ public struct LinkAutoCompletionView: View {
 /// SwiftUI view for link status indicator
 public struct LinkStatusView: View {
     @ObservedObject var integration: EditorLinkingIntegration
+    @EnvironmentObject var themeManager: ThemeManager
 
     public var body: some View {
         HStack {
             // Link count
             if !integration.currentLinks.isEmpty {
                 Label("\(integration.currentLinks.count)", systemImage: "link")
-                    .font(.caption)
+                    .font(themeManager.monospacedCaption)
                     .foregroundColor(.blue)
             }
 
             // Tag count
             if !integration.currentTags.isEmpty {
                 Label("\(integration.currentTags.count)", systemImage: "tag")
-                    .font(.caption)
+                    .font(themeManager.monospacedCaption)
                     .foregroundColor(.purple)
             }
 
@@ -434,7 +436,7 @@ public struct LinkStatusView: View {
                 !validation.brokenLinks.isEmpty
             {
                 Label("\(validation.brokenLinks.count)", systemImage: "exclamationmark.triangle")
-                    .font(.caption)
+                    .font(themeManager.monospacedCaption)
                     .foregroundColor(.orange)
             }
         }
@@ -484,6 +486,7 @@ public struct LinkingToolbarButtons: View {
 
 struct LinkInsertionDialog: View {
     @ObservedObject var integration: EditorLinkingIntegration
+    @EnvironmentObject var themeManager: ThemeManager
     @Environment(\.dismiss) var dismiss
 
     @State private var linkTarget = ""
@@ -492,7 +495,7 @@ struct LinkInsertionDialog: View {
     var body: some View {
         VStack(spacing: 16) {
             Text("Insert Link")
-                .font(.headline)
+                .font(themeManager.monospacedHeadline)
 
             TextField("Link Target", text: $linkTarget)
                 .textFieldStyle(.roundedBorder)
@@ -522,6 +525,7 @@ struct LinkInsertionDialog: View {
 
 struct TagInsertionDialog: View {
     @ObservedObject var integration: EditorLinkingIntegration
+    @EnvironmentObject var themeManager: ThemeManager
     @Environment(\.dismiss) var dismiss
 
     @State private var tagName = ""
@@ -529,7 +533,7 @@ struct TagInsertionDialog: View {
     var body: some View {
         VStack(spacing: 16) {
             Text("Insert Tag")
-                .font(.headline)
+                .font(themeManager.monospacedHeadline)
 
             TextField("Tag Name", text: $tagName)
                 .textFieldStyle(.roundedBorder)
@@ -561,10 +565,10 @@ extension Notification.Name {
 
 // MARK: - Preview
 
-struct EditorLinkingIntegration_Previews: PreviewProvider {
+struct EditorLinkingIntegration_Samples: PreviewProvider {
     static var previews: some View {
         VStack {
-            Text("Editor Linking Integration Preview")
+            Text("Editor Linking Integration Sample")
                 .font(.title)
             Text("Requires vault path to initialize properly")
                 .foregroundColor(.secondary)

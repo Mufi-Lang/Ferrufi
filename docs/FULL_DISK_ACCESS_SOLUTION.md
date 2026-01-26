@@ -209,7 +209,7 @@ Full Disk Access works even without:
 
 ### In README.md
 
-```markdown
+```
 ## First Launch Setup
 
 Ferrufi requires Full Disk Access to store your notes in `~/.ferrufi/`.
@@ -231,7 +231,7 @@ and write to these locations, even for files the app creates itself.
 
 ### In Release Notes
 
-```markdown
+```
 ## Important: Full Disk Access Required
 
 Ferrufi now properly requests Full Disk Access on first launch. This is 

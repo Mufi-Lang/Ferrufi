@@ -86,7 +86,7 @@ fi
 
 All releases (experimental and official) will note:
 
-```markdown
+```
 ## Build Information
 - Entitlements: Applied (file access enabled)
 

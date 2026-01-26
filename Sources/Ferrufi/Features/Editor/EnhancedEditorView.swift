@@ -6,15 +6,18 @@
 //
 
 import Combine
+import Foundation
 import SwiftUI
 
-/// Enhanced editor view with split-pane editing and live preview
+/// Enhanced editor view with split-pane editing and integrated REPL
 struct EnhancedEditorView: View {
     @Binding var note: Note?
     @Binding var content: String
 
     @State private var isEditing = false
-    @State private var showPreview = true
+
+    // Secondary pane modes removed — editor-only view
+
     @State private var showREPL = false
     @State private var showTerminal = false
     @State private var outputText: String = ""
@@ -27,70 +30,42 @@ struct EnhancedEditorView: View {
 
     @Environment(\.colorScheme) var colorScheme
     @EnvironmentObject var folderManager: FolderManager
+    @EnvironmentObject var themeManager: ThemeManager
 
     // Auto-save configuration
     private let autoSaveInterval: TimeInterval = 2.0
     private let autoSaveDelay: TimeInterval = 0.5
 
-    private var isMarkdownFile: Bool {
-        guard let note = note else { return false }
-        return note.filePath.lowercased().hasSuffix(".md")
-    }
+    // Helper removed
 
     var body: some View {
         VStack(spacing: 0) {
-            HSplitView {
-                // Editor pane
+            Group {
+                // Secondary pane support removed — single Mufi editor surface
                 VStack(spacing: 0) {
                     editorToolbar
-
                     UnifiedEditor(
                         text: $content,
                         isEditing: $isEditing,
-                        fileType: .markdown,
-                        showPreview: false,
+                        fileType: .mufi,
                         placeholder: "Start writing...",
-                        onTextChange: { newText in
-                            handleTextChange(newText)
-                        },
-                        onSave: {
-                            saveNote()
-                        }
+                        onTextChange: { newText in handleTextChange(newText) },
+                        onSave: { saveNote() }
                     )
+                    .environmentObject(themeManager)
                 }
                 .frame(minWidth: 300)
-
-                // Preview pane (if enabled)
-                if showPreview && isMarkdownFile {
-                    VStack(spacing: 0) {
-                        previewToolbar
-
-                        NativeMarkdownPreview(
-                            markdown: content,
-                            baseURL: note?.url?.deletingLastPathComponent()
-                        )
-                        .background(Color(NSColor.textBackgroundColor))
-                    }
-                    .frame(minWidth: 300)
-                }
             }
 
             // Terminal output (if enabled)
             if showTerminal {
                 Divider()
-
                 MufiTerminalView(
                     output: outputText,
                     exitStatus: exitStatus,
                     executionTime: executionTime,
-                    onClear: {
-                        clearTerminal()
-                    },
-                    onClose: {
-                        withAnimation {
-                            showTerminal = false
-                        }
-                    }
+                    onClear: { clearTerminal() },
+                    onClose: { withAnimation { showTerminal = false } }
                 )
                 .frame(height: 250)
                 .transition(.move(edge: .bottom))
@@ -99,25 +74,22 @@ struct EnhancedEditorView: View {
         .onAppear {
             setupAutoSave()
             setupNotificationObservers()
+            // Debug: log the resolved monospaced font family and size so we can confirm parity
+            print(
+                "EnhancedEditorView: editor font: \(themeManager.resolvedMonospacedFontName) @ \(themeManager.editorFontSize)pt"
+            )
         }
-        .onDisappear {
-            stopAutoSave()
-        }
+        .onDisappear { stopAutoSave() }
         .onReceive(NotificationCenter.default.publisher(for: .openWikiLink)) { notification in
-            if let noteName = notification.object as? String {
-                openWikiLink(noteName)
-            }
+            if let noteName = notification.object as? String { openWikiLink(noteName) }
         }
         .onReceive(NotificationCenter.default.publisher(for: .openFileLink)) { notification in
-            if let url = notification.object as? URL {
-                openFileLink(url)
-            }
+            if let url = notification.object as? URL { openFileLink(url) }
         }
-        // REPL sheet
         .sheet(isPresented: $showREPL) {
-            EmbeddedMufiREPLView()
-                .frame(minWidth: 700, minHeight: 500)
+            EmbeddedMufiREPLView().frame(minWidth: 700, minHeight: 500)
         }
+        .environment(\.font, themeManager.monospacedFont)
     }
 
     // MARK: - Editor Toolbar
@@ -132,54 +104,17 @@ struct EnhancedEditorView: View {
                     .frame(width: 8, height: 8)
 
                 Text(isEditing ? "Editing" : "Ready")
-                    .font(.caption)
+                    .font(themeManager.monospacedCaption)
                     .foregroundColor(.secondary)
             }
 
             Spacer()
 
-            // Formatting buttons
-            Group {
-                Button(action: { insertFormatting("**", "**", "bold text") }) {
-                    Image(systemName: "bold")
-                }
-                .help("Bold (⌘B)")
-
-                Button(action: { insertFormatting("*", "*", "italic text") }) {
-                    Image(systemName: "italic")
-                }
-                .help("Italic (⌘I)")
-
-                Button(action: { insertFormatting("[", "](url)", "link text") }) {
-                    Image(systemName: "link")
-                }
-                .help("Link (⌘K)")
-
-                Divider()
-                    .frame(height: 16)
-
-                Button(action: { insertList() }) {
-                    Image(systemName: "list.bullet")
-                }
-                .help("Insert List")
-
-                Button(action: { insertHeader() }) {
-                    Image(systemName: "textformat.size")
-                }
-                .help("Insert Header")
-            }
-            .buttonStyle(PlainButtonStyle())
-            .foregroundColor(.secondary)
+            // Formatting toolbar removed (deprecated)
 
             Spacer()
 
-            // Preview toggle
-            Button(action: { showPreview.toggle() }) {
-                Image(systemName: showPreview ? "eye.slash" : "eye")
-            }
-            .help("Toggle Preview")
-            .buttonStyle(PlainButtonStyle())
-            .foregroundColor(.secondary)
+            // Secondary pane removed (editor-only)
 
             // Run script
             Button(action: { runScript() }) {
@@ -196,6 +131,18 @@ struct EnhancedEditorView: View {
             .foregroundColor(.secondary)
             .disabled(isRunningScript)
 
+            // Font test: verify editor font parity
+            Button(action: {
+                let snippet =
+                    "\n\nSPLIT-EDITOR FONT TEST:\n0123456789 abcdefgh ABCDEFGH\n`inline code sample`\n\n"
+                handleTextChange(content + snippet)
+            }) {
+                Image(systemName: "textformat.abc")
+            }
+            .buttonStyle(PlainButtonStyle())
+            .help("Insert font test snippet")
+            .foregroundColor(.secondary)
+
             // Open REPL
             Button(action: { showREPL.toggle() }) {
                 Image(systemName: "terminal")
@@ -210,33 +157,12 @@ struct EnhancedEditorView: View {
         .border(Color(NSColor.separatorColor), width: 0.5)
     }
 
-    // MARK: - Preview Toolbar
+    // MARK: - Secondary Toolbar
 
     @ViewBuilder
-    private var previewToolbar: some View {
-        HStack {
-            Text("Preview")
-                .font(.caption)
-                .foregroundColor(.secondary)
-
-            Spacer()
-
-            // Word count
-            if let wordCount = getWordCount() {
-                Text("\(wordCount) words")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-
-            // Character count
-            Text("\(content.count) characters")
-                .font(.caption)
-                .foregroundColor(.secondary)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(Color(NSColor.controlBackgroundColor))
-        .border(Color(NSColor.separatorColor), width: 0.5)
+    private var secondaryToolbar: some View {
+        // Secondary toolbar removed
+        EmptyView()
     }
 
     // MARK: - Text Handling
@@ -246,22 +172,7 @@ struct EnhancedEditorView: View {
         scheduleAutoSave()
     }
 
-    private func insertFormatting(_ prefix: String, _ suffix: String, _ placeholder: String) {
-        // This would need to communicate with the MarkdownEditor to insert text
-        // For now, we'll post a notification that the editor can listen to
-        NotificationCenter.default.post(
-            name: .insertMarkdownFormatting,
-            object: MarkdownFormatting(prefix: prefix, suffix: suffix, placeholder: placeholder)
-        )
-    }
-
-    private func insertList() {
-        NotificationCenter.default.post(name: .insertMarkdownList, object: nil)
-    }
-
-    private func insertHeader() {
-        NotificationCenter.default.post(name: .insertMarkdownHeader, object: nil)
-    }
+    // Formatting helper functions removed
 
     // MARK: - Auto-save
 
@@ -365,19 +276,16 @@ struct EnhancedEditorView: View {
     }
 
     private func openFileLink(_ url: URL) {
-        // Handle file:// links to other notes or attachments
-        if url.pathExtension == "md" {
-            Task {
-                if let foundNote = await folderManager.findNoteByURL(url) {
-                    await MainActor.run {
-                        note = foundNote
-                        NotificationCenter.default.post(name: .navigateToNote, object: foundNote)
-                    }
+        Task {
+            if let foundNote = await folderManager.findNoteByURL(url) {
+                await MainActor.run {
+                    note = foundNote
+                    NotificationCenter.default.post(name: .navigateToNote, object: foundNote)
                 }
+            } else {
+                // Open external file
+                NSWorkspace.shared.open(url)
             }
-        } else {
-            // Open external file
-            NSWorkspace.shared.open(url)
         }
     }
 
@@ -413,20 +321,12 @@ struct EnhancedEditorView: View {
 
 // MARK: - Supporting Types
 
-struct MarkdownFormatting {
-    let prefix: String
-    let suffix: String
-    let placeholder: String
-}
+// Formatting removed
 
 // MARK: - Notification Extensions
 
-extension Notification.Name {
-    static let insertMarkdownFormatting = Notification.Name("insertMarkdownFormatting")
-    static let insertMarkdownList = Notification.Name("insertMarkdownList")
-    static let insertMarkdownHeader = Notification.Name("insertMarkdownHeader")
-    static let navigateToNote = Notification.Name("navigateToNote")
-}
+// Notification names for editor actions are centralized in
+// `Ferrufi/Sources/Ferrufi/Features/Editor/EditorNotifications.swift`.
 
 // MARK: - FolderManager Extensions
 
@@ -471,16 +371,17 @@ extension FolderManager {
     }
 }
 
-// MARK: - Preview
+// MARK: - SwiftUI Samples
 
-struct EnhancedEditorView_Previews: PreviewProvider {
+struct EnhancedEditorView_Samples: PreviewProvider {
     static var previews: some View {
         EnhancedEditorView(
             note: .constant(Note.sample),
             content: .constant(
-                "# Sample Note\n\nThis is a **sample** note with *italic* text and a [link](https://example.com).\n\n## Code Example\n\n```swift\nprint(\"Hello, World!\")\n```"
+                "// Sample Mufi Script\n\nprint(\"Hello, Mufi!\")\n\n// Example function\nfunc greet(name) {\n    print(\"Hello, \\(name)!\")\n}\ngreet(\"World\")"
             )
         )
         .environmentObject(FolderManager())
+        .environmentObject(ThemeManager())
     }
 }

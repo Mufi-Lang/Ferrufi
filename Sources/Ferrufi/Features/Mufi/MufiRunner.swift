@@ -279,6 +279,7 @@ public struct MufiREPLView: View {
     @StateObject private var repl = MufiREPL()
     @State private var inputText: String = ""
     @FocusState private var inputFocused: Bool
+    @EnvironmentObject var themeManager: ThemeManager
     // Simple autoscroll anchor
     private let bottomId = UUID()
 
@@ -288,7 +289,7 @@ public struct MufiREPLView: View {
         VStack(spacing: 0) {
             HStack {
                 Text("Mufi REPL")
-                    .font(.headline)
+                    .font(themeManager.monospacedHeadline)
                 Spacer()
                 Button(action: toggleStartStop) {
                     Image(systemName: repl.isRunning ? "stop.circle" : "play.circle")
@@ -313,7 +314,7 @@ public struct MufiREPLView: View {
                 ScrollView {
                     // Use a monospaced text for console output
                     Text(repl.output)
-                        .font(.system(size: 13, design: .monospaced))
+                        .font(themeManager.monospacedFont(ofSize: 13))
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding()
                         .id(bottomId)

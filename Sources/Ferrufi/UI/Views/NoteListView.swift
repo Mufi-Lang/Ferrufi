@@ -335,7 +335,7 @@ struct NoteListRowView: View {
                     .font(.headline)
                     .lineLimit(1)
 
-                Text(contentPreview)
+                Text(contentSnippet)
                     .font(.body)
                     .foregroundColor(.secondary)
                     .lineLimit(2)
@@ -379,7 +379,7 @@ struct NoteListRowView: View {
         .padding(.vertical, 4)
     }
 
-    private var contentPreview: String {
+    private var contentSnippet: String {
         let content = note.content
             .replacingOccurrences(of: #"\[([^\]]+)\]"#, with: "", options: .regularExpression)
             .replacingOccurrences(of: "#", with: "")
@@ -401,7 +401,7 @@ struct NoteGridItemView: View {
                 .lineLimit(2)
                 .multilineTextAlignment(.leading)
 
-            Text(contentPreview)
+            Text(contentSnippet)
                 .font(.body)
                 .foregroundColor(.secondary)
                 .lineLimit(4)
@@ -441,7 +441,7 @@ struct NoteGridItemView: View {
         .background(Color.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
     }
 
-    private var contentPreview: String {
+    private var contentSnippet: String {
         let content = note.content
             .replacingOccurrences(of: #"\[([^\]]+)\]"#, with: "", options: .regularExpression)
             .replacingOccurrences(of: "#", with: "")
@@ -536,7 +536,7 @@ enum SortDirection: CaseIterable, Sendable {
     }
 }
 
-struct NoteListView_Previews: PreviewProvider {
+struct NoteListView_Samples: PreviewProvider {
     static var previews: some View {
         NavigationSplitView {
             SidebarView()

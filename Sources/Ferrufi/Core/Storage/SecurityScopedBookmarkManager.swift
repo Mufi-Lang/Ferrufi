@@ -408,7 +408,7 @@ public class SecurityScopedBookmarkManager: ObservableObject {
                     "Ferrufi needs access to: \(path)\n\nPlease select this folder to grant access.",
                 defaultDirectory: URL(fileURLWithPath: path),
                 showHidden: false
-            ) { [weak self] url in
+            ) { url in
                 if let url = url {
                     // URL has an active security scope already
                     completion(url)

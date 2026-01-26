@@ -5,7 +5,6 @@
 //  Created on 2024-12-19.
 //
 
-import AppKit
 import Foundation
 
 /// Utility class for advanced file operations including import/export and batch operations
@@ -13,145 +12,7 @@ class FileOperations {
 
     // MARK: - Import Operations
 
-    /// Import markdown files from a directory
-    static func importMarkdownFiles(from sourceURL: URL, to targetFolder: Folder) throws
-        -> [Note]
-    {
-        let fileManager = FileManager.default
-        var importedNotes: [Note] = []
-
-        // Get all markdown files in source directory
-        let resourceKeys: [URLResourceKey] = [.isRegularFileKey, .nameKey]
-        guard
-            let urls = try? fileManager.contentsOfDirectory(
-                at: sourceURL,
-                includingPropertiesForKeys: resourceKeys,
-                options: [.skipsHiddenFiles]
-            )
-        else {
-            throw FerrufiError.fileSystem(.readError("Cannot enumerate source directory"))
-        }
-
-        for fileURL in urls {
-            guard fileURL.pathExtension == "md" else { continue }
-
-            do {
-                let content = try String(contentsOf: fileURL, encoding: .utf8)
-                let fileName = fileURL.deletingPathExtension().lastPathComponent
-
-                let targetURL = targetFolder.url.appendingPathComponent(fileURL.lastPathComponent)
-
-                // Copy file to target location
-                try fileManager.copyItem(at: fileURL, to: targetURL)
-
-                // Create note object
-                let note = Note(
-                    title: fileName,
-                    content: content,
-                    filePath: targetURL.path
-                )
-
-                importedNotes.append(note)
-
-            } catch {
-                print("Failed to import file \(fileURL.lastPathComponent): \(error)")
-            }
-        }
-
-        return importedNotes
-    }
-
-    /// Import Obsidian workspace
-    @available(*, deprecated, message: "Use importObsidianWorkspace(from:to:) instead")
-    static func importObsidianVault(from vaultURL: URL, to targetFolder: Folder) throws
-        -> ImportResult
-    {
-        return try importObsidianWorkspace(from: vaultURL, to: targetFolder)
-    }
-
-    static func importObsidianWorkspace(from workspaceURL: URL, to targetFolder: Folder) throws
-        -> ImportResult
-    {
-        var importedNotes: [Note] = []
-        var importedAttachments: [URL] = []
-
-        let fileManager = FileManager.default
-
-        func processDirectory(at url: URL) throws {
-            let urls = try fileManager.contentsOfDirectory(
-                at: url,
-                includingPropertiesForKeys: [.isRegularFileKey, .isDirectoryKey],
-                options: [.skipsHiddenFiles]
-            )
-
-            for fileURL in urls {
-                let resourceValues = try fileURL.resourceValues(forKeys: [.isDirectoryKey])
-
-                if resourceValues.isDirectory == true {
-                    try processDirectory(at: fileURL)
-                } else {
-                    let pathExtension = fileURL.pathExtension.lowercased()
-
-                    if pathExtension == "md" {
-                        // Import markdown file
-                        let content = try String(contentsOf: fileURL, encoding: .utf8)
-                        let processedContent = processObsidianContent(content)
-
-                        let targetURL = targetFolder.url.appendingPathComponent(
-                            fileURL.lastPathComponent)
-                        try processedContent.write(to: targetURL, atomically: true, encoding: .utf8)
-
-                        let note = Note(
-                            title: fileURL.deletingPathExtension().lastPathComponent,
-                            content: processedContent,
-                            filePath: targetURL.path
-                        )
-
-                        importedNotes.append(note)
-
-                    } else if ["png", "jpg", "jpeg", "gif", "pdf", "mp4", "mov"].contains(
-                        pathExtension)
-                    {
-                        // Import attachment
-                        let attachmentsFolder = targetFolder.url.appendingPathComponent(
-                            "attachments", isDirectory: true)
-                        try fileManager.createDirectory(
-                            at: attachmentsFolder, withIntermediateDirectories: true)
-
-                        let targetURL = attachmentsFolder.appendingPathComponent(
-                            fileURL.lastPathComponent)
-                        try fileManager.copyItem(at: fileURL, to: targetURL)
-
-                        importedAttachments.append(targetURL)
-                    }
-                }
-            }
-        }
-
-        try processDirectory(at: workspaceURL)
-
-        return ImportResult(notes: importedNotes, attachments: importedAttachments)
-    }
-
-    /// Process Obsidian-specific markdown content
-    private static func processObsidianContent(_ content: String) -> String {
-        var processedContent = content
-
-        // Convert Obsidian wiki links to standard format if needed
-        // Example: [[Note Name]] stays as [[Note Name]]
-
-        // Convert Obsidian tags to standard format
-        // Example: #tag stays as #tag
-
-        // Convert attachment links
-        processedContent = processedContent.replacingOccurrences(
-            of: #"!\[\[([^\]]+)\]\]"#,
-            with: "![attachment](attachments/$1)",
-            options: .regularExpression
-        )
-
-        return processedContent
-    }
+    // Obsidian import & processing removed.
 
     // MARK: - Export Operations
 
@@ -169,13 +30,9 @@ class FileOperations {
             let content: String
 
             switch format {
-            case .markdown:
-                fileName = "\(note.title).md"
+            case .mufi:
+                fileName = "\(note.title).mufi"
                 content = note.content
-
-            case .html:
-                fileName = "\(note.title).html"
-                content = convertMarkdownToHTML(note.content)
 
             case .pdf:
                 // PDF export not implemented yet
@@ -183,7 +40,7 @@ class FileOperations {
 
             case .plainText:
                 fileName = "\(note.title).txt"
-                content = stripMarkdown(note.content)
+                content = note.content
             }
 
             let fileURL = destinationURL.appendingPathComponent(fileName)
@@ -201,7 +58,7 @@ class FileOperations {
             guard let sourceURL = note.url else { continue }
 
             let newTitle = note.title.replacingOccurrences(of: pattern, with: replacement)
-            let newFileName = "\(newTitle).md"
+            let newFileName = "\(newTitle).mufi"
             let destinationURL = sourceURL.deletingLastPathComponent().appendingPathComponent(
                 newFileName)
 
@@ -251,123 +108,7 @@ class FileOperations {
 
     // MARK: - Content Processing
 
-    /// Convert markdown to HTML
-    ///
-    /// This is a lightweight converter that avoids using AppKit conversions which
-    /// caused mismatches between `AttributedString` and `NSAttributedString` APIs.
-    /// It performs safe HTML escaping and a few common inline Markdown replacements
-    /// to produce a simple HTML representation suitable for export.
-    private static func convertMarkdownToHTML(_ markdown: String) -> String {
-        let trimmed = markdown.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return "" }
-
-        // Escape HTML special chars first
-        func escapeHTML(_ s: String) -> String {
-            return s.replacingOccurrences(of: "&", with: "&amp;")
-                .replacingOccurrences(of: "<", with: "&lt;")
-                .replacingOccurrences(of: ">", with: "&gt;")
-        }
-
-        // Helper to run a regex replacement
-        func replacingRegex(_ input: String, pattern: String, template: String) -> String {
-            guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else {
-                return input
-            }
-            let range = NSRange(location: 0, length: (input as NSString).length)
-            return regex.stringByReplacingMatches(
-                in: input, options: [], range: range, withTemplate: template)
-        }
-
-        // Start from escaped text
-        var html = escapeHTML(markdown)
-
-        // Handle fenced code blocks (```): convert to <pre><code> blocks
-        // We'll keep the inner content escaped (already escaped above).
-        var processedLines: [String] = []
-        var inCodeBlock = false
-        for line in html.components(separatedBy: "\n") {
-            if line.trimmingCharacters(in: .whitespaces).hasPrefix("```") {
-                if inCodeBlock {
-                    processedLines.append("</code></pre>")
-                    inCodeBlock = false
-                } else {
-                    processedLines.append("<pre><code>")
-                    inCodeBlock = true
-                }
-            } else {
-                processedLines.append(line)
-            }
-        }
-        html = processedLines.joined(separator: "\n")
-
-        // Inline code `code`
-        html = replacingRegex(html, pattern: "`([^`]+)`", template: "<code>$1</code>")
-
-        // Bold **strong**
-        html = replacingRegex(html, pattern: "\\*\\*(.*?)\\*\\*", template: "<strong>$1</strong>")
-
-        // Italic *em*
-        html = replacingRegex(html, pattern: "\\*(.*?)\\*", template: "<em>$1</em>")
-
-        // Links [text](url)
-        html = replacingRegex(
-            html, pattern: "\\[([^\\]]+)\\]\\(([^)]+)\\)", template: "<a href=\"$2\">$1</a>")
-
-        // Headings: convert lines starting with 1-6 hashes to <h1>..</h6>
-        let lines = html.components(separatedBy: "\n")
-        var outLines: [String] = []
-        for line in lines {
-            let trimmedLine = line.trimmingCharacters(in: .whitespaces)
-            var headerLevel = 0
-            for ch in trimmedLine {
-                if ch == "#" { headerLevel += 1 } else { break }
-            }
-            if headerLevel > 0 {
-                // ensure there's a space after hashes
-                let after = trimmedLine.dropFirst(headerLevel)
-                if after.first == " " {
-                    let content = String(after.dropFirst()).trimmingCharacters(in: .whitespaces)
-                    let level = min(headerLevel, 6)
-                    outLines.append("<h\(level)>\(content)</h\(level)>")
-                    continue
-                }
-            }
-            outLines.append(line)
-        }
-        html = outLines.joined(separator: "\n")
-
-        // Convert remaining newlines to <br/> for simple paragraph handling
-        // but preserve existing block tags by only replacing single newlines not adjacent to block tags.
-        html = html.replacingOccurrences(of: "\n", with: "<br/>")
-
-        // Wrap in a container
-        return "<div>\(html)</div>"
-    }
-
-    /// Strip markdown formatting
-    private static func stripMarkdown(_ markdown: String) -> String {
-        var text = markdown
-
-        // Remove headers
-        text = text.replacingOccurrences(of: #"^#{1,6}\s+"#, with: "", options: .regularExpression)
-
-        // Remove bold/italic
-        text = text.replacingOccurrences(
-            of: #"\*\*([^*]+)\*\*"#, with: "$1", options: .regularExpression)
-        text = text.replacingOccurrences(
-            of: #"\*([^*]+)\*"#, with: "$1", options: .regularExpression)
-
-        // Remove links
-        text = text.replacingOccurrences(
-            of: #"\[([^\]]+)\]\([^)]+\)"#, with: "$1", options: .regularExpression)
-
-        // Remove code blocks
-        text = text.replacingOccurrences(
-            of: #"```[\s\S]*?```"#, with: "", options: .regularExpression)
-        text = text.replacingOccurrences(of: #"`([^`]+)`"#, with: "$1", options: .regularExpression)
-
-        return text
-    }
+    // Content-processing helpers for deprecated Markdown support have been removed.
 
     // MARK: - File System Utilities
 
@@ -413,15 +154,13 @@ class FileOperations {
 // MARK: - Supporting Types
 
 enum ExportFormat: String, CaseIterable, Sendable {
-    case markdown = "md"
-    case html = "html"
+    case mufi = "mufi"
     case pdf = "pdf"
     case plainText = "txt"
 
     var displayName: String {
         switch self {
-        case .markdown: return "Markdown"
-        case .html: return "HTML"
+        case .mufi: return "Mufi"
         case .pdf: return "PDF"
         case .plainText: return "Plain Text"
         }

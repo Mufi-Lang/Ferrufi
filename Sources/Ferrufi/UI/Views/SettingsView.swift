@@ -949,7 +949,7 @@ enum SettingsTab: String, CaseIterable {
     case about = "about"
 }
 
-struct SettingsView_Previews: PreviewProvider {
+struct SettingsView_Samples: PreviewProvider {
     public static var previews: some View {
         SettingsView()
             .environmentObject(FerrufiApp())

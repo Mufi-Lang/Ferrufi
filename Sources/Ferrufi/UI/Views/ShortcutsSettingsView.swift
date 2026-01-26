@@ -423,7 +423,7 @@ struct ShortcutEditorView: View {
 
 // MARK: - Previews
 
-struct ShortcutsSettingsView_Previews: PreviewProvider {
+struct ShortcutsSettingsView_Samples: PreviewProvider {
     static var previews: some View {
         ShortcutsSettingsView()
             .environmentObject(FerrufiApp())

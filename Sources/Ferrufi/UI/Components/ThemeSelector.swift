@@ -112,7 +112,7 @@ struct ThemePreviewCard: View {
     var body: some View {
         Button(action: onSelect) {
             VStack(spacing: 0) {
-                // Preview area with mock UI elements
+                // Sample area with mock UI elements
                 VStack(spacing: 8) {
                     // Mock window bar
                     HStack {

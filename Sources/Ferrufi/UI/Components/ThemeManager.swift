@@ -5,7 +5,9 @@
 //  Sophisticated theme system inspired by Ghostty with beautiful color palettes
 //
 
+import AppKit
 import Combine
+import CoreText
 import Foundation
 import SwiftUI
 
@@ -21,6 +23,85 @@ public class ThemeManager: ObservableObject {
     @Published public var cornerRadius: CornerRadius = .medium
     @Published public var animationSpeed: AnimationSpeed = .normal
 
+    // Editor font settings (user-configurable)
+    @Published public var editorFontName: String = "Menlo"
+    @Published public var editorFontSize: Double = 14.0
+
+    // STRICT MODE: enforce monospaced fonts in the editor (global).
+    // When `enforceMonospacedEditorFonts` is true, the editor will always use a
+    // monospaced font; if `forcedMonospacedEditorFontName` is set and available
+    // it will be used, otherwise the system monospaced font is used.
+    @Published public var enforceMonospacedEditorFonts: Bool = true
+    @Published public var forcedMonospacedEditorFontName: String? = nil
+
+    // Canonical monospaced font resolution and helpers
+    //
+    // This centralizes monospaced font selection into one canonical "resolved" name,
+    // and provides NSFont / Font helpers that always use that resolved name.
+    // Behavior:
+    // - If strict mode is enabled and a forced font name is provided and available,
+    //   it will be used.
+    // - Otherwise, if the configured editor font is available and appears monospaced,
+    //   it will be used.
+    // - Otherwise fallback to the system monospaced font.
+    public var resolvedMonospacedFontName: String {
+        // 1) strict forced name wins if enabled and available
+        if enforceMonospacedEditorFonts, let forced = forcedMonospacedEditorFontName,
+            NSFont(name: forced, size: CGFloat(editorFontSize)) != nil
+        {
+            return forced
+        }
+
+        // 2) use configured editor font if it appears monospaced (heuristic)
+        if let custom = NSFont(name: editorFontName, size: CGFloat(editorFontSize)) {
+            let narrow = ("i" as NSString).size(withAttributes: [.font: custom]).width
+            let wide = ("W" as NSString).size(withAttributes: [.font: custom]).width
+            if abs(narrow - wide) < 0.5 {
+                return custom.fontName
+            }
+        }
+
+        // 3) fallback to system monospaced font name
+        return NSFont.monospacedSystemFont(ofSize: CGFloat(editorFontSize), weight: .regular)
+            .fontName
+    }
+
+    /// Returns an NSFont using the canonical monospaced name at the requested size,
+    /// falling back to the system monospaced font if the named font is missing.
+    public func resolvedMonospacedNSFont(ofSize size: CGFloat) -> NSFont {
+        if let f = NSFont(name: resolvedMonospacedFontName, size: size) {
+            return f
+        }
+        return NSFont.monospacedSystemFont(ofSize: size, weight: .regular)
+    }
+
+    /// Returns a SwiftUI Font using the canonical monospaced name at the requested size,
+    /// falling back to the system monospaced font if the named font is missing.
+    public func resolvedMonospacedFont(ofSize size: CGFloat) -> Font {
+        if NSFont(name: resolvedMonospacedFontName, size: size) != nil {
+            return Font.custom(resolvedMonospacedFontName, size: size)
+        }
+        return Font.system(size: size, design: .monospaced)
+    }
+
+    // Core helpers used across the UI:
+    public var monospacedNSFont: NSFont {
+        resolvedMonospacedNSFont(ofSize: CGFloat(editorFontSize))
+    }
+    public var monospacedFont: Font { resolvedMonospacedFont(ofSize: CGFloat(editorFontSize)) }
+
+    // Common style helpers (headline/caption) that use the same canonical font family
+    public var monospacedHeadline: Font {
+        resolvedMonospacedFont(ofSize: CGFloat(editorFontSize + 2))
+    }
+    public var monospacedCaption: Font {
+        resolvedMonospacedFont(ofSize: max(CGFloat(editorFontSize) - 2, 10))
+    }
+
+    // Convenience for arbitrary sizes
+    public func monospacedFont(ofSize size: CGFloat) -> Font {
+        resolvedMonospacedFont(ofSize: size)
+    }
     // MARK: - Private Properties
 
     private var cancellables = Set<AnyCancellable>()
@@ -33,12 +114,27 @@ public class ThemeManager: ObservableObject {
         static let lineSpacing = "Ferrufi.lineSpacing"
         static let cornerRadius = "Ferrufi.cornerRadius"
         static let animationSpeed = "Ferrufi.animationSpeed"
+
+        // Editor font keys
+        static let editorFontName = "Ferrufi.editorFontName"
+        static let editorFontSize = "Ferrufi.editorFontSize"
     }
 
     // MARK: - Initialization
 
     public init() {
+        // Migrate any legacy editor settings first, then load and bind current settings
+        migrateLegacyEditorSettings()
         loadSettings()
+
+        // Ensure strict enforcement uses a guaranteed monospaced system font by default
+        // if enforcement is enabled and no explicit forced font name was set yet.
+        if enforceMonospacedEditorFonts, forcedMonospacedEditorFontName == nil {
+            forcedMonospacedEditorFontName =
+                NSFont.monospacedSystemFont(ofSize: CGFloat(editorFontSize), weight: .regular)
+                .fontName
+        }
+
         setupBindings()
     }
 
@@ -87,6 +183,41 @@ public class ThemeManager: ObservableObject {
             self?.saveSettings()
         }
         .store(in: &cancellables)
+
+        // Persist editor font changes as well and update syntax-highlighter fonts.
+        Publishers.CombineLatest($editorFontName, $editorFontSize)
+            .dropFirst()
+            .sink { [weak self] name, size in
+                self?.saveSettings()
+
+                // Debug: report how the configured editor font resolves to a monospaced font
+                // If the configured font exists and appears monospaced (heuristic: compare 'i' and 'W' advance widths),
+                // we will use it; otherwise we fall back to the system monospaced font and log that decision.
+                if let customFont = NSFont(name: name, size: CGFloat(size)) {
+                    let wI = ("i" as NSString).size(withAttributes: [.font: customFont]).width
+                    let wW = ("W" as NSString).size(withAttributes: [.font: customFont]).width
+                    if abs(wI - wW) < 0.5 {
+                        print(
+                            "ThemeManager: editor font '\(name)' @ \(size) detected as monospaced — using '\(customFont.fontName)' @ \(customFont.pointSize)"
+                        )
+                    } else {
+                        let fallback = NSFont.monospacedSystemFont(
+                            ofSize: CGFloat(size), weight: .regular)
+                        print(
+                            "ThemeManager: editor font '\(name)' @ \(size) is NOT monospaced — falling back to system monospaced '\(fallback.fontName)' @ \(fallback.pointSize)"
+                        )
+                    }
+                } else {
+                    let fallback = NSFont.monospacedSystemFont(
+                        ofSize: CGFloat(size), weight: .regular)
+                    print(
+                        "ThemeManager: editor font '\(name)' @ \(size) not found — falling back to system monospaced '\(fallback.fontName)' @ \(fallback.pointSize)"
+                    )
+                }
+            }
+            .store(in: &cancellables)
+
+        // Initialize highlighter fonts from current settings so editors/highlighters are unified on startup
     }
 
     private func loadSettings() {
@@ -119,6 +250,14 @@ public class ThemeManager: ObservableObject {
         {
             self.animationSpeed = animationSpeed
         }
+
+        // Editor font settings
+        if let savedFontName = userDefaults.string(forKey: Keys.editorFontName) {
+            self.editorFontName = savedFontName
+        }
+        if let savedFontSize = userDefaults.object(forKey: Keys.editorFontSize) as? Double {
+            self.editorFontSize = savedFontSize
+        }
     }
 
     private func saveSettings() {
@@ -127,6 +266,23 @@ public class ThemeManager: ObservableObject {
         userDefaults.set(lineSpacing.rawValue, forKey: Keys.lineSpacing)
         userDefaults.set(cornerRadius.rawValue, forKey: Keys.cornerRadius)
         userDefaults.set(animationSpeed.rawValue, forKey: Keys.animationSpeed)
+
+        // Editor font persistence
+        userDefaults.set(editorFontName, forKey: Keys.editorFontName)
+        userDefaults.set(editorFontSize, forKey: Keys.editorFontSize)
+    }
+
+    /// Migrate legacy editor-related settings into the new keys (best-effort).
+    /// This helps upgrade users who previously stored editor preferences under old keys.
+    private func migrateLegacyEditorSettings() {
+        // Example legacy keys that were used historically; if present, migrate them.
+        if let legacyName = userDefaults.string(forKey: "Ferrufi.editorFont") {
+            userDefaults.set(legacyName, forKey: Keys.editorFontName)
+        }
+        if let legacySize = userDefaults.object(forKey: "Ferrufi.editorFontSize") as? Double {
+            userDefaults.set(legacySize, forKey: Keys.editorFontSize)
+        }
+        // Add any future migration mappings here.
     }
 }
 

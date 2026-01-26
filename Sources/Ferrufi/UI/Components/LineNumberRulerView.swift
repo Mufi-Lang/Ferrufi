@@ -78,18 +78,27 @@ final class LineNumberRulerView: NSRulerView {
             // Determine the character index for the start of the line
             let charIndex = layoutManager.characterIndexForGlyph(at: lineGlyphRange.location)
 
-            // Line number is number of newline separators before charIndex + 1
-            let prefix = (textView.string as NSString).substring(
-                with: NSRange(location: 0, length: charIndex))
-            let lineNumber = prefix.components(separatedBy: "\n").count + 1
+            // Compute the 1-based line number by counting newline separators before charIndex.
+            // `components(separatedBy:)` returns 1 element for an empty prefix, so its count is already the correct 1-based line number.
+            let nsString = textView.string as NSString
+            // Clamp the charIndex into the valid range before slicing
+            let safeCharIndex = max(0, min(charIndex, nsString.length))
+            let prefix = nsString.substring(with: NSRange(location: 0, length: safeCharIndex))
+            let lineNumber = prefix.components(separatedBy: "\n").count
 
-            // Vertical position, adjusted by text container origin and visible clip origin
-            let y = lineRect.minY + origin.y - (clipView.bounds.minY)
+            // Vertical position: convert text container coordinates to ruler coordinates so wrapped fragments align visually.
+            // We convert a point at the fragment's minY from the text view coordinate space into the ruler's coordinate space.
+            let containerOrigin = textView.textContainerOrigin
+            let yInTextView = containerOrigin.y + lineRect.minY
+            // Convert the point from the textView coordinate system into this ruler's coordinate system.
+            let pointInRuler = textView.convert(NSPoint(x: 0, y: yInTextView), to: self)
+            let y = pointInRuler.y
 
             let text = NSString(string: "\(lineNumber)")
             let size = text.size(withAttributes: attrs)
             let x = max(6, self.ruleThickness - size.width - 6)  // leave small left padding
 
+            // Draw the number vertically centered in the fragment rectangle as converted into ruler coordinates.
             let drawPoint = NSPoint(x: x, y: y + (lineRect.height - size.height) / 2.0)
             text.draw(at: drawPoint, withAttributes: attrs)
 

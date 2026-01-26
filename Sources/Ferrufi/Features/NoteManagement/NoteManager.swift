@@ -53,16 +53,20 @@ class NoteManager: ObservableObject {
     // MARK: - Note Creation
 
     /// Create a new note from template
-    func createNote(from template: NoteTemplate, in folder: Folder?, name: String? = nil)
-        async throws -> Note
-    {
+    func createNote(
+        from template: NoteTemplate,
+        in folder: Folder?,
+        name: String? = nil,
+        fileExtension: String = ".md"
+    ) async throws -> Note {
         let noteName = name ?? generateNoteName(from: template)
         let content = processTemplateContent(template.content, noteName: noteName)
 
         let note = try await folderManager.createNote(
             name: noteName,
             content: content,
-            folder: folder
+            folder: folder,
+            fileExtension: fileExtension
         )
 
         addToRecentNotes(note)
@@ -70,11 +74,19 @@ class NoteManager: ObservableObject {
     }
 
     /// Create a new note with default template
-    func createNote(name: String, in folder: Folder?, content: String = "") async throws -> Note {
+    func createNote(
+        name: String,
+        in folder: Folder?,
+        content: String = "",
+        fileExtension: String = ".md"
+    ) async throws -> Note {
+        let contentToUse = content.isEmpty ? getDefaultNoteContent(name: name) : content
+
         let note = try await folderManager.createNote(
             name: name,
-            content: content.isEmpty ? getDefaultNoteContent(name: name) : content,
-            folder: folder
+            content: contentToUse,
+            folder: folder,
+            fileExtension: fileExtension
         )
 
         addToRecentNotes(note)
@@ -392,9 +404,9 @@ class NoteManager: ObservableObject {
     }
 
     private func handleExternalFileChanges(_ urls: [URL]) async {
-        // Refresh notes if markdown files changed
-        let markdownURLs = urls.filter { $0.pathExtension == "md" }
-        if !markdownURLs.isEmpty {
+        // Refresh notes if .mufi files changed
+        let mufiURLs = urls.filter { $0.pathExtension.lowercased() == "mufi" }
+        if !mufiURLs.isEmpty {
             folderManager.refreshNotes()
         }
     }

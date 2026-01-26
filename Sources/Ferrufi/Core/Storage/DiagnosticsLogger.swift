@@ -104,21 +104,58 @@ public final class DiagnosticsLogger {
     }
 
     /// Rotate log if it exceeds maxSizeMB (simple rotate to .log.1)
+    /// NOTE: perform all file I/O on the background queue and avoid referencing
+    /// main-actor-isolated properties or calling main-actor methods from the
+    /// non-isolated closure. We write a small rotation marker directly to the
+    /// new log file to avoid invoking the actor-isolated `log(...)` helper here.
     public func rotateIfNeeded(maxSizeMB: Int = 10) {
-        queue.async { [weak self] in
-            guard let self = self else { return }
+        // Snapshot values on the main actor so the background work doesn't touch
+        // actor-isolated properties.
+        let logPath = logFile.path
+        let maxBytes = UInt64(maxSizeMB) * 1024 * 1024
+
+        queue.async {
             do {
-                let attrs = try self.fileManager.attributesOfItem(atPath: self.logFile.path)
-                if let size = attrs[.size] as? UInt64 {
-                    let limit = UInt64(maxSizeMB) * 1024 * 1024
-                    if size > limit {
-                        let rotated = self.logFile.deletingPathExtension().appendingPathExtension(
-                            "log.1")
-                        try? self.fileManager.removeItem(at: rotated)  // ignore error
-                        try self.fileManager.moveItem(at: self.logFile, to: rotated)
-                        self.fileManager.createFile(
-                            atPath: self.logFile.path, contents: nil, attributes: nil)
-                        self.log("Rotated log (maxSizeMB=\(maxSizeMB))", level: "ROTATE")
+                // Use FileManager.default directly to avoid referencing `self.fileManager`
+                let attrs = try FileManager.default.attributesOfItem(atPath: logPath)
+                if let size = attrs[.size] as? UInt64, size > maxBytes {
+                    let logURL = URL(fileURLWithPath: logPath)
+                    let rotated = logURL.deletingPathExtension().appendingPathExtension("log.1")
+                    try? FileManager.default.removeItem(at: rotated)  // ignore error
+                    try FileManager.default.moveItem(at: logURL, to: rotated)
+                    FileManager.default.createFile(atPath: logPath, contents: nil, attributes: nil)
+
+                    // Best-effort: append a rotation marker directly into the new log file.
+                    let timestamp = ISO8601DateFormatter().string(from: Date())
+                    let entry = "\(timestamp) [ROTATE] Rotated log (maxSizeMB=\(maxSizeMB))\n"
+                    if let data = entry.data(using: .utf8) {
+                        if let fh = try? FileHandle(forWritingTo: logURL) {
+                            defer {
+                                do {
+                                    try fh.close()
+                                } catch {
+                                    print(
+                                        "[DiagnosticsLogger] failed to close rotated log file: \(error)"
+                                    )
+                                }
+                            }
+                            do {
+                                try fh.seekToEnd()
+                                try fh.write(contentsOf: data)
+                            } catch {
+                                print(
+                                    "[DiagnosticsLogger] failed to write rotation marker: \(error)")
+                            }
+                        } else {
+                            // Fallback: atomically write the small marker if FileHandle couldn't open
+                            do {
+                                try data.write(to: logURL, options: .atomic)
+                            } catch {
+                                print(
+                                    "[DiagnosticsLogger] failed to write rotation marker (atomic): \(error)"
+                                )
+                            }
+                        }
                     }
                 }
             } catch {

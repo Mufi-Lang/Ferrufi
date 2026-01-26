@@ -25,7 +25,6 @@ public final class ShortcutsManager: ObservableObject {
         "find": "Find in Notes",
         "findAndReplace": "Find and Replace",
         "toggleSidebar": "Toggle Sidebar",
-        "togglePreview": "Toggle Preview",
         "showGraph": "Show Graph View",
         "focusMode": "Focus Mode",
         "zoomIn": "Zoom In",

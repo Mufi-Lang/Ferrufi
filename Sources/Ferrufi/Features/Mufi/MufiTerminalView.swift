@@ -296,9 +296,9 @@ public struct InlineMufiTerminalView: View {
     }
 }
 
-// MARK: - Preview
+// MARK: - SwiftUI Samples
 
-struct MufiTerminalView_Previews: PreviewProvider {
+struct MufiTerminalView_Samples: PreviewProvider {
     static var previews: some View {
         VStack(spacing: 20) {
             // Success output

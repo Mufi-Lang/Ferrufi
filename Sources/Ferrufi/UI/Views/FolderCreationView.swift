@@ -250,7 +250,7 @@ struct FolderCreationView: View {
     }
 }
 
-struct FolderCreationView_Previews: PreviewProvider {
+struct FolderCreationView_Samples: PreviewProvider {
     static var previews: some View {
         FolderCreationView()
             .environmentObject(FerrufiApp())

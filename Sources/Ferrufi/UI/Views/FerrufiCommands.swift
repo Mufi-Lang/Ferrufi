@@ -85,12 +85,7 @@ public struct FerrufiCommands: Commands {
                 shortcuts.keyboardShortcut(for: "toggleSidebar")
                     ?? KeyboardShortcut(KeyEquivalent("s"), modifiers: [.command, .control]))
 
-            Button("Toggle Preview") {
-                nav?.togglePreview()
-            }
-            .keyboardShortcut(
-                shortcuts.keyboardShortcut(for: "togglePreview")
-                    ?? KeyboardShortcut(KeyEquivalent("p"), modifiers: [.command, .control]))
+            // Toggle Preview command removed
 
             Divider()
 
@@ -335,8 +330,7 @@ public struct FerrufiCommands: Commands {
         panel.allowsMultipleSelection = true
         panel.canChooseDirectories = false
         panel.allowedContentTypes = [
-            UTType(filenameExtension: "md") ?? .plainText,
-            UTType(filenameExtension: "markdown") ?? .plainText,
+            UTType(filenameExtension: "mufi") ?? .plainText,
             UTType.plainText,
         ]
 
@@ -458,7 +452,6 @@ public struct FerrufiCommands: Commands {
 
     private func enterFocusMode() {
         nav?.sidebarVisible = false
-        nav?.previewVisible = false
     }
 
     private func zoomIn() {
@@ -488,8 +481,7 @@ public struct FerrufiCommands: Commands {
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
         panel.allowedContentTypes = [
-            UTType(filenameExtension: "md") ?? .plainText,
-            UTType(filenameExtension: "markdown") ?? .plainText,
+            UTType(filenameExtension: "mufi") ?? .plainText,
             UTType.plainText,
         ]
 

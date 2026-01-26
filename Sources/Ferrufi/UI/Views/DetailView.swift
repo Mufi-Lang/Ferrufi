@@ -549,10 +549,10 @@ struct ExportSheet: View {
                 VStack(spacing: 12) {
                     ExportOption(
                         icon: "doc.text",
-                        title: "Markdown",
-                        subtitle: "Export as .md file"
+                        title: "Mufi Script",
+                        subtitle: "Export as .mufi file"
                     ) {
-                        // Export as markdown
+                        // Export as .mufi
                         dismiss()
                     }
 
@@ -695,7 +695,7 @@ private struct FPSCounterView: View {
     }
 }
 
-struct DetailView_Previews: PreviewProvider {
+struct DetailView_Samples: PreviewProvider {
     static var previews: some View {
         DetailView()
             .environmentObject(FerrufiApp())

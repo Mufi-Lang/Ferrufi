@@ -39,8 +39,7 @@ public class NavigationModel: ObservableObject {
     /// Sidebar visibility for NavigationSplitView
     @Published public var sidebarVisibility: NavigationSplitViewVisibility = .all
 
-    /// Whether the preview pane is visible
-    @Published public var previewVisible: Bool = true
+    // Preview pane visibility removed — preview UI is no longer part of the editor surface.
 
     /// Current error to display
     @Published public var currentError: Error?
@@ -290,12 +289,7 @@ public class NavigationModel: ObservableObject {
         }
     }
 
-    /// Toggles preview pane visibility
-    public func togglePreview() {
-        withAnimation(.easeInOut(duration: 0.2)) {
-            previewVisible.toggle()
-        }
-    }
+    // Preview toggling removed — no-op placeholder retained historically.
 
     /// Toggles file tree mode
     public func toggleFileTreeMode() {
@@ -322,9 +316,18 @@ public class NavigationModel: ObservableObject {
                     targetFolder = ferrufiApp.folderManager.rootFolder
                 }
 
+                // Use Mufi script template for new notes by default
+                let defaultContent: String =
+                    content.isEmpty
+                    ? """
+                    // \(title)
+                    // Created on \(DateFormatter.localizedString(from: Date(), dateStyle: .medium, timeStyle: .short))
+
+                    """ : content
+
                 let newNote = try await ferrufiApp.createNote(
                     title: title,
-                    content: content.isEmpty ? "# \(title)\n\n" : content,
+                    content: defaultContent,
                     in: targetFolder
                 )
 

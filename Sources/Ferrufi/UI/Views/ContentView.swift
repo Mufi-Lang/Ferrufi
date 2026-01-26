@@ -415,10 +415,10 @@ public struct ContentView: View {
                                         .expandingTildeInPath
                                 ).standardizedFileURL.path
                                 ferrufiApp.configuration.updateConfiguration { config in
-                                    var arr = config.trustedVaultPaths ?? []
+                                    var arr = config.trustedWorkspacePaths ?? []
                                     if !arr.contains(canonicalSelected) {
                                         arr.append(canonicalSelected)
-                                        config.trustedVaultPaths = arr
+                                        config.trustedWorkspacePaths = arr
                                     }
                                 }
 
@@ -525,7 +525,7 @@ public struct ContentView: View {
 
             ## Mufi IDE Features
 
-            - **Code Editor**: Syntax-aware editor with markdown support
+            - **Code Editor**: Syntax-aware editor for Mufi scripts
             - **Integrated Terminal**: Run scripts and see output inline (⌘R)
             - **Interactive REPL**: Test code snippets interactively (⌃⌘R)
             - **File Explorer**: Browse and organize your scripts
@@ -564,7 +564,7 @@ public struct ContentView: View {
     }
 }
 
-struct ContentView_Previews: PreviewProvider {
+struct ContentView_Samples: PreviewProvider {
     static var previews: some View {
         Group {
             ContentView()

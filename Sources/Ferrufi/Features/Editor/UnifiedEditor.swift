@@ -2,15 +2,14 @@
 //  UnifiedEditor.swift
 //  Ferrufi
 //
-//  A single unified editor component that supports multiple file modes (Markdown, Mufi)
-//  and — for Markdown files — an optional split preview pane. This view replaces the
-//  multiple editor components by exposing one public API and internally switching
-//  behaviour based on `EditorFileType` while reusing existing utilities such as the
-//  `MarkdownSyntaxHighlighter` and `MarkdownPreview`.
+//  A single unified editor component that supports Mufi mode and additional modes.
+//  This view replaces the multiple editor components by exposing one public API and
+//  switching behaviour based on `EditorFileType` while reusing existing utilities such as
+//  the editor syntax highlighter and previewer.
 //
 //  The `UnifiedTextView` subclass implements per-mode editing behavior (syntax highlighting,
 //  keyboard handling for formatting shortcuts and list continuation). The SwiftUI `UnifiedEditor`
-//  view composes the scroll view and (optionally) the preview split for markdown files.
+//  view composes the scroll view and an optional secondary split/pane.
 //
 //  Created on 2026-01-18.
 //
@@ -22,20 +21,24 @@ import SwiftUI
 
 // Public API: file type / mode
 public enum EditorFileType {
-    case markdown
     case mufi
-    case rich  // reserved for future use (Notion style)
 }
+
+// Fonts are provided at runtime via ThemeManager. Avoid global NSFont constants so font sizing
+// can be configured by users and remain safe with actor isolation. The `EditorContainerView`
+// applies the current font from `ThemeManager` to the `UnifiedTextView` instance.
 
 public struct UnifiedEditor: View {
     @Binding public var text: String
     @Binding public var isEditing: Bool
 
     public var fileType: EditorFileType
-    public var showPreview: Bool = true  // only used for markdown files
+
     public var placeholder: String = "Start writing..."
     public var onTextChange: ((String) -> Void)?
     public var onSave: (() -> Void)?
+    // Enable/disable incremental highlighting (defaults to true)
+    public var highlightingEnabled: Bool = true
 
     // Environment objects commonly used by other editor components
     @EnvironmentObject private var themeManager: ThemeManager
@@ -44,21 +47,22 @@ public struct UnifiedEditor: View {
     // Local state for internal synchronization
     @State private var internalText: String = ""
     @State private var editorHeight: CGFloat = 0
+    // Secondary rendering functionality removed
 
     public init(
         text: Binding<String>,
         isEditing: Binding<Bool>,
         fileType: EditorFileType,
-        showPreview: Bool = true,
         placeholder: String = "Start writing...",
+        highlightingEnabled: Bool = true,
         onTextChange: ((String) -> Void)? = nil,
         onSave: (() -> Void)? = nil
     ) {
         self._text = text
         self._isEditing = isEditing
         self.fileType = fileType
-        self.showPreview = showPreview
         self.placeholder = placeholder
+        self.highlightingEnabled = highlightingEnabled
         self.onTextChange = onTextChange
         self.onSave = onSave
         self._internalText = State(initialValue: text.wrappedValue)
@@ -66,44 +70,50 @@ public struct UnifiedEditor: View {
 
     public var body: some View {
         Group {
-            if fileType == .markdown && showPreview {
-                // Split editor + preview
-                HSplitView {
-                    EditorContainerView(
-                        text: $internalText,
-                        isEditing: $isEditing,
-                        fileType: fileType,
-                        placeholder: placeholder,
-                        onTextChange: { newText in
-                            syncText(newText)
-                        },
-                        onSave: onSave
-                    )
-                    .frame(minWidth: 300)
+            VStack(spacing: 0) {
+                // Secondary pane removed
 
-                    NativeMarkdownPreview(
-                        markdown: internalText,
-                        baseURL: nil
-                    )
-                    .background(Color(NSColor.textBackgroundColor))
-                    .frame(minWidth: 300)
-                }
-            } else {
-                // Editor only
                 EditorContainerView(
                     text: $internalText,
                     isEditing: $isEditing,
                     fileType: fileType,
                     placeholder: placeholder,
-                    onTextChange: { newText in
-                        syncText(newText)
-                    },
+                    highlightingEnabled: highlightingEnabled,
+                    onTextChange: { newText in syncText(newText) },
                     onSave: onSave
                 )
             }
         }
         .onAppear {
             internalText = text
+            // Secondary initialization removed
+
+            // If we opened a Mufi file, lock the enforced editor font and size to the
+            // currently resolved monospaced family so the raw editor uses the Mufi editor's
+            // exact font & point-size.
+            if fileType == .mufi {
+                DispatchQueue.main.async {
+                    themeManager.forcedMonospacedEditorFontName =
+                        themeManager.resolvedMonospacedFontName
+                    themeManager.editorFontSize = Double(themeManager.monospacedNSFont.pointSize)
+                }
+            }
+        }
+        .onChange(of: fileType) { newMode in
+            // When switching into Mufi mode, lock the forced monospaced font and size so
+            // the raw editor remains identical to the Mufi script editor. When switching
+            // away, clear the forced name so user preferences can take effect.
+            if newMode == .mufi {
+                DispatchQueue.main.async {
+                    themeManager.forcedMonospacedEditorFontName =
+                        themeManager.resolvedMonospacedFontName
+                    themeManager.editorFontSize = Double(themeManager.monospacedNSFont.pointSize)
+                }
+            } else {
+                DispatchQueue.main.async {
+                    themeManager.forcedMonospacedEditorFontName = nil
+                }
+            }
         }
         .onChange(of: text) { _, newValue in
             // External changes should update the internal editor content
@@ -131,6 +141,8 @@ private struct EditorContainerView: NSViewRepresentable {
 
     var fileType: EditorFileType
     var placeholder: String
+    // When false, the underlying UnifiedTextView will skip incremental highlighting.
+    var highlightingEnabled: Bool = true
     var onTextChange: ((String) -> Void)?
     var onSave: (() -> Void)?
 
@@ -155,13 +167,21 @@ private struct EditorContainerView: NSViewRepresentable {
         unifiedTextView.delegate = context.coordinator
         unifiedTextView.coordinator = context.coordinator
         unifiedTextView.setupForMode(fileType)
+        // Propagate highlighting preference from the SwiftUI wrapper to the NSTextView subclass
+        unifiedTextView.highlightingEnabled = highlightingEnabled
 
         // Basic appearance & behavior
         unifiedTextView.isEditable = true
         unifiedTextView.isSelectable = true
         unifiedTextView.allowsUndo = true
         unifiedTextView.isRichText = false
-        unifiedTextView.font = NSFont.monospacedSystemFont(ofSize: 14, weight: .regular)
+        // Use monospaced font so the editor displays like the Mufi script editor
+        // (consistent appearance across script and note editing modes).
+        let chosenFont: NSFont = themeManager.monospacedNSFont
+        unifiedTextView.font = chosenFont
+        // Make the highlighter use the same base family so token-derived fonts match.
+        unifiedTextView.configureHighlighter(
+            baseFontName: unifiedTextView.font?.fontName, baseSize: themeManager.editorFontSize)
         unifiedTextView.textContainerInset = NSSize(width: 16, height: 16)
         unifiedTextView.isVerticallyResizable = true
         unifiedTextView.isHorizontallyResizable = false
@@ -171,6 +191,14 @@ private struct EditorContainerView: NSViewRepresentable {
 
         // Initial content
         unifiedTextView.string = text
+
+        // Ensure base font is applied to text storage so raw text matches the preview/editor immediately
+        if let font = unifiedTextView.font {
+            textStorage.addAttribute(
+                .font, value: font, range: NSRange(location: 0, length: textStorage.length))
+            // Ensure typing attributes inherit the same font so newly typed text matches preview/editor
+            unifiedTextView.typingAttributes[.font] = font
+        }
 
         // Theme
         updateTheme(textView: unifiedTextView)
@@ -210,7 +238,25 @@ private struct EditorContainerView: NSViewRepresentable {
             textView.setSelectedRange(safe)
         }
 
-        // Update theme and ruler visibility
+        // Use monospaced font so the editor displays like the Mufi script editor -
+        // keep parity with Mufi files for visual consistency.
+        let chosenFont: NSFont = themeManager.monospacedNSFont
+        textView.font = chosenFont
+        // Log the actual NSTextView font and size to aid debugging font parity
+        if let f = textView.font {
+            print("EditorContainerView: textView font: \(f.fontName) @ \(f.pointSize)pt")
+        } else {
+            print("EditorContainerView: textView font: <none>")
+        }
+        // Ensure highlighter uses the chosen font family for Mufi files (pass font name) or default for code
+        let highlighterFontName: String? = (fileType == .mufi) ? chosenFont.fontName : nil
+        textView.configureHighlighter(
+            baseFontName: highlighterFontName, baseSize: themeManager.editorFontSize)
+        if let ts = textView.textStorage, let base = textView.font {
+            let full = NSRange(location: 0, length: ts.length)
+            ts.addAttribute(.font, value: base, range: full)
+        }
+
         updateTheme(textView: textView)
         if ferrufiApp.configuration.editor.showLineNumbers {
             if !(nsView.verticalRulerView is LineNumberRulerView) {
@@ -260,9 +306,47 @@ private struct EditorContainerView: NSViewRepresentable {
         var onTextChange: ((String) -> Void)?
         var onSave: (() -> Void)?
 
-        weak var textView: UnifiedTextView?
+        weak var textView: UnifiedTextView? {
+            didSet {
+                // Notify interested parties when the active UnifiedTextView instance changes.
+                // Listeners can observe `.unifiedEditorTextViewChanged` to obtain the new text view
+                // (object is the UnifiedTextView instance or nil).
+                NotificationCenter.default.post(
+                    name: .unifiedEditorTextViewChanged,
+                    object: textView)
+
+                // Remove any previous selection observer attached to the old text view
+                if let old = oldValue {
+                    NotificationCenter.default.removeObserver(
+                        self,
+                        name: NSTextView.didChangeSelectionNotification,
+                        object: old)
+                }
+
+                // When a new text view attaches, observe its selection changes so we can
+                // broadcast selection updates from a single centralized notification.
+                if let tv = textView {
+                    NotificationCenter.default.addObserver(
+                        self,
+                        selector: #selector(handleUnifiedTextViewSelectionChanged(_:)),
+                        name: NSTextView.didChangeSelectionNotification,
+                        object: tv)
+
+                    // Immediately publish the current selection so listeners can initialize.
+                    NotificationCenter.default.post(
+                        name: .unifiedEditorSelectionChanged,
+                        object: tv.selectedRange())
+                } else {
+                    // Notify listeners that there is no active editor selection
+                    NotificationCenter.default.post(
+                        name: .unifiedEditorSelectionChanged,
+                        object: nil)
+                }
+            }
+        }
         var formatterObserversInstalled = false
         var coordinatorCancellables = Set<AnyCancellable>()
+        // Legacy persistent output queue removed; outputs are handled inline by editor components.
 
         init(
             text: Binding<String>, isEditing: Binding<Bool>, onTextChange: ((String) -> Void)?,
@@ -278,24 +362,8 @@ private struct EditorContainerView: NSViewRepresentable {
             guard !formatterObserversInstalled else { return }
             formatterObserversInstalled = true
 
-            // Insert formatting
-            NotificationCenter.default.addObserver(
-                self,
-                selector: #selector(handleInsertFormatting(_:)),
-                name: .insertMarkdownFormatting,
-                object: nil)
-
-            NotificationCenter.default.addObserver(
-                self,
-                selector: #selector(handleInsertList(_:)),
-                name: .insertMarkdownList,
-                object: nil)
-
-            NotificationCenter.default.addObserver(
-                self,
-                selector: #selector(handleInsertHeader(_:)),
-                name: .insertMarkdownHeader,
-                object: nil)
+            // Markdown formatting observers removed — toolbar formatting no longer supported.
+            // Previous behavior posted notifications to insert formatting/list/header.
         }
 
         func textDidChange(_ notification: Notification) {
@@ -314,28 +382,30 @@ private struct EditorContainerView: NSViewRepresentable {
         func textDidEndEditing(_ notification: Notification) {
             isEditingBinding.wrappedValue = false
             onSave?()
+            // Legacy persistent output queue removed; nothing to flush here.
         }
 
         // MARK: - Formatting handlers
 
-        @objc private func handleInsertFormatting(_ notification: Notification) {
-            guard let payload = notification.object as? MarkdownFormatting,
-                let tv = self.textView
-            else { return }
+        // Markdown formatting handlers were removed when Markdown support was deprecated.
 
-            tv.wrapSelectedText(
-                prefix: payload.prefix, suffix: payload.suffix, placeholder: payload.placeholder)
+        // Selection change handler forwarded from the live UnifiedTextView instance.
+        // Posts `.unifiedEditorSelectionChanged` with the current NSRange selection as the object.
+        @objc private func handleUnifiedTextViewSelectionChanged(_ notification: Notification) {
+            guard let tv = notification.object as? NSTextView else {
+                NotificationCenter.default.post(name: .unifiedEditorSelectionChanged, object: nil)
+                return
+            }
+            NotificationCenter.default.post(
+                name: .unifiedEditorSelectionChanged, object: tv.selectedRange())
         }
 
-        @objc private func handleInsertList(_ notification: Notification) {
-            guard let tv = self.textView else { return }
-            tv.insertListItem()
-        }
+        // MARK: - Output handlers
 
-        @objc private func handleInsertHeader(_ notification: Notification) {
-            guard let tv = self.textView else { return }
-            tv.insertHeader()
-        }
+        // Persistent output handlers removed.
+        // Output insertion/clearing is now handled inline by editor components directly
+        // without posting notifications. If you need to persist outputs programmatically, use the
+        // editor `onTextChange` callback to modify the bound text.
     }
 }
 
@@ -343,12 +413,15 @@ private struct EditorContainerView: NSViewRepresentable {
 
 private class UnifiedTextView: NSTextView {
     weak var coordinator: EditorContainerView.Coordinator?
-    private var markdownHighlighter: MarkdownSyntaxHighlighter?
-    private var mode: EditorFileType = .markdown
+    private var mode: EditorFileType = .mufi
+    // When false, skip incremental highlighting (useful for performance-sensitive cases)
+    var highlightingEnabled: Bool = true
 
     override func awakeFromNib() {
         super.awakeFromNib()
-        setupCommon()
+        Task { @MainActor in
+            setupCommon()
+        }
     }
 
     override init(frame frameRect: NSRect, textContainer container: NSTextContainer?) {
@@ -358,10 +431,12 @@ private class UnifiedTextView: NSTextView {
 
     required init?(coder: NSCoder) {
         super.init(coder: coder)
-        setupCommon()
+        Task { @MainActor in
+            setupCommon()
+        }
     }
 
-    private func setupCommon() {
+    @MainActor private func setupCommon() {
         // Default settings
         isRichText = false
         allowsUndo = true
@@ -371,57 +446,18 @@ private class UnifiedTextView: NSTextView {
     /// Configure the view for a specific mode.
     func setupForMode(_ fileType: EditorFileType) {
         self.mode = fileType
-        switch fileType {
-        case .markdown:
-            // Use markdown highlighter and markdown-friendly behaviors
-            if markdownHighlighter == nil {
-                markdownHighlighter = MarkdownSyntaxHighlighter()
-            }
-            isAutomaticQuoteSubstitutionEnabled = true
-            isAutomaticDashSubstitutionEnabled = true
-            isAutomaticSpellingCorrectionEnabled = true
-            isAutomaticTextReplacementEnabled = false
-            // Use monospaced font with slightly larger size for Markdown
-            self.font = NSFont.monospacedSystemFont(ofSize: 14, weight: .regular)
-        case .mufi:
-            // Mufi script mode: simpler editor, no markdown highlighting
-            markdownHighlighter = nil
-            isAutomaticQuoteSubstitutionEnabled = false
-            isAutomaticDashSubstitutionEnabled = false
-            isAutomaticSpellingCorrectionEnabled = false
-            isAutomaticTextReplacementEnabled = false
-            self.font = NSFont.monospacedSystemFont(ofSize: 14, weight: .regular)
-        case .rich:
-            // Reserved for Notion-style behaviors; default to markdown-like
-            if markdownHighlighter == nil {
-                markdownHighlighter = MarkdownSyntaxHighlighter()
-            }
-            isAutomaticQuoteSubstitutionEnabled = false
-            isAutomaticDashSubstitutionEnabled = false
-            self.font = NSFont.systemFont(ofSize: 16, weight: .regular)
-        }
-        // Re-apply highlighting immediately if in markdown
-        if mode == .markdown {
-            applyMarkdownHighlightingWhole()
-        } else {
-            // Clear attributes for non-markdown
-            clearAllAttributes()
-        }
+        // All modes use script/plain editing behavior; preview/highlighting features removed.
+        isAutomaticQuoteSubstitutionEnabled = false
+        isAutomaticDashSubstitutionEnabled = false
+        isAutomaticSpellingCorrectionEnabled = false
+        isAutomaticTextReplacementEnabled = false
+        // Ensure attributes are cleared (no document highlighting).
+        clearAllAttributes()
     }
 
-    // Apply markdown highlighting to the entire document
-    private func applyMarkdownHighlightingWhole() {
-        guard let highlighter = markdownHighlighter, let ts = textStorage else { return }
-        let full = NSRange(location: 0, length: ts.length)
-        // Reset base attributes
-        ts.removeAttribute(.foregroundColor, range: full)
-        ts.removeAttribute(.font, range: full)
-        // Apply base font and color
-        let baseFont = NSFont.monospacedSystemFont(ofSize: 14, weight: .regular)
-        ts.addAttribute(.font, value: baseFont, range: full)
-        ts.addAttribute(.foregroundColor, value: NSColor.textColor, range: full)
-
-        highlighter.highlight(textStorage: ts, in: full)
+    // Apply syntax highlighting to the entire document (removed)
+    private func applyHighlightingWhole() {
+        // Syntax highlighting removed — no-op.
     }
 
     private func clearAllAttributes() {
@@ -435,178 +471,35 @@ private class UnifiedTextView: NSTextView {
         ts.addAttribute(.foregroundColor, value: NSColor.textColor, range: full)
     }
 
+    /// Configure the highlighter fonts to match the provided editor font settings.
+    /// This keeps the visual appearance of highlighted text consistent with the editor font.
+    func configureHighlighter(baseFontName: String?, baseSize: Double) {
+        // Highlighter configuration removed — no-op.
+    }
+
     // MARK: - Editing hooks
 
     override func didChangeText() {
         super.didChangeText()
-        // Update markdown highlighting incrementally when in markdown mode
-        if mode == .markdown {
-            if let ts = textStorage {
-                let changedRange = ts.editedRange
-                let safeRange = NSUnionRange(changedRange, NSMakeRange(0, 0))
-                markdownHighlighter?.highlight(
-                    textStorage: ts, in: NSRange(location: 0, length: ts.length))
-            }
-        }
+        // Incremental highlighting removed — previously this re-highlighted edited regions
+        // (to cover multiline constructs like lists, code fences, and blockquotes) instead of
+        // re-highlighting the whole document on every keystroke.
+        // Incremental highlighting removed — no-op in this editor build.
         // Notify coordinator via NotificationCenter callback (textDidChange will call delegate)
     }
 
-    // Support common formatting commands triggered from toolbar via NotificationCenter
-    func wrapSelectedText(prefix: String, suffix: String, placeholder: String) {
-        let selectedRange = self.selectedRange()
-        let ns = self.string as NSString
-        let selectedText = selectedRange.length > 0 ? ns.substring(with: selectedRange) : ""
-        let newText: String
-        if selectedText.isEmpty {
-            newText = "\(prefix)\(placeholder)\(suffix)"
-            replaceCharacters(in: selectedRange, with: newText)
-            // Select placeholder
-            let placeholderRange = NSRange(
-                location: selectedRange.location + prefix.count, length: placeholder.count)
-            setSelectedRange(placeholderRange)
-        } else {
-            newText = "\(prefix)\(selectedText)\(suffix)"
-            if shouldChangeText(in: selectedRange, replacementString: newText) {
-                replaceCharacters(in: selectedRange, with: newText)
-                // Restore selection around content
-                setSelectedRange(
-                    NSRange(
-                        location: selectedRange.location + prefix.count, length: selectedText.count)
-                )
-            }
-        }
-    }
+    // Toolbar formatting helper removed.
 
-    func insertListItem() {
-        // Insert "- " at the start of the current line or add a new bullet line
-        let sel = selectedRange()
-        let textNSString = self.string as NSString
-        let lineRange = textNSString.lineRange(for: sel)
-        // If cursor is at empty line, insert bullet
-        if lineRange.length == 0
-            || (lineRange.length == 1 && textNSString.substring(with: lineRange) == "\n")
-        {
-            insertText("- ", replacementRange: NSRange(location: sel.location, length: 0))
-        } else {
-            // Otherwise, insert "- " at line start
-            let insertPos = lineRange.location
-            if shouldChangeText(
-                in: NSRange(location: insertPos, length: 0), replacementString: "- ")
-            {
-                replaceCharacters(in: NSRange(location: insertPos, length: 0), with: "- ")
-                setSelectedRange(NSRange(location: sel.location + 2, length: 0))
-            }
-        }
-    }
+    // Toolbar formatting helper removed.
 
-    func insertHeader() {
-        // Insert "# " at start of the current line
-        let sel = selectedRange()
-        let textNSString = self.string as NSString
-        let lineRange = textNSString.lineRange(for: sel)
-        let insertPos = lineRange.location
-        if shouldChangeText(in: NSRange(location: insertPos, length: 0), replacementString: "# ") {
-            replaceCharacters(in: NSRange(location: insertPos, length: 0), with: "# ")
-            setSelectedRange(NSRange(location: sel.location + 2, length: 0))
-        }
-    }
+    // Toolbar formatting helper removed.
 
-    // Override keyDown to provide markdown-specific behaviors for Enter, Tab, Backspace in markdown mode
+    // Override keyDown: markdown-specific behaviors removed; default system handling used.
     override func keyDown(with event: NSEvent) {
-        if mode == .markdown {
-            if event.modifierFlags.contains(.command) {
-                // Basic formatting shortcuts forwarded to default handlers (the wrapper UI triggers via notifications)
-                // Let system handle if not intercepted
-            } else {
-                // Handle newline list continuation & blockquote continuation
-                if event.keyCode == 36 {  // Return / Enter
-                    if handleEnterKey() { return }
-                } else if event.keyCode == 48 {  // Tab
-                    if handleTabKey() { return }
-                } else if event.keyCode == 51 {  // Backspace
-                    if handleBackspaceKey() { return }
-                }
-            }
-        }
         super.keyDown(with: event)
     }
 
-    // Helpers for special key handling
-    private func handleEnterKey() -> Bool {
-        let sel = selectedRange()
-        guard sel.location <= (string as NSString).length else { return false }
-        let ns = string as NSString
-        let lineRange = ns.lineRange(for: sel)
-        let currentLine = ns.substring(with: lineRange)
-        // List continuation
-        if let match = currentLine.range(of: #"^(\s*)([-*+]|\d+\.)\s"#, options: .regularExpression)
-        {
-            let prefix = String(currentLine[currentLine.startIndex..<match.upperBound])
-            insertText("\n\(prefix)", replacementRange: NSRange(location: sel.location, length: 0))
-            return true
-        }
-        // Blockquote continuation
-        if currentLine.trimmingCharacters(in: .whitespaces).hasPrefix(">") {
-            let spaces = String(currentLine.prefix(while: { $0.isWhitespace }))
-            insertText(
-                "\n\(spaces)> ", replacementRange: NSRange(location: sel.location, length: 0))
-            return true
-        }
-        return false
-    }
-
-    private func handleTabKey() -> Bool {
-        let sel = selectedRange()
-        if sel.length == 0 {
-            // Insert two spaces
-            insertText("  ", replacementRange: NSRange(location: sel.location, length: 0))
-            return true
-        } else {
-            // Indent selected lines
-            indentSelectedLines(indent: true)
-            return true
-        }
-    }
-
-    private func handleBackspaceKey() -> Bool {
-        let sel = selectedRange()
-        if sel.length == 0 && sel.location > 0 {
-            let ns = string as NSString
-            let lineRange = ns.lineRange(for: sel)
-            let currentLine = ns.substring(with: lineRange)
-            if currentLine.hasPrefix("  ") && sel.location == lineRange.location + 2 {
-                // Remove the two-space indent
-                replaceCharacters(in: NSRange(location: lineRange.location, length: 2), with: "")
-                setSelectedRange(NSRange(location: lineRange.location, length: 0))
-                return true
-            }
-        }
-        return false
-    }
-
-    private func indentSelectedLines(indent: Bool) {
-        let sel = selectedRange()
-        let ns = string as NSString
-        let linesRange = ns.lineRange(for: sel)
-        let linesText = ns.substring(with: linesRange)
-        let components = linesText.components(separatedBy: .newlines)
-        var newText = ""
-        for (i, line) in components.enumerated() {
-            if indent {
-                newText += "  " + line
-            } else {
-                if line.hasPrefix("  ") {
-                    newText += String(line.dropFirst(2))
-                } else {
-                    newText += line
-                }
-            }
-            if i < components.count - 1 { newText += "\n" }
-        }
-        if shouldChangeText(in: linesRange, replacementString: newText) {
-            replaceCharacters(in: linesRange, with: newText)
-            let newLocation = indent ? sel.location + 2 : max(0, sel.location - 2)
-            setSelectedRange(NSRange(location: newLocation, length: sel.length))
-        }
-    }
+    // Markdown-specific special-key handlers (Enter/Tab/Backspace) have been removed.
+    // The editor relies on default system behavior and any higher-level formatting
+    // commands driven from toolbars or commands are handled via explicit API calls.
 }

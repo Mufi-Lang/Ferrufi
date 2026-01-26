@@ -16,6 +16,7 @@
 import SwiftUI
 
 public struct EmbeddedMufiREPLView: View {
+    @EnvironmentObject var themeManager: ThemeManager
     @State private var output: String = ""
     @State private var inputText: String = ""
     @State private var isBusy: Bool = false
@@ -32,7 +33,7 @@ public struct EmbeddedMufiREPLView: View {
             // Toolbar
             HStack {
                 Text("Mufi REPL (Embedded)")
-                    .font(.headline)
+                    .font(themeManager.monospacedHeadline)
 
                 Spacer()
 
@@ -58,7 +59,7 @@ public struct EmbeddedMufiREPLView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     Text(output.isEmpty ? "(no output yet)" : output)
-                        .font(.system(size: 13, design: .monospaced))
+                        .font(themeManager.monospacedFont(ofSize: 13))
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding()
                         .id(bottomAnchor)

@@ -32,16 +32,7 @@ public class FerrufiApp: ObservableObject {
 
     // MARK: - State
     @Published public private(set) var isInitialized = false
-    @Published public private(set) var currentWorkspacePath: String? {
-        didSet {
-            // Keep deprecated `currentVaultPath` in sync for backward compatibility.
-            if currentVaultPath != currentWorkspacePath {
-                currentVaultPath = currentWorkspacePath
-            }
-        }
-    }
-    @available(*, deprecated, message: "Use 'currentWorkspacePath' instead")
-    @Published public private(set) var currentVaultPath: String?
+    @Published public private(set) var currentWorkspacePath: String?
     @Published public private(set) var notes: [Note] = []
     @Published public private(set) var isIndexing = false
 
@@ -154,18 +145,23 @@ public class FerrufiApp: ObservableObject {
     // MARK: - Note Management
 
     /// Creates a new note
-    public func createNote(title: String, content: String = "", in folder: Folder? = nil)
-        async throws -> Note
-    {
+    public func createNote(
+        title: String,
+        content: String = "",
+        in folder: Folder? = nil,
+        fileExtension: String = ".md"
+    ) async throws -> Note {
         guard isInitialized else {
             throw FerrufiError.workspaceNotFound("No workspace initialized")
         }
 
         do {
+            let contentToUse = content.isEmpty ? "# \(title)\n\n" : content
             let note = try await folderManager.createNote(
                 name: title,
-                content: content.isEmpty ? "# \(title)\n\n" : content,
-                folder: folder
+                content: contentToUse,
+                folder: folder,
+                fileExtension: fileExtension
             )
 
             // Add to search index

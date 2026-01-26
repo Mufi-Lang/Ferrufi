@@ -2,13 +2,13 @@
 //  LinkParser.swift
 //  Ferrufi
 //
-//  Link parser for detecting wiki-style links and tags in markdown content
+//  Link parser for detecting wiki-style links and tags in note content
 //
 
 import Foundation
 import RegexBuilder
 
-/// Parser for extracting wiki-style links and tags from markdown text
+/// Parser for extracting wiki-style links and tags from note text
 public final class LinkParser: @unchecked Sendable {
 
     // MARK: - Regular Expressions
@@ -39,7 +39,7 @@ public final class LinkParser: @unchecked Sendable {
 
     // MARK: - Parsing Methods
 
-    /// Parse all links and tags from markdown content
+    /// Parse all links and tags from note content
     public func parseContent(_ content: String) -> LinkAnalysis {
         let excludedRanges = findExcludedRanges(in: content)
 

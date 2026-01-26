@@ -11,7 +11,7 @@ It focuses on a smooth, native experience with fast text rendering, an integrate
 - Integrated Mufi REPL and embedded runtime (`libmufiz.dylib`)
 - Built-in compile/run workflows and quick-run
 - Project/workspace support and CLI launcher (`ferrufi`)
-- Syntax highlighting (Mufi, Markdown), auto-complete, Markdown preview
+- Syntax highlighting (Mufi), auto-complete
 - Lightweight distribution scripts for building and installing releases
 
 ---

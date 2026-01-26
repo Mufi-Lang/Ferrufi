@@ -49,7 +49,9 @@ public struct BeautifulNoteSelector: View {
                                 NoteSelectorCard(
                                     note: note,
                                     isHovered: hoveredNoteId == note.id,
-                                    onTap: { navigationModel.selectNote(note, ferrufiApp: ferrufiApp) }
+                                    onTap: {
+                                        navigationModel.selectNote(note, ferrufiApp: ferrufiApp)
+                                    }
                                 )
                                 .environmentObject(themeManager)
                                 .onHover { isHovering in
@@ -59,7 +61,9 @@ public struct BeautifulNoteSelector: View {
                                 NoteSelectorCompactCard(
                                     note: note,
                                     isHovered: hoveredNoteId == note.id,
-                                    onTap: { navigationModel.selectNote(note, ferrufiApp: ferrufiApp) }
+                                    onTap: {
+                                        navigationModel.selectNote(note, ferrufiApp: ferrufiApp)
+                                    }
                                 )
                                 .environmentObject(themeManager)
                                 .onHover { isHovering in
@@ -309,8 +313,8 @@ struct NoteSelectorCard: View {
                         .foregroundColor(themeManager.currentTheme.colors.foregroundTertiary)
                 }
 
-                // Content preview
-                Text(contentPreview)
+                // Content snippet
+                Text(contentSnippet)
                     .font(.system(size: 14))
                     .foregroundColor(themeManager.currentTheme.colors.foregroundSecondary)
                     .lineLimit(4)
@@ -416,7 +420,7 @@ struct NoteSelectorCard: View {
         }
     }
 
-    private var contentPreview: String {
+    private var contentSnippet: String {
         let content = note.content
             .replacingOccurrences(of: #"#+"#, with: "", options: .regularExpression)
             .replacingOccurrences(of: #"\[([^\]]+)\]"#, with: "$1", options: .regularExpression)
@@ -450,7 +454,7 @@ struct NoteSelectorCompactCard: View {
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
 
-                Text(contentPreview)
+                Text(contentSnippet)
                     .font(.system(size: 12))
                     .foregroundColor(themeManager.currentTheme.colors.foregroundSecondary)
                     .lineLimit(2)
@@ -497,7 +501,7 @@ struct NoteSelectorCompactCard: View {
         .animation(.easeInOut(duration: 0.2), value: isHovered)
     }
 
-    private var contentPreview: String {
+    private var contentSnippet: String {
         let content = note.content
             .replacingOccurrences(of: #"#+"#, with: "", options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -545,7 +549,7 @@ enum SortOption: String, CaseIterable {
 
 // MARK: - Preview
 
-struct BeautifulNoteSelector_Previews: PreviewProvider {
+struct BeautifulNoteSelector_Samples: PreviewProvider {
     static var previews: some View {
         BeautifulNoteSelector()
             .environmentObject(FerrufiApp())

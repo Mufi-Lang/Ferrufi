@@ -210,8 +210,8 @@ public struct NoteLinkParser: Sendable {
 }
 
 extension Note {
-    /// Creates a note from markdown file content
-    public static func fromMarkdown(
+    /// Creates a note from text file content
+    public static func fromText(
         filePath: String,
         content: String
     ) -> Note {
@@ -232,7 +232,7 @@ extension Note {
         return note
     }
 
-    /// Extracts title from markdown content (first # header)
+    /// Extracts title from content (first # header)
     private static func extractTitle(from content: String) -> String? {
         let lines = content.components(separatedBy: .newlines)
         for line in lines {
@@ -266,9 +266,9 @@ extension Note {
                 print(greeting)
                 ```
 
-                #sample #markdown
+                #sample
                 """,
-            filePath: "/tmp/sample.md"
+            filePath: "/tmp/sample.mufi"
         )
     }
 }

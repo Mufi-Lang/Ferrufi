@@ -302,8 +302,6 @@ public struct UIConfiguration: Codable, Sendable {
     public var theme: Theme
     public var sidebarWidth: Double
     public var showSidebar: Bool
-    public var showPreview: Bool
-    public var previewPosition: PreviewPosition
     public var animationsEnabled: Bool
     public var metalAccelerationEnabled: Bool
 
@@ -311,16 +309,12 @@ public struct UIConfiguration: Codable, Sendable {
         theme: Theme = .system,
         sidebarWidth: Double = 250.0,
         showSidebar: Bool = true,
-        showPreview: Bool = true,
-        previewPosition: PreviewPosition = .right,
         animationsEnabled: Bool = true,
         metalAccelerationEnabled: Bool = true
     ) {
         self.theme = theme
         self.sidebarWidth = sidebarWidth
         self.showSidebar = showSidebar
-        self.showPreview = showPreview
-        self.previewPosition = previewPosition
         self.animationsEnabled = animationsEnabled
         self.metalAccelerationEnabled = metalAccelerationEnabled
     }
@@ -433,7 +427,6 @@ public struct ShortcutsConfiguration: Codable, Sendable {
             "find": KeyBinding(key: "f", modifiers: ["cmd"]),
             "quickOpen": KeyBinding(key: "p", modifiers: ["cmd"]),
             "toggleSidebar": KeyBinding(key: "s", modifiers: ["ctrl", "cmd"]),
-            "togglePreview": KeyBinding(key: "p", modifiers: ["ctrl", "cmd"]),
             "zoomIn": KeyBinding(key: "+", modifiers: ["cmd"]),
             "zoomOut": KeyBinding(key: "-", modifiers: ["cmd"]),
             "resetZoom": KeyBinding(key: "0", modifiers: ["cmd"]),
@@ -455,20 +448,6 @@ public enum Theme: String, Codable, CaseIterable, Sendable {
         case .light: return "Light"
         case .dark: return "Dark"
         case .system: return "System"
-        }
-    }
-}
-
-public enum PreviewPosition: String, Codable, CaseIterable, Sendable {
-    case right = "right"
-    case bottom = "bottom"
-    case hidden = "hidden"
-
-    public var displayName: String {
-        switch self {
-        case .right: return "Right"
-        case .bottom: return "Bottom"
-        case .hidden: return "Hidden"
         }
     }
 }

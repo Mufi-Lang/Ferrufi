@@ -534,10 +534,10 @@ struct SidebarView: View {
                                 fileURLWithPath: (parentURL.path as NSString).expandingTildeInPath
                             ).standardizedFileURL.path
                             ferrufiApp.configuration.updateConfiguration { config in
-                                var arr = config.trustedVaultPaths ?? []
+                                var arr = config.trustedWorkspacePaths ?? []
                                 if !arr.contains(canonicalParent) {
                                     arr.append(canonicalParent)
-                                    config.trustedVaultPaths = arr
+                                    config.trustedWorkspacePaths = arr
                                 }
                             }
 
@@ -582,7 +582,6 @@ struct SidebarView: View {
     /// Otherwise it presents the folder picker to request OS-level access and
     /// persists the bookmark + trust when granted.
     private func trustCurrentWorkspaceFromSidebar() {
-        let homeURL = FileManager.default.homeDirectoryForCurrentUser
         let rawWorkspacePath =
             ferrufiApp.currentWorkspacePath
             ?? ferrufiApp.configuration.workspace.defaultWorkspacePath
@@ -1969,7 +1968,7 @@ extension Color {
     }
 }
 
-struct SidebarView_Previews: PreviewProvider {
+struct SidebarView_Samples: PreviewProvider {
     static var previews: some View {
         NavigationSplitView {
             SidebarView()

@@ -48,17 +48,16 @@
     <!-- Document types: avoid owning public.directory -->
     <key>CFBundleDocumentTypes</key>
     <array>
-      <!-- Markdown/plain text files -->
+      <!-- Plain text files -->
       <dict>
         <key>CFBundleTypeName</key>
-        <string>Markdown Document</string>
+        <string>Text Document</string>
         <key>CFBundleTypeRole</key>
         <string>Editor</string>
         <key>LSHandlerRank</key>
         <string>Alternate</string>
         <key>LSItemContentTypes</key>
         <array>
-          <string>net.daringfireball.markdown</string>
           <string>public.plain-text</string>
           <string>public.text</string>
         </array>

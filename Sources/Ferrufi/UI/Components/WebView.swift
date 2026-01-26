@@ -35,7 +35,7 @@ public struct WebView: NSViewRepresentable {
     public func updateNSView(_ webView: WKWebView, context: Context) {
         print("🌐 WebView updateNSView called")
         print("📄 HTML content length: \(htmlContent.count)")
-        print("📄 HTML preview: \(String(htmlContent.prefix(100)))...")
+        print("📄 HTML excerpt: \(String(htmlContent.prefix(100)))...")
 
         if !htmlContent.isEmpty {
             webView.loadHTMLString(htmlContent, baseURL: nil)
@@ -161,9 +161,9 @@ public struct WebView: NSViewRepresentable {
     }
 }
 
-// MARK: - Preview WebView
+// MARK: - Sample WebView
 
-public struct PreviewWebView: View {
+public struct SampleWebView: View {
     let content: String
 
     public init(content: String) {
@@ -176,7 +176,7 @@ public struct PreviewWebView: View {
             HStack {
                 Image(systemName: "eye")
                     .foregroundColor(.secondary)
-                Text("Preview")
+                Text("Rendered HTML")
                     .font(.headline)
                     .foregroundColor(.secondary)
                 Spacer()

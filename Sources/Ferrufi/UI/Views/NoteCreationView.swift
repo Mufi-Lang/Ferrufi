@@ -20,6 +20,7 @@ public struct NoteCreationSheet: View {
     @State private var noteTitle = ""
     @State private var selectedFolder: Folder?
     @State private var showingDirectoryPicker = false
+    @State private var selectedFileType: String = ".mufi"
 
     var availableFolders: [Folder] {
         var folders = ferrufiApp.folderManager.allFolders
@@ -98,6 +99,12 @@ public struct NoteCreationSheet: View {
                                 createNote()
                             }
                         }
+
+                    // File type picker: Mufi script only (Markdown support removed)
+                    Picker("File Type", selection: $selectedFileType) {
+                        Text("Mufi").tag(".mufi")
+                    }
+                    .pickerStyle(.segmented)
                 }
 
                 // Directory Selection
@@ -265,7 +272,7 @@ public struct NoteCreationSheet: View {
                 let targetFolder =
                     selectedFolder ?? suggestedFolder ?? ferrufiApp.folderManager.rootFolder
 
-                // Create Mufi script template
+                // Default to Mufi script content
                 let scriptContent = """
                     // \(noteTitle)
                     // Created on \(DateFormatter.localizedString(from: Date(), dateStyle: .medium, timeStyle: .short))
@@ -275,13 +282,16 @@ public struct NoteCreationSheet: View {
                 let newNote = try await ferrufiApp.createNote(
                     title: noteTitle,
                     content: scriptContent,
-                    in: targetFolder
+                    in: targetFolder,
+                    fileExtension: ".mufi"
                 )
 
                 await MainActor.run {
                     navigationModel.selectNote(newNote, ferrufiApp: ferrufiApp)
                     noteTitle = ""
                     selectedFolder = nil
+                    // Reset file type to default (.mufi) to match typical workflow
+                    selectedFileType = ".mufi"
                     dismiss()
                 }
             } catch {
@@ -293,7 +303,7 @@ public struct NoteCreationSheet: View {
     }
 }
 
-struct NoteCreationSheet_Previews: PreviewProvider {
+struct NoteCreationSheet_Samples: PreviewProvider {
     static var previews: some View {
         NoteCreationSheet()
             .environmentObject(FerrufiApp())

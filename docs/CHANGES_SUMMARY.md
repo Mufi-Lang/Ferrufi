@@ -2,7 +2,7 @@
 
 ## Overview
 
-Ferrufi's editor has been refactored to provide enhanced Mufi code execution capabilities while maintaining full markdown functionality. The key improvement is the addition of an **inline terminal output view** that displays script execution results directly below the editor.
+Ferrufi's editor has been refactored to provide enhanced Mufi code execution capabilities with a Mufi-first focus. The key improvement is the addition of an **inline terminal output view** that displays script execution results directly below the editor. Legacy live-render functionality has been deprecated and removed in favor of a unified Mufi editing experience.
 
 ## What Changed
 
@@ -61,7 +61,7 @@ Ferrufi's editor has been refactored to provide enhanced Mufi code execution cap
   - Parses comments
 - Sample scripts for testing and previews
 
-**Note:** This model coexists with the existing `Note` model. Markdown functionality is fully preserved.
+**Note:** This model coexists with the existing `Note` model. Legacy live-render functionality has been deprecated and removed; the editor now focuses on Mufi scripts and consistent script-first workflows.
 
 ### 4. Enhanced Execution Flow
 
@@ -133,7 +133,7 @@ Ferrufi's editor has been refactored to provide enhanced Mufi code execution cap
 |--------|----------|--------|
 | Run Mufi Script | `⌘R` | ✅ Active |
 | Toggle REPL | `⌃⌘R` | ✅ Active |
-| Toggle Preview | `⌃⌘P` | ✅ Active |
+
 | Bold | `⌘B` | ✅ Active |
 | Italic | `⌘I` | ✅ Active |
 | Link | `⌘K` | ✅ Active |
@@ -164,16 +164,11 @@ Ferrufi's editor has been refactored to provide enhanced Mufi code execution cap
 
 ## Backward Compatibility
 
-✅ **Full backward compatibility maintained:**
-- All markdown functionality works as before
-- Note model unchanged
-- Existing workflows unaffected
-- REPL still available as separate sheet
-- Preview mode still functional
+⚠️ **Backward compatibility notes:** Legacy live-render support has been removed. The Note model remains unchanged; most workflows continue to operate as before, but users should expect that live-render features are no longer available. The REPL remains available as a separate tool.
 
 ## What Still Works
 
-- ✅ Markdown editing with live preview
+- ❌ Legacy live-render support removed (Mufi-first editor)
 - ✅ Wiki-style links `[[Note Name]]`
 - ✅ Hashtag support `#tag`
 - ✅ Formatting shortcuts (bold, italic, code, etc.)
@@ -227,11 +222,7 @@ Potential improvements identified:
    - Verify `⌃⌘R` opens REPL
    - Test all formatting shortcuts
 
-6. **Markdown Compatibility**
-   - Create/edit markdown notes
-   - Verify preview still works
-   - Test wiki-links and hashtags
-   - Run Mufi code in markdown context
+6. **Legacy rendering:** Live-render tests are deprecated and no longer part of the standard testing matrix. Focus test efforts on Mufi script execution, terminal output, REPL behavior, and general note/script integrity.
 
 ## Files Modified
 
@@ -270,7 +261,7 @@ Build complete! (0.13s)
 
 ## Summary
 
-This refactoring successfully adds powerful code execution capabilities while maintaining the editor's markdown-first philosophy. The inline terminal provides immediate, non-intrusive feedback for Mufi script execution, making Ferrufi a more capable environment for both note-taking and programming.
+This refactoring successfully adds powerful code execution capabilities and transitions the editor to a Mufi-first workflow. The inline terminal provides immediate, non-intrusive feedback for Mufi script execution, making Ferrufi a more capable environment for scripting and lightweight note management.
 
 **Key Achievement:** Enhanced functionality without breaking existing features.
 

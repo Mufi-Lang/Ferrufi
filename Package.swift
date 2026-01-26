@@ -21,6 +21,7 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/JohnSundell/Files.git", from: "4.0.0"),
         .package(url: "https://github.com/kylef/PathKit.git", from: "1.0.0"),
+
     ],
     targets: [
         .systemLibrary(
@@ -33,6 +34,7 @@ let package = Package(
                 "CMufi",
                 .product(name: "Files", package: "Files"),
                 .product(name: "PathKit", package: "PathKit"),
+
             ],
             resources: [
                 .process("UI/Metal/Shaders.metal")

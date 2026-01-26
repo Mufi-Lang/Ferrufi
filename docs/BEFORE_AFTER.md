@@ -48,11 +48,11 @@
 ┌─────────────────────────────────────────────────────────┐
 │ Ferrufi - Editor                                        │
 ├─────────────────────────────────────────────────────────┤
-│ Toolbar: [Fmt] [▶️] [🖥️ Terminal] [🔧 REPL] [👁️]       │
+│ Toolbar: [Fmt] [▶️] [🖥️ Terminal] [🔧 REPL]            │
 ├─────────────────────────────────────────────────────────┤
 │                                                         │
-│  Editor Pane          │  Preview Pane                  │
-│  (Write code here)    │  (Markdown preview)            │
+│  Editor Pane          │  Secondary Pane                │
+│  (Write code here)    │  (secondary content)           │
 │                       │                                 │
 ├─────────────────────────────────────────────────────────┤
 │ ● Terminal          SUCCESS               0.045s       │
@@ -481,10 +481,10 @@ EditorView
 - ✅ Execution metrics built-in
 - ✅ Reusable terminal component
 - ✅ Consistent across all editors
-- ✅ Maintained markdown compatibility
+- ✅ Focused Mufi-first workflow
 
 ---
 
-**Conclusion:** The refactoring transforms Ferrufi from a note-taking app with basic script execution into a professional code editor with integrated terminal output, all while preserving its markdown-first philosophy.
+**Conclusion:** The refactoring transforms Ferrufi from a note-taking app with basic script execution into a professional Mufi script editor with integrated terminal output.
 
 🎉 **Result:** Best of both worlds!

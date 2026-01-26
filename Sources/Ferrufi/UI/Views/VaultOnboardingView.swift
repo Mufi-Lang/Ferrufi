@@ -104,7 +104,7 @@ public struct WorkspaceOnboardingView: View {
 }
 
 #if DEBUG
-    struct WorkspaceOnboardingView_Previews: PreviewProvider {
+    struct WorkspaceOnboardingView_Samples: PreviewProvider {
         static var previews: some View {
             Group {
                 WorkspaceOnboardingView(

@@ -223,9 +223,9 @@ The execution timer helps you:
 ### File Types
 
 The editor works with:
-- `.md` - Markdown files (can contain Mufi code blocks)
-- `.mufi` - Pure Mufi script files
-- Any text content treated as potential Mufi code when executed
+- `.mufi` - Primary Mufi script files (recommended for authoring scripts)
+- `.md` - Plain-text notes (legacy Markdown editing supported; live preview has been deprecated)
+- Any text content is treated as plain text; when executed, the editor will attempt to interpret its contents as Mufi code where applicable
 
 ## Troubleshooting
 
@@ -238,8 +238,8 @@ The editor works with:
 ### Terminal Not Appearing
 
 - Click the terminal icon to toggle visibility
-- Check that script actually executed (look for spinning indicator)
-- Verify you're not in preview-only mode
+- Check that the script actually executed (look for spinning indicator)
+- Ensure the terminal panel isn't collapsed or hidden; try toggling the terminal visibility
 
 ### Slow Execution
 

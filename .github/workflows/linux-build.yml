@@ -1,0 +1,126 @@
+name: Linux CI - build & libmufiz
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-linux:
+    name: Build (Linux) + libmufiz
+    runs-on: ubuntu-latest
+    # Use an official Swift Docker image to ensure an appropriate toolchain is available.
+    # If you prefer to use a self-hosted runner that already has Swift, remove the container stanza.
+    container:
+      image: swift:5.9
+    env:
+      # Optional: allow secrets to provide either a prebuilt artifact or a git repo to build from.
+      MUFIZ_PREBUILT_URL: ${{ secrets.MUFIZ_PREBUILT_URL || '' }}
+      MUFIZ_GIT_URL: ${{ secrets.MUFIZ_GIT_URL || '' }}
+      MUFIZ_TAG: ${{ secrets.MUFIZ_TAG || 'main' }}
+      MUFIZ_BUILD_CMD: ${{ secrets.MUFIZ_BUILD_CMD || '' }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Print environment
+        run: |
+          echo "Running in container: $(cat /etc/os-release 2>/dev/null || uname -a)"
+          swift --version || true
+
+      - name: Install system dependencies
+        run: |
+          set -eux
+          apt-get update
+          # Essential build tools, GL development libs, GTK (for later integration), and helpers.
+          apt-get install -y --no-install-recommends \
+            build-essential \
+            curl \
+            git \
+            ca-certificates \
+            libgl1-mesa-dev \
+            libegl1-mesa-dev \
+            libgtk-3-dev \
+            pkg-config \
+            libx11-dev \
+            cmake \
+            unzip \
+            lsb-release
+          # Install Zig (attempt via apt; if not available, warn — the build script can accept prebuilt artifacts)
+          if ! command -v zig >/dev/null 2>&1; then
+            echo "Attempting to install Zig..."
+            apt-get install -y zig || echo "Zig not available via apt; script may require Zig in PATH or a prebuilt artifact."
+          fi
+
+      - name: Ensure scripts are executable
+        run: |
+          chmod +x scripts/build_mufiz.sh || true
+
+      - name: Ensure libmufiz present (build or download if configured)
+        id: ensure-mufiz
+        run: |
+          set -euxo pipefail
+          # Determine expected artifact path for Linux
+          MUFI_LIB="$PWD/Sources/CMufi/libmufiz.so"
+
+          if [ -f "$MUFI_LIB" ]; then
+            echo "libmufiz.so already present in repository."
+            exit 0
+          fi
+
+          # If user provided a direct prebuilt URL, download it
+          if [ -n "${MUFIZ_PREBUILT_URL:-}" ]; then
+            echo "Attempting to download libmufiz from MUFIZ_PREBUILT_URL..."
+            ./scripts/build_mufiz.sh || ( echo "Download/build script failed"; exit 1 )
+          elif [ -n "${MUFIZ_GIT_URL:-}" ]; then
+            echo "MUFIZ_GIT_URL provided; attempting to clone and build libmufiz..."
+            ./scripts/build_mufiz.sh || ( echo "Build script failed"; exit 1 )
+          else
+            echo "No prebuilt URL or git repo specified and libmufiz.so not found in repository."
+            echo "Set MUFIZ_PREBUILT_URL or MUFIZ_GIT_URL (via repository secrets) to provide the library."
+            exit 1
+          fi
+
+          # Final check
+          if [ ! -f "$MUFI_LIB" ]; then
+            echo "::error::libmufiz.so not found at $MUFI_LIB after build/download step."
+            echo "If mufiz is not available publicly, consider adding a prebuilt libmufiz.so to Sources/CMufi for CI."
+            exit 1
+          fi
+
+      - name: Show libmufiz info (for debugging)
+        if: success()
+        run: |
+          echo "libmufiz.so contents and ldd output:"
+          ls -la Sources/CMufi || true
+          file Sources/CMufi/libmufiz.so || true
+          ldd Sources/CMufi/libmufiz.so || true
+
+      - name: Swift build (release)
+        run: |
+          set -euxo pipefail
+          swift build -v
+
+      - name: Swift test (if any)
+        # Tests may be macOS-specific. Keep this step best-effort.
+        continue-on-error: true
+        run: |
+          set -euxo pipefail
+          swift test || true
+
+      - name: Upload built mufiz (artifact)
+        if: success() || failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: libmufiz
+          path: Sources/CMufi/libmufiz.so
+
+      - name: Post-check (sanity)
+        if: success()
+        run: |
+          echo "Linux build completed successfully."

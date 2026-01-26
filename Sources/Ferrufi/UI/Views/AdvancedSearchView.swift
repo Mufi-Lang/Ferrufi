@@ -619,7 +619,7 @@ public struct AdvancedSearchView: View {
 
 // MARK: - Preview
 
-struct AdvancedSearchView_Previews: PreviewProvider {
+struct AdvancedSearchView_Samples: PreviewProvider {
     static var previews: some View {
         AdvancedSearchView()
             .environmentObject(FerrufiApp())

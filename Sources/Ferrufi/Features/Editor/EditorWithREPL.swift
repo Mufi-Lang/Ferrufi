@@ -2,10 +2,9 @@
 //  EditorWithREPL.swift
 //  Ferrufi
 //
-//  Enhanced editor view with inline REPL mode alongside preview
+//  Enhanced editor view with inline REPL support
 //  Allows users to:
 //  - Edit code in the left pane
-//  - See preview in the middle pane
 //  - Use interactive REPL in the right pane
 //
 
@@ -14,9 +13,7 @@ import SwiftUI
 /// Display mode for the editor
 enum EditorDisplayMode: String, CaseIterable {
     case editorOnly = "Editor Only"
-    case editorPreview = "Editor + Preview"
     case editorREPL = "Editor + REPL"
-    case editorPreviewREPL = "All Panes"
 }
 
 /// Enhanced editor with integrated REPL support
@@ -25,7 +22,7 @@ struct EditorWithREPL: View {
     @Binding var content: String
 
     @State private var isEditing = false
-    @State private var displayMode: EditorDisplayMode = .editorPreview
+    @State private var displayMode: EditorDisplayMode = .editorOnly
     @State private var showTerminal = false
     @State private var outputText: String = ""
     @State private var exitStatus: UInt8 = 0
@@ -36,6 +33,7 @@ struct EditorWithREPL: View {
 
     @Environment(\.colorScheme) var colorScheme
     @EnvironmentObject var folderManager: FolderManager
+    @EnvironmentObject var themeManager: ThemeManager
 
     // Auto-save configuration
     private let autoSaveInterval: TimeInterval = 2.0
@@ -72,6 +70,7 @@ struct EditorWithREPL: View {
                 .transition(.move(edge: .bottom))
             }
         }
+        .environment(\.font, themeManager.monospacedFont)
         .onAppear {
             setupAutoSave()
             setupNotificationObservers()
@@ -103,44 +102,13 @@ struct EditorWithREPL: View {
                     .frame(width: 8, height: 8)
 
                 Text(isEditing ? "Editing" : "Ready")
-                    .font(.caption)
+                    .font(themeManager.monospacedCaption)
                     .foregroundColor(.secondary)
             }
 
             Spacer()
 
-            // Formatting buttons
-            Group {
-                Button(action: { insertFormatting("**", "**", "bold text") }) {
-                    Image(systemName: "bold")
-                }
-                .help("Bold (⌘B)")
-
-                Button(action: { insertFormatting("*", "*", "italic text") }) {
-                    Image(systemName: "italic")
-                }
-                .help("Italic (⌘I)")
-
-                Button(action: { insertFormatting("[", "](url)", "link text") }) {
-                    Image(systemName: "link")
-                }
-                .help("Link (⌘K)")
-
-                Divider()
-                    .frame(height: 16)
-
-                Button(action: { insertList() }) {
-                    Image(systemName: "list.bullet")
-                }
-                .help("Insert List")
-
-                Button(action: { insertHeader() }) {
-                    Image(systemName: "textformat.size")
-                }
-                .help("Insert Header")
-            }
-            .buttonStyle(PlainButtonStyle())
-            .foregroundColor(.secondary)
+            // Formatting toolbar removed
 
             Spacer()
 
@@ -174,7 +142,7 @@ struct EditorWithREPL: View {
                 .disabled(isRunningScript)
 
                 // Quick REPL toggle
-                if displayMode != .editorREPL && displayMode != .editorPreviewREPL {
+                if displayMode != .editorREPL {
                     Button(action: { toggleREPL() }) {
                         Image(systemName: "terminal")
                     }
@@ -183,13 +151,15 @@ struct EditorWithREPL: View {
                     .foregroundColor(.secondary)
                 }
 
+                // Secondary pane removed
+
                 // Save indicator
                 if Date().timeIntervalSince(lastSaveTime) < 2.0 {
                     HStack(spacing: 4) {
                         Image(systemName: "checkmark.circle.fill")
                             .foregroundColor(.green)
                         Text("Saved")
-                            .font(.caption)
+                            .font(themeManager.monospacedCaption)
                             .foregroundColor(.secondary)
                     }
                     .transition(.opacity)
@@ -208,20 +178,9 @@ struct EditorWithREPL: View {
         switch displayMode {
         case .editorOnly:
             editorPane
-        case .editorPreview:
-            HSplitView {
-                editorPane
-                previewPane
-            }
         case .editorREPL:
             HSplitView {
                 editorPane
-                replPane
-            }
-        case .editorPreviewREPL:
-            HSplitView {
-                editorPane
-                previewPane
                 replPane
             }
         }
@@ -235,10 +194,10 @@ struct EditorWithREPL: View {
             // Editor pane header
             HStack {
                 Text("Editor")
-                    .font(.headline)
+                    .font(themeManager.monospacedHeadline)
                 Spacer()
                 Text("\(content.count) characters")
-                    .font(.caption)
+                    .font(themeManager.monospacedCaption)
                     .foregroundColor(.secondary)
             }
             .padding(.horizontal, 12)
@@ -248,8 +207,7 @@ struct EditorWithREPL: View {
             UnifiedEditor(
                 text: $content,
                 isEditing: $isEditing,
-                fileType: .markdown,
-                showPreview: true,
+                fileType: .mufi,
                 placeholder: "Start writing...",
                 onTextChange: { newText in
                     handleTextChange(newText)
@@ -262,34 +220,9 @@ struct EditorWithREPL: View {
         .frame(minWidth: 300)
     }
 
-    // MARK: - Preview Pane
+    // MARK: - Secondary Pane
 
-    @ViewBuilder
-    private var previewPane: some View {
-        VStack(spacing: 0) {
-            // Preview pane header
-            HStack {
-                Text("Preview")
-                    .font(.headline)
-                Spacer()
-                if let wordCount = getWordCount() {
-                    Text("\(wordCount) words")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(Color(NSColor.controlBackgroundColor).opacity(0.5))
-
-            NativeMarkdownPreview(
-                markdown: content,
-                baseURL: note?.url?.deletingLastPathComponent()
-            )
-            .background(Color(NSColor.textBackgroundColor))
-        }
-        .frame(minWidth: 300)
-    }
+    // Secondary pane removed
 
     // MARK: - REPL Pane
 
@@ -299,7 +232,7 @@ struct EditorWithREPL: View {
             // REPL pane header
             HStack {
                 Text("Mufi REPL")
-                    .font(.headline)
+                    .font(themeManager.monospacedHeadline)
                 Spacer()
                 Button(action: {
                     // Quick action to send current selection or entire content to REPL
@@ -325,14 +258,12 @@ struct EditorWithREPL: View {
         switch displayMode {
         case .editorOnly:
             displayMode = .editorREPL
-        case .editorPreview:
-            displayMode = .editorPreviewREPL
         case .editorREPL:
             displayMode = .editorOnly
-        case .editorPreviewREPL:
-            displayMode = .editorPreview
         }
     }
+
+    // Pane toggling removed — secondary pane is no longer part of the editor UI.
 
     private func sendToREPL(_ code: String) {
         // Post notification to REPL to execute code
@@ -349,20 +280,7 @@ struct EditorWithREPL: View {
         scheduleAutoSave()
     }
 
-    private func insertFormatting(_ prefix: String, _ suffix: String, _ placeholder: String) {
-        NotificationCenter.default.post(
-            name: .insertMarkdownFormatting,
-            object: MarkdownFormatting(prefix: prefix, suffix: suffix, placeholder: placeholder)
-        )
-    }
-
-    private func insertList() {
-        NotificationCenter.default.post(name: .insertMarkdownList, object: nil)
-    }
-
-    private func insertHeader() {
-        NotificationCenter.default.post(name: .insertMarkdownHeader, object: nil)
-    }
+    // Formatting helpers removed
 
     // MARK: - Auto-save
 
@@ -463,17 +381,15 @@ struct EditorWithREPL: View {
     }
 
     private func openFileLink(_ url: URL) {
-        if url.pathExtension == "md" {
-            Task {
-                if let foundNote = await folderManager.findNoteByURL(url) {
-                    await MainActor.run {
-                        note = foundNote
-                        NotificationCenter.default.post(name: .navigateToNote, object: foundNote)
-                    }
+        Task {
+            if let foundNote = await folderManager.findNoteByURL(url) {
+                await MainActor.run {
+                    note = foundNote
+                    NotificationCenter.default.post(name: .navigateToNote, object: foundNote)
                 }
+            } else {
+                NSWorkspace.shared.open(url)
             }
-        } else {
-            NSWorkspace.shared.open(url)
         }
     }
 
@@ -513,9 +429,9 @@ extension Notification.Name {
     static let executeInREPL = Notification.Name("executeInREPL")
 }
 
-// MARK: - Preview
+// MARK: - SwiftUI Samples
 
-struct EditorWithREPL_Previews: PreviewProvider {
+struct EditorWithREPL_Samples: PreviewProvider {
     static var previews: some View {
         EditorWithREPL(
             note: .constant(Note.sample),

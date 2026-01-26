@@ -353,9 +353,14 @@ extension Folder {
 
 extension FolderManager {
     /// Creates a new note
-    public func createNote(name: String, content: String, folder: Folder?) async throws -> Note {
+    public func createNote(
+        name: String, content: String, folder: Folder?, fileExtension: String = ".md"
+    ) async throws -> Note {
         let targetFolder = folder ?? rootFolder
-        let fileName = name.hasSuffix(".mufi") ? name : "\(name).mufi"
+        // Respect the requested file extension when composing the filename.
+        // If the provided name already ends with the requested extension, use it as-is;
+        // otherwise append the extension (e.g. "note" + ".md" -> "note.md").
+        let fileName = name.hasSuffix(fileExtension) ? name : "\(name)\(fileExtension)"
         let fileURL = targetFolder.url.appendingPathComponent(fileName)
         let filePath = fileURL.path
 

@@ -150,7 +150,7 @@ public final class FileStorage: NSObject, FileStorageProtocol, ObservableObject,
         // access is consistently handled in one place. Prefer a resolved workspace URL path
         // when present so the stored configuration remains canonical.
         let basePath = self.resolvedWorkspaceURL?.path ?? self.workspacePath
-        let notePath = URL(fileURLWithPath: basePath).appendingPathComponent("\(note.title).md")
+        let notePath = URL(fileURLWithPath: basePath).appendingPathComponent("\(note.title).mufi")
             .path
 
         do {
@@ -166,7 +166,7 @@ public final class FileStorage: NSObject, FileStorageProtocol, ObservableObject,
         // Read note contents via FileService (handles security-scoped access).
         do {
             let content = try await FileService.shared.readTextFile(atPath: path)
-            var note = Note.fromMarkdown(filePath: path, content: content)
+            var note = Note.fromText(filePath: path, content: content)
 
             // Load metadata if present (async helper)
             if let metadata = try? await loadNoteMetadata(for: note.id) {
@@ -212,8 +212,8 @@ public final class FileStorage: NSObject, FileStorageProtocol, ObservableObject,
             let entries = try await FileService.shared.listDirectory(atPath: notesDir)
 
             let noteFiles = entries.compactMap { name -> String? in
-                // entries from FileService are directory entries (names). Filter by .md extension.
-                guard (name as NSString).pathExtension == "md" else { return nil }
+                // entries from FileService are directory entries (names). Filter by .mufi extension.
+                guard (name as NSString).pathExtension == "mufi" else { return nil }
                 // If an entry is absolute, return as-is; otherwise resolve relative to notesDir.
                 if name.hasPrefix("/") {
                     return name
