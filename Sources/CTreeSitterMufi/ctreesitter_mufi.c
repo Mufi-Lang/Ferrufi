@@ -18,6 +18,7 @@
 #include "tree_sitter/api.h"
 #include "tree_sitter/parser.h"
 #include <stdlib.h>
+#include <pthread.h>
 
 // Forward declaration for the generated language accessor
 extern const TSLanguage *tree_sitter_mufi(void);
@@ -61,10 +62,86 @@ static int32_t mufi_capture_to_token_type(const char *name, uint32_t name_len) {
     return CTS_TOKEN_UNKNOWN;
 }
 
-int cts_mufi_parser_available(void) {
-    // Return non-zero when the generated language is available (linked in).
+static TSParser *g_parser = NULL;
+static TSQuery *g_query = NULL;
+static pthread_mutex_t g_parser_mutex = PTHREAD_MUTEX_INITIALIZER;
+static int g_atexit_registered = 0;
+
+static void cts_mufi_runtime_cleanup(void);
+
+// Ensure the cached parser and compiled query are initialized.
+// Returns 0 on success, -1 on failure.
+static int ensure_parser_and_query(void) {
+    // Fast check without locking
+    if (g_parser != NULL && g_query != NULL) return 0;
+
+    // Lock and initialize if necessary
+    pthread_mutex_lock(&g_parser_mutex);
+
+    if (g_parser != NULL && g_query != NULL) {
+        pthread_mutex_unlock(&g_parser_mutex);
+        return 0;
+    }
+
     const TSLanguage *lang = tree_sitter_mufi();
-    return (lang != NULL) ? 1 : 0;
+    if (lang == NULL) {
+        pthread_mutex_unlock(&g_parser_mutex);
+        return -1;
+    }
+
+    TSParser *parser = ts_parser_new();
+    if (!parser) {
+        pthread_mutex_unlock(&g_parser_mutex);
+        return -1;
+    }
+
+    if (!ts_parser_set_language(parser, lang)) {
+        ts_parser_delete(parser);
+        pthread_mutex_unlock(&g_parser_mutex);
+        return -1;
+    }
+
+    uint32_t q_error_offset = 0;
+    TSQueryError qerr = TSQueryErrorNone;
+    TSQuery *query = ts_query_new(lang, mufi_highlights_query, (uint32_t)strlen(mufi_highlights_query), &qerr, &q_error_offset);
+    if (!query) {
+        ts_parser_delete(parser);
+        pthread_mutex_unlock(&g_parser_mutex);
+        return -1;
+    }
+
+    // Publish initialized objects
+    g_parser = parser;
+    g_query = query;
+
+    if (!g_atexit_registered) {
+        atexit(cts_mufi_runtime_cleanup);
+        g_atexit_registered = 1;
+    }
+
+    pthread_mutex_unlock(&g_parser_mutex);
+    return 0;
+}
+
+// Cleanup cached runtime objects at library unload
+static void cts_mufi_runtime_cleanup(void) {
+    pthread_mutex_lock(&g_parser_mutex);
+    if (g_query) {
+        ts_query_delete(g_query);
+        g_query = NULL;
+    }
+    if (g_parser) {
+        ts_parser_delete(g_parser);
+        g_parser = NULL;
+    }
+    pthread_mutex_unlock(&g_parser_mutex);
+
+    // Destroy the mutex - it is safe here since program is terminating
+    pthread_mutex_destroy(&g_parser_mutex);
+}
+
+int cts_mufi_parser_available(void) {
+    return (ensure_parser_and_query() == 0) ? 1 : 0;
 }
 
 int cts_mufi_highlight_ranges(
@@ -77,38 +154,23 @@ int cts_mufi_highlight_ranges(
         return -1;
     }
 
-    // Ensure the generated language is present
-    const TSLanguage *lang = tree_sitter_mufi();
-    if (lang == NULL) {
+    // Ensure parser & query are initialized
+    if (ensure_parser_and_query() != 0) {
         return -1;
     }
 
-    // Create a parser and parse the provided UTF-8 text
-    TSParser *parser = ts_parser_new();
-    if (!parser) {
-        return -1;
-    }
-    ts_parser_set_language(parser, lang);
+    // Parse using the cached parser (protected by the mutex)
+    pthread_mutex_lock(&g_parser_mutex);
+    TSTree *tree = ts_parser_parse_string(g_parser, NULL, text, (uint32_t)strlen(text));
+    pthread_mutex_unlock(&g_parser_mutex);
 
-    TSTree *tree = ts_parser_parse_string(parser, NULL, text, (uint32_t)strlen(text));
     if (tree == NULL) {
-        ts_parser_delete(parser);
         return -1;
     }
 
-    // Compile the highlights query
-    uint32_t error_offset = 0;
-    TSQueryError error_type = 0;
-    TSQuery *query = ts_query_new(lang, mufi_highlights_query, (uint32_t)strlen(mufi_highlights_query), &error_type, &error_offset);
-    if (query == NULL) {
-        ts_tree_delete(tree);
-        ts_parser_delete(parser);
-        return -1;
-    }
-
-    // Execute the query against the parse tree
+    // Execute the precompiled (cached) query against the parse tree
     TSQueryCursor *cursor = ts_query_cursor_new();
-    ts_query_cursor_exec(cursor, query, ts_tree_root_node(tree));
+    ts_query_cursor_exec(cursor, g_query, ts_tree_root_node(tree));
 
     TSQueryMatch match;
     int32_t reported = 0;
@@ -117,24 +179,22 @@ int cts_mufi_highlight_ranges(
         for (uint32_t i = 0; i < match.capture_count; i++) {
             TSQueryCapture capture = match.captures[i];
             uint32_t name_len = 0;
-            const char *name = ts_query_capture_name_for_id(query, capture.index, &name_len);
+            const char *name = ts_query_capture_name_for_id(g_query, capture.index, &name_len);
             int32_t tokenType = mufi_capture_to_token_type(name, name_len);
 
             uint32_t start = ts_node_start_byte(capture.node);
             uint32_t end = ts_node_end_byte(capture.node);
             int32_t length = (int32_t)(end - start);
 
-            // Invoke the callback with byte offsets (UTF-8)
+            // Invoke the callback with byte offsets and length
             callback((int32_t)start, length, tokenType, ctx);
             reported++;
         }
     }
 
-    // Cleanup
+    // cleanup tree & cursor (cached query and parser remain)
     ts_query_cursor_delete(cursor);
-    ts_query_delete(query);
     ts_tree_delete(tree);
-    ts_parser_delete(parser);
 
     return reported;
 }
