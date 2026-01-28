@@ -41,6 +41,31 @@ final class TreeSitterHighlighterTests: XCTestCase {
         }
     }
 
+    func testTokenPriority_functionOverridesIdentifier() async throws {
+        try XCTSkipIf(
+            !TreeSitterHighlighter.shared.isParserAvailable, "Tree-sitter parser not available")
+        let sample = "fun foo() { }"
+        let fooRange = (sample as NSString).range(of: "foo")
+        let maybeTokens = await MainActor.run {
+            TreeSitterHighlighter.shared.highlightRanges(in: sample)
+        }
+        guard let tokens = maybeTokens else {
+            XCTFail("highlightRanges returned nil")
+            return
+        }
+        // tokens are sorted by start+priority; find those that cover 'foo'
+        let covering = tokens.filter { token in
+            NSIntersectionRange(token.0, fooRange).length > 0
+        }
+        XCTAssertFalse(covering.isEmpty, "expected some token(s) covering the function name")
+        // Ensure the last covering token is the function token (highest priority)
+        if let last = covering.last {
+            XCTAssertEqual(last.1, .function, "expected function token to override identifier")
+        } else {
+            XCTFail("no covering token found")
+        }
+    }
+
     func testHighlightRanges_repeatedCalls_areStable() async throws {
         try XCTSkipIf(
             !TreeSitterHighlighter.shared.isParserAvailable, "Tree-sitter parser not available")

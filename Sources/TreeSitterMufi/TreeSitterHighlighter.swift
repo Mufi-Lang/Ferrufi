@@ -114,6 +114,25 @@ public final class TreeSitterHighlighter {
         }
 
         // Convert collected UTF-8 byte offset ranges to NSRange (UTF-16)
+        // and return a deterministic ordering so highlighting is stable.
+        // Strategy: sort tokens by priority (lower priorities first) so
+        // higher-priority tokens (e.g. comments) are applied last and thus
+        // override lower-priority tokens when ranges overlap.
+        let priority: (MufiTokenKind) -> Int = { kind in
+            switch kind {
+            case .comment: return 90
+            case .string: return 80
+            case .number: return 70
+            case .keyword: return 60
+            case .function: return 50
+            case .type: return 40
+            case .op: return 30
+            case .punctuation: return 20
+            case .identifier: return 10
+            default: return 0
+            }
+        }
+
         var out: [(NSRange, MufiTokenKind)] = []
         for entry in collector.entries {
             if let nsr = Self.nsRangeFromUTF8Offsets(
@@ -122,6 +141,19 @@ public final class TreeSitterHighlighter {
                 let kind = MufiTokenKind(fromInt: entry.type)
                 out.append((nsr, kind))
             }
+        }
+
+        // Sort by priority ascending (low -> high), then start location, then length.
+        out.sort { a, b in
+            let pa = priority(a.1)
+            let pb = priority(b.1)
+            if pa == pb {
+                if a.0.location == b.0.location {
+                    return a.0.length < b.0.length
+                }
+                return a.0.location < b.0.location
+            }
+            return pa < pb
         }
 
         return out
