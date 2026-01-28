@@ -234,6 +234,14 @@ struct SidebarView: View {
                     navigationModel.showingFolderCreation = true
                 }
 
+                // REPL quick action: toggle the embedded REPL (quick actions menu)
+                CompactActionCard(
+                    icon: "terminal",
+                    color: Color(red: 0.4, green: 0.4, blue: 0.9)
+                ) {
+                    NotificationCenter.default.post(name: .toggleMufiREPL, object: nil)
+                }
+
                 CompactActionCard(
                     icon: "folder.badge.gearshape",
                     color: Color(red: 1.0, green: 0.6, blue: 0.2)

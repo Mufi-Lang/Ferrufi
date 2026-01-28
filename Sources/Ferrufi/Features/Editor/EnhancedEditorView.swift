@@ -143,13 +143,7 @@ struct EnhancedEditorView: View {
             .help("Insert font test snippet")
             .foregroundColor(.secondary)
 
-            // Open REPL
-            Button(action: { showREPL.toggle() }) {
-                Image(systemName: "terminal")
-            }
-            .help("Open Embedded Mufi REPL")
-            .buttonStyle(PlainButtonStyle())
-            .foregroundColor(.secondary)
+            // REPL toggle moved to the global bottom toolbar
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)

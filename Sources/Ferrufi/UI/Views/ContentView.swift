@@ -10,6 +10,9 @@ public struct ContentView: View {
     @State private var vaultFolderURL: URL?
     // Onboarding removed: default to Application Support vault on first run
 
+    // Global REPL toggle (accessible without opening a file)
+    @State private var showGlobalREPL: Bool = false
+
     // Trust selection is now applied immediately when the user selects a folder.
 
     @StateObject private var bookmarkManager = SecurityScopedBookmarkManager()
@@ -190,6 +193,39 @@ public struct ContentView: View {
                 .environmentObject(ferrufiApp)
                 .environmentObject(navigationModel)
                 .environmentObject(themeManager)
+        }
+
+        .onReceive(NotificationCenter.default.publisher(for: .toggleMufiREPL)) { _ in
+            withAnimation { showGlobalREPL.toggle() }
+        }
+        .overlay(alignment: .bottom) {
+            if showGlobalREPL {
+                VStack(spacing: 0) {
+                    HStack(spacing: 8) {
+                        Text("Mufi REPL")
+                            .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                        Spacer()
+                        Button(action: { withAnimation { showGlobalREPL = false } }) {
+                            Image(systemName: "chevron.down")
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 6)
+                    .background(Color(NSColor.controlBackgroundColor))
+                    Divider()
+                    EmbeddedMufiREPLView()
+                        .environmentObject(themeManager)
+                        .frame(minHeight: 220, maxHeight: 420)
+                        .background(Color(NSColor.windowBackgroundColor))
+                }
+                .frame(maxWidth: .infinity)
+                .cornerRadius(8)
+                .shadow(radius: 8)
+                .padding(.horizontal, 12)
+                .padding(.bottom, 6)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
         }
         .onChange(of: navigationModel.showingFolderCreation) { _, newValue in
             print("ContentView: showingFolderCreation changed to: \(newValue)")

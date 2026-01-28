@@ -141,16 +141,6 @@ struct EditorWithREPL: View {
                 .foregroundColor(.secondary)
                 .disabled(isRunningScript)
 
-                // Quick REPL toggle
-                if displayMode != .editorREPL {
-                    Button(action: { toggleREPL() }) {
-                        Image(systemName: "terminal")
-                    }
-                    .help("Show REPL")
-                    .buttonStyle(PlainButtonStyle())
-                    .foregroundColor(.secondary)
-                }
-
                 // Secondary pane removed
 
                 // Save indicator
