@@ -32,6 +32,7 @@ let package = Package(
             name: "Ferrufi",
             dependencies: [
                 "CMufi",
+                "TreeSitterMufi",
                 .product(name: "Files", package: "Files"),
                 .product(name: "PathKit", package: "PathKit"),
 
@@ -43,6 +44,14 @@ let package = Package(
                 .unsafeFlags(["-L", "Sources/CMufi"]),
                 .linkedLibrary("mufiz"),
             ]
+        ),
+        .target(
+            name: "CTreeSitterMufi",
+            path: "Sources/CTreeSitterMufi"
+        ),
+        .target(
+            name: "TreeSitterMufi",
+            dependencies: ["CTreeSitterMufi"]
         ),
         .executableTarget(
             name: "FerrufiApp",
@@ -59,7 +68,7 @@ let package = Package(
 
         .testTarget(
             name: "FerrufiTests",
-            dependencies: ["Ferrufi"],
+            dependencies: ["Ferrufi", "TreeSitterMufi"],
             linkerSettings: [
                 .unsafeFlags(["-L", "Sources/CMufi"]),
                 .unsafeFlags([
