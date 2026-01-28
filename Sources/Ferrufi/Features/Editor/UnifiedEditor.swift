@@ -18,6 +18,7 @@ import AppKit
 import Combine
 import Foundation
 import SwiftUI
+import TreeSitterMufi
 
 // Public API: file type / mode
 public enum EditorFileType {
@@ -99,7 +100,7 @@ public struct UnifiedEditor: View {
                 }
             }
         }
-        .onChange(of: fileType) { newMode in
+        .onChange(of: fileType) { _, newMode in
             // When switching into Mufi mode, lock the forced monospaced font and size so
             // the raw editor remains identical to the Mufi script editor. When switching
             // away, clear the forced name so user preferences can take effect.
@@ -181,7 +182,9 @@ private struct EditorContainerView: NSViewRepresentable {
         unifiedTextView.font = chosenFont
         // Make the highlighter use the same base family so token-derived fonts match.
         unifiedTextView.configureHighlighter(
-            baseFontName: unifiedTextView.font?.fontName, baseSize: themeManager.editorFontSize)
+            baseFontName: unifiedTextView.font?.fontName,
+            baseSize: themeManager.editorFontSize,
+            themeColors: themeManager.currentTheme.colors)
         unifiedTextView.textContainerInset = NSSize(width: 16, height: 16)
         unifiedTextView.isVerticallyResizable = true
         unifiedTextView.isHorizontallyResizable = false
@@ -199,6 +202,9 @@ private struct EditorContainerView: NSViewRepresentable {
             // Ensure typing attributes inherit the same font so newly typed text matches preview/editor
             unifiedTextView.typingAttributes[.font] = font
         }
+
+        // Apply initial highlighting for Mufi scripts
+        unifiedTextView.applyHighlightingWhole()
 
         // Theme
         updateTheme(textView: unifiedTextView)
@@ -251,7 +257,8 @@ private struct EditorContainerView: NSViewRepresentable {
         // Ensure highlighter uses the chosen font family for Mufi files (pass font name) or default for code
         let highlighterFontName: String? = (fileType == .mufi) ? chosenFont.fontName : nil
         textView.configureHighlighter(
-            baseFontName: highlighterFontName, baseSize: themeManager.editorFontSize)
+            baseFontName: highlighterFontName, baseSize: themeManager.editorFontSize,
+            themeColors: themeManager.currentTheme.colors)
         if let ts = textView.textStorage, let base = textView.font {
             let full = NSRange(location: 0, length: ts.length)
             ts.addAttribute(.font, value: base, range: full)
@@ -417,6 +424,37 @@ private class UnifiedTextView: NSTextView {
     // When false, skip incremental highlighting (useful for performance-sensitive cases)
     var highlightingEnabled: Bool = true
 
+    // --- Lightweight syntax highlighter state ---
+    private var highlighterBaseFontName: String? = nil
+    private var highlighterBaseSize: Double = 14.0
+    private var highlightDelaySeconds: TimeInterval = 0.12
+    private var highlightWorkItem: DispatchWorkItem? = nil
+
+    // Token color defaults; will be updated from theme via `configureHighlighter(...)`
+    private var keywordColor: NSColor = NSColor.systemBlue
+    private var stringColor: NSColor = NSColor.systemGreen
+    private var numberColor: NSColor = NSColor.systemOrange
+    private var commentColor: NSColor = NSColor.secondaryLabelColor
+    private var functionColor: NSColor = NSColor.systemPurple
+
+    // Mufi language spec (loaded from grammars/mufi.lang.json or app bundle)
+    private struct MufiLangSpec: Codable {
+        let keywords: [String]
+        let builtin_functions: [String]
+        let integer: String?
+        let float: String?
+        let string: String?
+        let comment: String?
+    }
+
+    // Runtime-driven patterns / token lists (default fallbacks kept)
+    private var mfKeywords: [String] = []
+    private var mfBuiltins: [String] = []
+    private var mfIntegerPattern: String = "\\b\\d+\\b"
+    private var mfFloatPattern: String = "\\b\\d+\\.\\d+\\b"
+    private var mfStringPattern: String = "\"(?:\\\\.|[^\"\\\\])*\""
+    private var mfCommentPattern: String = "//.*"
+
     override func awakeFromNib() {
         super.awakeFromNib()
         Task { @MainActor in
@@ -441,6 +479,9 @@ private class UnifiedTextView: NSTextView {
         isRichText = false
         allowsUndo = true
         isContinuousSpellCheckingEnabled = true
+
+        // Attempt to load the Mufi language specification (optional)
+        loadMufiLanguageSpec()
     }
 
     /// Configure the view for a specific mode.
@@ -455,9 +496,191 @@ private class UnifiedTextView: NSTextView {
         clearAllAttributes()
     }
 
-    // Apply syntax highlighting to the entire document (removed)
-    private func applyHighlightingWhole() {
-        // Syntax highlighting removed — no-op.
+    // Load Mufi language specification (if available) to drive highlighting
+    private func loadMufiLanguageSpec() {
+        // Try to find grammar in app bundle first
+        if let url = Bundle.main.url(
+            forResource: "mufi.lang", withExtension: "json", subdirectory: "grammars")
+        {
+            if let data = try? Data(contentsOf: url),
+                let spec = try? JSONDecoder().decode(MufiLangSpec.self, from: data)
+            {
+                mfKeywords = spec.keywords
+                mfBuiltins = spec.builtin_functions
+                if let f = spec.float { mfFloatPattern = f }
+                if let i = spec.integer { mfIntegerPattern = i }
+                if let s = spec.string { mfStringPattern = s }
+                if let c = spec.comment { mfCommentPattern = c }
+            }
+            return
+        }
+
+        // Development fallback: look in repository path
+        let fallback = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("Ferrufi/grammars/mufi.lang.json")
+        if FileManager.default.fileExists(atPath: fallback.path) {
+            if let data = try? Data(contentsOf: fallback),
+                let spec = try? JSONDecoder().decode(MufiLangSpec.self, from: data)
+            {
+                mfKeywords = spec.keywords
+                mfBuiltins = spec.builtin_functions
+                if let f = spec.float { mfFloatPattern = f }
+                if let i = spec.integer { mfIntegerPattern = i }
+                if let s = spec.string { mfStringPattern = s }
+                if let c = spec.comment { mfCommentPattern = c }
+            }
+        }
+    }
+
+    // Apply syntax highlighting to the entire document (simple, regex-based for Mufi)
+    fileprivate func applyHighlightingWhole() {
+        guard highlightingEnabled, let ts = textStorage else { return }
+        let textStr = self.string as NSString
+        let fullRange = NSRange(location: 0, length: textStr.length)
+
+        // Try Tree-sitter-based highlighting first (preferred). If not available, fallback
+        if let tsTokens = TreeSitterHighlighter.shared.highlightRanges(in: self.string) {
+            // Reset attributes and apply base font/foreground
+            clearAllAttributes()
+            if let baseFont = self.font {
+                ts.addAttribute(.font, value: baseFont, range: fullRange)
+            }
+            ts.addAttribute(
+                .foregroundColor, value: self.textColor ?? NSColor.labelColor, range: fullRange)
+
+            // Apply tree-sitter produced tokens
+            for (range, kind) in tsTokens {
+                guard range.location != NSNotFound, range.length > 0 else { continue }
+                let color: NSColor
+                switch kind {
+                case .comment:
+                    color = commentColor
+                case .string:
+                    color = stringColor
+                case .number:
+                    color = numberColor
+                case .keyword:
+                    color = keywordColor
+                case .function:
+                    color = functionColor
+                case .type:
+                    color = stringColor  // fallback mapping
+                default:
+                    color = self.textColor ?? NSColor.textColor
+                }
+                ts.addAttribute(.foregroundColor, value: color, range: range)
+            }
+            return
+        }
+
+        // Start by clearing attributes and reapplying base font/foreground (regex fallback)
+        clearAllAttributes()
+        if let baseFont = self.font {
+            ts.addAttribute(.font, value: baseFont, range: fullRange)
+        }
+        ts.addAttribute(
+            .foregroundColor, value: self.textColor ?? NSColor.labelColor, range: fullRange)
+
+        // Keep track of ranges that should not be re-colored (strings/comments)
+        var protected: [NSRange] = []
+
+        ts.beginEditing()
+        defer { ts.endEditing() }
+
+        func applyAndProtect(range: NSRange, color: NSColor) {
+            guard range.location != NSNotFound, range.length > 0 else { return }
+            ts.addAttribute(.foregroundColor, value: color, range: range)
+            protected.append(range)
+        }
+
+        do {
+            // Comments (use language-specified pattern if available)
+            do {
+                let commentRe = try NSRegularExpression(
+                    pattern: mfCommentPattern + "$", options: [.anchorsMatchLines])
+                let commentMatches = commentRe.matches(
+                    in: self.string, options: [], range: fullRange)
+                for m in commentMatches { applyAndProtect(range: m.range, color: commentColor) }
+            } catch {
+                // ignore malformed pattern
+            }
+
+            // Strings (use language-specified pattern if available)
+            do {
+                let stringRe = try NSRegularExpression(pattern: mfStringPattern, options: [])
+                let stringMatches = stringRe.matches(in: self.string, options: [], range: fullRange)
+                for m in stringMatches { applyAndProtect(range: m.range, color: stringColor) }
+            } catch {
+                // ignore malformed pattern
+            }
+
+            // Numbers: floats then integers (use language spec if available)
+            do {
+                let floatRe = try NSRegularExpression(pattern: mfFloatPattern, options: [])
+                let floatMatches = floatRe.matches(in: self.string, options: [], range: fullRange)
+                for m in floatMatches {
+                    if protected.contains(where: { NSIntersectionRange($0, m.range).length > 0 }) {
+                        continue
+                    }
+                    ts.addAttribute(.foregroundColor, value: numberColor, range: m.range)
+                }
+            } catch {}
+
+            do {
+                let intRe = try NSRegularExpression(pattern: mfIntegerPattern, options: [])
+                let intMatches = intRe.matches(in: self.string, options: [], range: fullRange)
+                for m in intMatches {
+                    if protected.contains(where: { NSIntersectionRange($0, m.range).length > 0 }) {
+                        continue
+                    }
+                    ts.addAttribute(.foregroundColor, value: numberColor, range: m.range)
+                }
+            } catch {}
+
+            // Keywords (dynamically built from loaded spec)
+            if !mfKeywords.isEmpty {
+                let escaped = mfKeywords.map { NSRegularExpression.escapedPattern(for: $0) }.joined(
+                    separator: "|")
+                let kwPattern = "\\b(?:" + escaped + ")\\b"
+                let kwRe = try NSRegularExpression(pattern: kwPattern, options: [])
+                let kwMatches = kwRe.matches(in: self.string, options: [], range: fullRange)
+                for m in kwMatches {
+                    if protected.contains(where: { NSIntersectionRange($0, m.range).length > 0 }) {
+                        continue
+                    }
+                    ts.addAttribute(.foregroundColor, value: keywordColor, range: m.range)
+                }
+            }
+
+            // Builtin functions (special highlight) — apply before generic function names
+            if !mfBuiltins.isEmpty {
+                let escapedBuiltins = mfBuiltins.map { NSRegularExpression.escapedPattern(for: $0) }
+                    .joined(separator: "|")
+                let builtinPattern = "\\b(?:" + escapedBuiltins + ")\\s*(?=\\()"
+                let builtinRe = try NSRegularExpression(pattern: builtinPattern, options: [])
+                let builtinMatches = builtinRe.matches(
+                    in: self.string, options: [], range: fullRange)
+                for m in builtinMatches {
+                    let r = m.range(at: 0)
+                    if protected.contains(where: { NSIntersectionRange($0, r).length > 0 }) {
+                        continue
+                    }
+                    ts.addAttribute(.foregroundColor, value: functionColor, range: r)
+                }
+            }
+
+            // Function names (identifier followed by '(') — highlight the identifier only
+            let funcRe = try NSRegularExpression(
+                pattern: #"\b([A-Za-z_][A-Za-z0-9_]*)\s*(?=\()"#, options: [])
+            let funcMatches = funcRe.matches(in: self.string, options: [], range: fullRange)
+            for m in funcMatches {
+                let r = m.range(at: 1)
+                if protected.contains(where: { NSIntersectionRange($0, r).length > 0 }) { continue }
+                ts.addAttribute(.foregroundColor, value: functionColor, range: r)
+            }
+        } catch {
+            // If regex fails, skip highlighting (safe failure)
+        }
     }
 
     private func clearAllAttributes() {
@@ -471,20 +694,40 @@ private class UnifiedTextView: NSTextView {
         ts.addAttribute(.foregroundColor, value: NSColor.textColor, range: full)
     }
 
-    /// Configure the highlighter fonts to match the provided editor font settings.
-    /// This keeps the visual appearance of highlighted text consistent with the editor font.
-    func configureHighlighter(baseFontName: String?, baseSize: Double) {
-        // Highlighter configuration removed — no-op.
+    /// Configure the highlighter fonts and theme colors for the lightweight syntax highlighter.
+    /// This keeps the visual appearance of highlighted text consistent with the editor font/theme.
+    func configureHighlighter(
+        baseFontName: String?, baseSize: Double, themeColors: ThemeColors? = nil
+    ) {
+        highlighterBaseFontName = baseFontName
+        highlighterBaseSize = baseSize
+
+        if let colors = themeColors {
+            // Use per-theme syntax colors (preferred) with sensible fallbacks
+            keywordColor = NSColor(colors.syntaxKeyword)
+            stringColor = NSColor(colors.syntaxString)
+            numberColor = NSColor(colors.syntaxNumber)
+            commentColor = NSColor(colors.syntaxComment)
+            functionColor = NSColor(colors.syntaxFunction)
+        }
     }
 
     // MARK: - Editing hooks
 
     override func didChangeText() {
         super.didChangeText()
-        // Incremental highlighting removed — previously this re-highlighted edited regions
-        // (to cover multiline constructs like lists, code fences, and blockquotes) instead of
-        // re-highlighting the whole document on every keystroke.
-        // Incremental highlighting removed — no-op in this editor build.
+
+        // Debounce highlighting to avoid work on every keystroke.
+        guard highlightingEnabled else { return }
+        highlightWorkItem?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            DispatchQueue.main.async { [weak self] in
+                self?.applyHighlightingWhole()
+            }
+        }
+        highlightWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + highlightDelaySeconds, execute: work)
+
         // Notify coordinator via NotificationCenter callback (textDidChange will call delegate)
     }
 
