@@ -1,28 +1,30 @@
 //
-//  NoteCreationView.swift
+//  ScriptCreationView.swift
 //  Ferrufi
 //
-//  Enhanced note creation with directory selection
+//  Enhanced script creation with directory selection
 //
 
 import SwiftUI
+import Files
 
 #if os(macOS)
     import AppKit
 #endif
 
-public struct NoteCreationSheet: View {
+public struct ScriptCreationView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var ferrufiApp: FerrufiApp
     @EnvironmentObject var navigationModel: NavigationModel
     @EnvironmentObject var themeManager: ThemeManager
 
-    @State private var noteTitle = ""
+    @State private var scriptName = ""
     @State private var selectedFolder: Folder?
     @State private var showingDirectoryPicker = false
-    @State private var selectedFileType: String = ".mufi"
+    
+    private typealias FerrufiFolder = Ferrufi.Folder
 
-    var availableFolders: [Folder] {
+    private var availableFolders: [FerrufiFolder] {
         var folders = ferrufiApp.folderManager.allFolders
 
         // Add working directory folder if set
@@ -32,7 +34,7 @@ public struct NoteCreationSheet: View {
             }
             if workingDirFolder == nil {
                 // Create temporary folder representation
-                let tempFolder = Folder(
+                let tempFolder = FerrufiFolder(
                     name: workingDir.lastPathComponent,
                     path: workingDir.path
                 )
@@ -43,7 +45,7 @@ public struct NoteCreationSheet: View {
         return folders.sorted { $0.name < $1.name }
     }
 
-    var suggestedFolder: Folder? {
+    private var suggestedFolder: FerrufiFolder? {
         if let workingDir = navigationModel.currentWorkingDirectory {
             return availableFolders.first { folder in
                 URL(fileURLWithPath: folder.path) == workingDir
@@ -55,74 +57,58 @@ public struct NoteCreationSheet: View {
     public init() {}
 
     public var body: some View {
-        VStack(spacing: 24) {
+        VStack(spacing: 0) {
             // Header
-            VStack(spacing: 16) {
-                ZStack {
-                    Circle()
-                        .fill(
-                            LinearGradient(
-                                colors: [
-                                    themeManager.currentTheme.colors.accent,
-                                    themeManager.currentTheme.colors.accentSecondary,
-                                ],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .frame(width: 60, height: 60)
-
-                    Image(systemName: "doc.badge.plus")
-                        .font(.system(size: 24, weight: .medium))
-                        .foregroundColor(.white)
-                }
-
+            HStack {
                 Text("Create New Script")
                     .font(.title2)
                     .fontWeight(.bold)
                     .foregroundColor(themeManager.currentTheme.colors.foreground)
-            }
-
-            VStack(spacing: 20) {
-                // Script Name
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Script Name")
-                        .font(.headline)
-                        .foregroundColor(themeManager.currentTheme.colors.foreground)
-
-                    TextField("my_script", text: $noteTitle)
-                        .textFieldStyle(.roundedBorder)
-                        .onSubmit {
-                            if !noteTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-                                .isEmpty
-                            {
-                                createNote()
-                            }
-                        }
-
-                    // File type picker: Mufi script only (Markdown support removed)
-                    Picker("File Type", selection: $selectedFileType) {
-                        Text("Mufi").tag(".mufi")
-                    }
-                    .pickerStyle(.segmented)
+                Spacer()
+                Button(action: { dismiss() }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundColor(themeManager.currentTheme.colors.foregroundSecondary)
+                        .font(.title2)
                 }
-
-                // Directory Selection
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Text("Directory")
+                .buttonStyle(.plain)
+            }
+            .padding(20)
+            .background(themeManager.currentTheme.colors.backgroundSecondary)
+            
+            ScrollView {
+                VStack(spacing: 24) {
+                    // Script Name
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Name")
                             .font(.headline)
                             .foregroundColor(themeManager.currentTheme.colors.foreground)
 
-                        Spacer()
-
-                        Button("Browse...") {
-                            openDirectoryPicker()
-                        }
-                        .foregroundColor(themeManager.currentTheme.colors.accent)
+                        TextField("script_name", text: $scriptName)
+                            .textFieldStyle(.roundedBorder)
+                            .onSubmit {
+                                if isValid { createScript() }
+                            }
+                        
+                        Text("File will be saved as \(scriptName).mufi")
+                            .font(.caption)
+                            .foregroundColor(themeManager.currentTheme.colors.foregroundSecondary)
                     }
 
-                    if !availableFolders.isEmpty {
+                    // Directory Selection
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text("Location")
+                                .font(.headline)
+                                .foregroundColor(themeManager.currentTheme.colors.foreground)
+
+                            Spacer()
+
+                            Button("Browse...") {
+                                openDirectoryPicker()
+                            }
+                            .foregroundColor(themeManager.currentTheme.colors.accent)
+                        }
+
                         Menu {
                             ForEach(availableFolders, id: \.id) { folder in
                                 Button(action: {
@@ -133,8 +119,6 @@ public struct NoteCreationSheet: View {
                                         Text(folder.name)
                                         if folder.id == suggestedFolder?.id {
                                             Text("(suggested)")
-                                                .foregroundColor(
-                                                    themeManager.currentTheme.colors.accent)
                                         }
                                     }
                                 }
@@ -149,6 +133,8 @@ public struct NoteCreationSheet: View {
                                         ?? "Select Directory"
                                 )
                                 .foregroundColor(themeManager.currentTheme.colors.foreground)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
 
                                 Spacer()
 
@@ -159,69 +145,47 @@ public struct NoteCreationSheet: View {
                             .padding(.horizontal, 12)
                             .padding(.vertical, 8)
                             .background(
-                                RoundedRectangle(cornerRadius: 8)
-                                    .fill(themeManager.currentTheme.colors.backgroundSecondary)
+                                RoundedRectangle(cornerRadius: 6)
+                                    .fill(themeManager.currentTheme.colors.background)
                                     .stroke(
                                         themeManager.currentTheme.colors.border, lineWidth: 1)
                             )
                         }
-                    }
-
-                    if let selected = selectedFolder ?? suggestedFolder {
-                        HStack {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundColor(themeManager.currentTheme.colors.success)
-
-                            Text("Note will be created in: \(selected.name)")
-                                .font(.caption)
-                                .foregroundColor(
-                                    themeManager.currentTheme.colors.foregroundSecondary)
-                        }
-                        .padding(.top, 4)
+                        .buttonStyle(.plain)
                     }
                 }
+                .padding(24)
             }
-
-            Spacer()
-
-            // Action Buttons
+            
+            Divider()
+            
+            // Footer Actions
             HStack(spacing: 16) {
                 Button("Cancel") {
-                    noteTitle = ""
-                    selectedFolder = nil
                     dismiss()
                 }
-                .foregroundColor(themeManager.currentTheme.colors.foregroundSecondary)
-                .padding(.horizontal, 20)
-                .padding(.vertical, 10)
-                .background(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(themeManager.currentTheme.colors.border, lineWidth: 1)
-                )
+                .keyboardShortcut(.cancelAction)
+                .buttonStyle(SecondaryButtonStyle(themeManager: themeManager))
 
-                Button("Create Note") {
-                    createNote()
+                Button("Create Script") {
+                    createScript()
                 }
-                .disabled(noteTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                .foregroundColor(.white)
-                .padding(.horizontal, 20)
-                .padding(.vertical, 10)
-                .background(
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(
-                            noteTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                                ? themeManager.currentTheme.colors.foregroundTertiary
-                                : themeManager.currentTheme.colors.accent
-                        )
-                )
+                .disabled(!isValid)
+                .keyboardShortcut(.defaultAction)
+                .buttonStyle(PrimaryButtonStyle(themeManager: themeManager, disabled: !isValid))
             }
+            .padding(20)
+            .background(themeManager.currentTheme.colors.backgroundSecondary)
         }
-        .padding(30)
-        .frame(width: 450, height: 400)
+        .frame(width: 450, height: 380)
         .background(themeManager.currentTheme.colors.background)
         .onAppear {
             selectedFolder = suggestedFolder
         }
+    }
+    
+    private var isValid: Bool {
+        !scriptName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private func openDirectoryPicker() {
@@ -232,7 +196,7 @@ public struct NoteCreationSheet: View {
             panel.allowsMultipleSelection = false
             panel.canCreateDirectories = true
             panel.prompt = "Select Directory"
-            panel.message = "Choose directory for the new note"
+            panel.message = "Choose directory for the new script"
 
             if let currentDir = navigationModel.currentWorkingDirectory {
                 panel.directoryURL = currentDir
@@ -257,30 +221,26 @@ public struct NoteCreationSheet: View {
                             )
                             self.selectedFolder = newFolder
                         }
-
-                        // Also update working directory
-                        self.navigationModel.setWorkingDirectory(url)
                     }
                 }
             }
         #endif
     }
 
-    private func createNote() {
+    private func createScript() {
         Task {
             do {
                 let targetFolder =
                     selectedFolder ?? suggestedFolder ?? ferrufiApp.folderManager.rootFolder
 
-                // Default to Mufi script content
                 let scriptContent = """
-                    // \(noteTitle)
-                    // Created on \(DateFormatter.localizedString(from: Date(), dateStyle: .medium, timeStyle: .short))
+                // \(scriptName)
+                // Created on \(DateFormatter.localizedString(from: Date(), dateStyle: .medium, timeStyle: .short))
 
-                    """
+                """
 
                 let newNote = try await ferrufiApp.createNote(
-                    title: noteTitle,
+                    title: scriptName,
                     content: scriptContent,
                     in: targetFolder,
                     fileExtension: ".mufi"
@@ -288,10 +248,8 @@ public struct NoteCreationSheet: View {
 
                 await MainActor.run {
                     navigationModel.selectNote(newNote, ferrufiApp: ferrufiApp)
-                    noteTitle = ""
+                    scriptName = ""
                     selectedFolder = nil
-                    // Reset file type to default (.mufi) to match typical workflow
-                    selectedFileType = ".mufi"
                     dismiss()
                 }
             } catch {
@@ -303,11 +261,35 @@ public struct NoteCreationSheet: View {
     }
 }
 
-struct NoteCreationSheet_Samples: PreviewProvider {
-    static var previews: some View {
-        NoteCreationSheet()
-            .environmentObject(FerrufiApp())
-            .environmentObject(NavigationModel())
-            .environmentObject(ThemeManager())
+struct PrimaryButtonStyle: ButtonStyle {
+    let themeManager: ThemeManager
+    let disabled: Bool
+    
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .padding(.horizontal, 20)
+            .padding(.vertical, 10)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(disabled ? themeManager.currentTheme.colors.foregroundTertiary : themeManager.currentTheme.colors.accent)
+            )
+            .foregroundColor(.white)
+            .opacity(configuration.isPressed ? 0.9 : 1.0)
+    }
+}
+
+struct SecondaryButtonStyle: ButtonStyle {
+    let themeManager: ThemeManager
+    
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .padding(.horizontal, 20)
+            .padding(.vertical, 10)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(themeManager.currentTheme.colors.border, lineWidth: 1)
+            )
+            .foregroundColor(themeManager.currentTheme.colors.foreground)
+            .opacity(configuration.isPressed ? 0.9 : 1.0)
     }
 }

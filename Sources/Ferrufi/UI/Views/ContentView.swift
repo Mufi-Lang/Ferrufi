@@ -151,7 +151,7 @@ public struct ContentView: View {
             }
         }
         .sheet(isPresented: $navigationModel.showingNoteCreation) {
-            NoteCreationSheet()
+            ScriptCreationView()
                 .environmentObject(ferrufiApp)
                 .environmentObject(navigationModel)
                 .environmentObject(themeManager)

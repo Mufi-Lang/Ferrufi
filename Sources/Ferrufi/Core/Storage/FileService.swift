@@ -16,6 +16,7 @@
 //
 
 import Combine
+import Files
 import Foundation
 
 /// Public actor that exposes unified file operations and handles security-scoped access.
@@ -50,19 +51,22 @@ public actor FileService {
     public static func readTextFileSync(atPath path: String) throws -> String {
         let url = URL(fileURLWithPath: (path as NSString).expandingTildeInPath)
         return try url.withSecurityScope { u in
-            try String(contentsOf: u, encoding: .utf8)
+            try Files.File(path: u.path).readAsString()
         }
     }
 
     /// Write text file synchronously (UTF-8). Ensures parent directory exists and uses security-scoped access.
     public static func writeTextFileSync(atPath path: String, contents: String) throws {
         let fileURL = URL(fileURLWithPath: (path as NSString).expandingTildeInPath)
-        let parent = fileURL.deletingLastPathComponent()
-        try parent.withSecurityScope { p in
-            try FileManager.default.createDirectory(at: p, withIntermediateDirectories: true)
-        }
-        try fileURL.withSecurityScope { u in
-            try contents.write(to: u, atomically: true, encoding: .utf8)
+        let parentURL = fileURL.deletingLastPathComponent()
+        
+        try parentURL.withSecurityScope { p in
+             // Ensure parent exists using FileManager (Files requires existing folder to init Folder)
+             try FileManager.default.createDirectory(at: p, withIntermediateDirectories: true)
+             
+             let folder = try Files.Folder(path: p.path)
+             let file = try folder.createFileIfNeeded(at: fileURL.lastPathComponent)
+             try file.write(contents)
         }
     }
 
@@ -70,19 +74,21 @@ public actor FileService {
     public static func readDataSync(atPath path: String) throws -> Data {
         let url = URL(fileURLWithPath: (path as NSString).expandingTildeInPath)
         return try url.withSecurityScope { u in
-            try Data(contentsOf: u)
+            try Files.File(path: u.path).read()
         }
     }
 
     /// Write binary data synchronously. Ensures parent directory exists and uses security-scoped access.
     public static func writeDataSync(atPath path: String, data: Data) throws {
         let fileURL = URL(fileURLWithPath: (path as NSString).expandingTildeInPath)
-        let parent = fileURL.deletingLastPathComponent()
-        try parent.withSecurityScope { p in
+        let parentURL = fileURL.deletingLastPathComponent()
+        
+        try parentURL.withSecurityScope { p in
             try FileManager.default.createDirectory(at: p, withIntermediateDirectories: true)
-        }
-        try fileURL.withSecurityScope { u in
-            try data.write(to: u, options: .atomic)
+            
+            let folder = try Files.Folder(path: p.path)
+            let file = try folder.createFileIfNeeded(at: fileURL.lastPathComponent)
+            try file.write(data)
         }
     }
 
@@ -105,14 +111,11 @@ public actor FileService {
                 if !fm.fileExists(atPath: u.path) {
                     try fm.createDirectory(at: u, withIntermediateDirectories: true)
                 }
-                // test file
+                // test file using Files package
+                let folder = try Files.Folder(path: u.path)
                 let testName = ".ferrufi_write_test_\(UUID().uuidString)"
-                let testPath = (u.path as NSString).appendingPathComponent(testName)
-                let created = fm.createFile(atPath: testPath, contents: Data(), attributes: nil)
-                if created {
-                    try? fm.removeItem(atPath: testPath)
-                    return
-                }
+                let file = try folder.createFile(named: testName)
+                try file.delete()
             }
             return true
         } catch {
@@ -130,13 +133,12 @@ public actor FileService {
                 if !fm.fileExists(atPath: u.path) {
                     try fm.createDirectory(at: u, withIntermediateDirectories: true)
                 }
+                
+                let folder = try Files.Folder(path: u.path)
                 let testName = ".ferrufi_write_test_\(UUID().uuidString)"
-                let testPath = (u.path as NSString).appendingPathComponent(testName)
-                let created = fm.createFile(atPath: testPath, contents: Data(), attributes: nil)
-                if created {
-                    try? fm.removeItem(atPath: testPath)
-                }
-                return created
+                let file = try folder.createFile(named: testName)
+                try file.delete()
+                return true
             }
         } catch {
             return false
@@ -147,7 +149,11 @@ public actor FileService {
     public static func deleteItemSync(atPath path: String) throws {
         let url = URL(fileURLWithPath: (path as NSString).expandingTildeInPath)
         try url.withSecurityScope { u in
-            try FileManager.default.removeItem(at: u)
+            if let file = try? Files.File(path: u.path) {
+                try file.delete()
+            } else if let folder = try? Files.Folder(path: u.path) {
+                try folder.delete()
+            }
         }
     }
 
@@ -156,12 +162,27 @@ public actor FileService {
         let srcURL = URL(fileURLWithPath: (srcPath as NSString).expandingTildeInPath)
         let dstURL = URL(fileURLWithPath: (dstPath as NSString).expandingTildeInPath)
         let dstParent = dstURL.deletingLastPathComponent()
+        
         try dstParent.withSecurityScope { p in
             try FileManager.default.createDirectory(at: p, withIntermediateDirectories: true)
         }
+        
         try srcURL.withSecurityScope { s in
             try dstURL.withSecurityScope { d in
-                try FileManager.default.moveItem(at: s, to: d)
+                // Files package move requires target folder instance
+                if let file = try? Files.File(path: s.path) {
+                    let parentFolder = try Files.Folder(path: dstURL.deletingLastPathComponent().path)
+                    try file.move(to: parentFolder)
+                    if file.name != dstURL.lastPathComponent {
+                        try file.rename(to: dstURL.lastPathComponent)
+                    }
+                } else if let folder = try? Files.Folder(path: s.path) {
+                    let parentFolder = try Files.Folder(path: dstURL.deletingLastPathComponent().path)
+                    try folder.move(to: parentFolder)
+                     if folder.name != dstURL.lastPathComponent {
+                        try folder.rename(to: dstURL.lastPathComponent)
+                    }
+                }
             }
         }
     }
@@ -170,7 +191,10 @@ public actor FileService {
     public static func listDirectorySync(atPath path: String) throws -> [String] {
         let dirURL = URL(fileURLWithPath: (path as NSString).expandingTildeInPath)
         return try dirURL.withSecurityScope { u in
-            try FileManager.default.contentsOfDirectory(atPath: u.path)
+            let folder = try Files.Folder(path: u.path)
+            let fileNames = folder.files.map { $0.name }
+            let folderNames = folder.subfolders.map { $0.name }
+            return fileNames + folderNames
         }
     }
 
@@ -212,7 +236,7 @@ public actor FileService {
         let fileURL = URL(fileURLWithPath: path)
         do {
             return try await withLocalAccess(fileURL) {
-                try String(contentsOf: fileURL, encoding: .utf8)
+                try Files.File(path: fileURL.path).readAsString()
             }
         } catch {
             throw FileServiceError.operationFailed("readTextFile(\(path))", underlying: error)
@@ -227,12 +251,11 @@ public actor FileService {
             // Ensure parent directory exists under an appropriate scope.
             try await withLocalAccess(parent) {
                 try fileManager.createDirectory(at: parent, withIntermediateDirectories: true)
+                let folder = try Files.Folder(path: parent.path)
+                let file = try folder.createFileIfNeeded(at: fileURL.lastPathComponent)
+                try file.write(contents)
             }
-
-            try await withLocalAccess(fileURL) {
-                try contents.write(to: fileURL, atomically: true, encoding: .utf8)
-            }
-
+            
             publishChange(path: path, changeType: .modified)
         } catch {
             throw FileServiceError.operationFailed("writeTextFile(\(path))", underlying: error)
@@ -244,6 +267,8 @@ public actor FileService {
         let dirURL = URL(fileURLWithPath: path)
         do {
             try await withLocalAccess(dirURL) {
+                // Files doesn't have a "createDirectory" on bare path easily without a parent folder object
+                // Fallback to FileManager for directory creation as it's cleaner than traversing to parent
                 try fileManager.createDirectory(at: dirURL, withIntermediateDirectories: recursive)
             }
             publishChange(path: path, changeType: .created)
@@ -257,7 +282,11 @@ public actor FileService {
         let url = URL(fileURLWithPath: path)
         do {
             try await withLocalAccess(url) {
-                try fileManager.removeItem(at: url)
+                if let file = try? Files.File(path: url.path) {
+                    try file.delete()
+                } else if let folder = try? Files.Folder(path: url.path) {
+                    try folder.delete()
+                }
             }
             publishChange(path: path, changeType: .deleted)
         } catch {
@@ -282,7 +311,19 @@ public actor FileService {
             let srcAccessed = await ssAccess.startAccessing(srcURL)
             let dstAccessed = await ssAccess.startAccessing(dstURL)
             do {
-                try fileManager.moveItem(at: srcURL, to: dstURL)
+                 if let file = try? Files.File(path: srcURL.path) {
+                    let parentFolder = try Files.Folder(path: dstURL.deletingLastPathComponent().path)
+                    try file.move(to: parentFolder)
+                    if file.name != dstURL.lastPathComponent {
+                        try file.rename(to: dstURL.lastPathComponent)
+                    }
+                } else if let folder = try? Files.Folder(path: srcURL.path) {
+                    let parentFolder = try Files.Folder(path: dstURL.deletingLastPathComponent().path)
+                    try folder.move(to: parentFolder)
+                     if folder.name != dstURL.lastPathComponent {
+                        try folder.rename(to: dstURL.lastPathComponent)
+                    }
+                }
             } catch {
                 if dstAccessed { await ssAccess.stopAccessing(dstURL) }
                 if srcAccessed { await ssAccess.stopAccessing(srcURL) }
@@ -304,7 +345,10 @@ public actor FileService {
         let dirURL = URL(fileURLWithPath: path)
         do {
             return try await withLocalAccess(dirURL) {
-                try fileManager.contentsOfDirectory(atPath: dirURL.path)
+                let folder = try Files.Folder(path: dirURL.path)
+                let files = folder.files.map { $0.name }
+                let subfolders = folder.subfolders.map { $0.name }
+                return files + subfolders
             }
         } catch {
             throw FileServiceError.operationFailed("listDirectory(\(path))", underlying: error)
@@ -355,16 +399,13 @@ public actor FileService {
             }
 
             // Create a small temp file and remove it to verify write permissions.
-            let testFile = (dirURL.path as NSString).appendingPathComponent(
-                ".ferrufi_write_test_\(UUID().uuidString)")
-            let data = Data()
+            // Using Files package
             return try await withLocalAccess(dirURL) {
-                // Use FileManager.createFile since it's atomic and simple
-                let created = fm.createFile(atPath: testFile, contents: data, attributes: nil)
-                if created {
-                    try? fm.removeItem(atPath: testFile)
-                }
-                return created
+                let folder = try Files.Folder(path: dirURL.path)
+                let testName = ".ferrufi_write_test_\(UUID().uuidString)"
+                let file = try folder.createFile(named: testName)
+                try file.delete()
+                return true
             }
         } catch {
             return false
@@ -376,7 +417,7 @@ public actor FileService {
         let url = URL(fileURLWithPath: path)
         do {
             return try await withLocalAccess(url) {
-                try Data(contentsOf: url)
+                try Files.File(path: url.path).read()
             }
         } catch {
             throw FileServiceError.operationFailed("readData(\(path))", underlying: error)
@@ -390,9 +431,9 @@ public actor FileService {
         do {
             try await withLocalAccess(parent) {
                 try fileManager.createDirectory(at: parent, withIntermediateDirectories: true)
-            }
-            try await withLocalAccess(url) {
-                try data.write(to: url, options: .atomic)
+                let folder = try Files.Folder(path: parent.path)
+                let file = try folder.createFileIfNeeded(at: url.lastPathComponent)
+                try file.write(data)
             }
             publishChange(path: path, changeType: .modified)
         } catch {
