@@ -45,12 +45,15 @@ struct NativeSplitEditor: View {
             editorToolbar
 
             // Main split view
+            let isMarkdown = note?.filePath.hasSuffix(".md") ?? false
+            let fileType: EditorFileType = isMarkdown ? .markdown : .mufi
+            
             HStack(spacing: 0) {
-                // Editor: all files use the Mufi script editor (Markdown support removed)
+                // Editor
                 UnifiedEditor(
                     text: $text,
                     isEditing: $isEditing,
-                    fileType: .mufi,
+                    fileType: fileType,
                     placeholder: placeholder,
                     onTextChange: onTextChange,
                     onSave: {

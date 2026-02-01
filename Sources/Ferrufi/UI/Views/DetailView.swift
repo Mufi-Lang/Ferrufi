@@ -17,6 +17,7 @@ struct DetailView: View {
     @State private var showingThemeSelector = false
     @State private var showingExportSheet = false
     @State private var isFullscreen = false
+    @State private var showPreview = false
 
     // Removed DetailViewMode enum - using only Notion-style live editing
 
@@ -51,6 +52,16 @@ struct DetailView: View {
                 editingText = note.content
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .openFileLink)) { notification in
+            if let url = notification.object as? URL {
+                openFileLink(url)
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .toggleMarkdownPreview)) { _ in
+            withAnimation {
+                showPreview.toggle()
+            }
+        }
         .sheet(isPresented: $showingExportSheet) {
             ExportSheet(note: navigationModel.selectedNote!)
                 .environmentObject(themeManager)
@@ -60,10 +71,17 @@ struct DetailView: View {
     // MARK: - Header
 
     private func iconForNote(_ note: Note) -> String {
-        if note.filePath.hasSuffix(".mufi") {
-            return "chevron.left.forwardslash.chevron.right"
-        } else {
+        let path = note.filePath.lowercased()
+        if path.hasSuffix(".mufi") {
+            return "cpu.fill"
+        } else if path.hasSuffix(".md") || path.hasSuffix(".markdown") {
+            return "text.quote"
+        } else if path.hasSuffix(".txt") {
             return "doc.text"
+        } else if path.hasSuffix(".png") || path.hasSuffix(".jpg") || path.hasSuffix(".jpeg") {
+            return "photo"
+        } else {
+            return "doc"
         }
     }
 
@@ -193,16 +211,28 @@ struct DetailView: View {
 
     private var nativeSplitEditingView: some View {
         // Clean native split editor without extra headers or toolbars
-        NativeSplitEditor(
-            note: navigationModel.selectedNote,
-            text: $editingText,
-            placeholder: "Start writing your note...",
-            onTextChange: { newText in
-                scheduleAutoSave()
+        let isMarkdown = navigationModel.selectedNote?.filePath.hasSuffix(".md") ?? false
+        
+        return HStack(spacing: 0) {
+            NativeSplitEditor(
+                note: navigationModel.selectedNote,
+                text: $editingText,
+                placeholder: "Start writing your note...",
+                onTextChange: { newText in
+                    scheduleAutoSave()
+                }
+            )
+            .environmentObject(ferrufiApp)
+            .environmentObject(themeManager)
+            .frame(maxWidth: .infinity)
+            
+            if isMarkdown && showPreview {
+                Divider()
+                WebView(htmlContent: MarkdownParser.shared.parse(editingText))
+                    .frame(maxWidth: .infinity)
+                    .background(themeManager.currentTheme.colors.background)
             }
-        )
-        .environmentObject(ferrufiApp)
-        .environmentObject(themeManager)
+        }
         .background(themeManager.currentTheme.colors.background)
     }
 
@@ -406,6 +436,24 @@ struct DetailView: View {
 
     private func lineCount(_ text: String) -> Int {
         return text.components(separatedBy: .newlines).count
+    }
+
+    private func openWikiLink(_ noteName: String) {
+        Task {
+            if let foundNote = ferrufiApp.folderManager.notes.first(where: { $0.title == noteName }) {
+                await MainActor.run {
+                    navigationModel.selectNote(foundNote, ferrufiApp: ferrufiApp)
+                }
+            }
+        }
+    }
+
+    private func openFileLink(_ url: URL) {
+        if let foundNote = ferrufiApp.notes.first(where: { $0.url == url }) {
+            navigationModel.selectNote(foundNote, ferrufiApp: ferrufiApp)
+        } else {
+            NSWorkspace.shared.open(url)
+        }
     }
 
     // MARK: - Auto-save

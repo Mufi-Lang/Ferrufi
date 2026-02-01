@@ -22,6 +22,7 @@ import SwiftUI
 // Public API: file type / mode
 public enum EditorFileType {
     case mufi
+    case markdown
 }
 
 // Fonts are provided at runtime via ThemeManager. Avoid global NSFont constants so font sizing
@@ -510,11 +511,21 @@ private class UnifiedTextView: NSTextView {
     /// Configure the view for a specific mode.
     func setupForMode(_ fileType: EditorFileType) {
         self.mode = fileType
-        // All modes use script/plain editing behavior; preview/highlighting features removed.
-        isAutomaticQuoteSubstitutionEnabled = false
-        isAutomaticDashSubstitutionEnabled = false
-        isAutomaticSpellingCorrectionEnabled = false
-        isAutomaticTextReplacementEnabled = false
+        
+        switch fileType {
+        case .mufi:
+            // All modes use script/plain editing behavior; preview/highlighting features removed.
+            isAutomaticQuoteSubstitutionEnabled = false
+            isAutomaticDashSubstitutionEnabled = false
+            isAutomaticSpellingCorrectionEnabled = false
+            isAutomaticTextReplacementEnabled = false
+        case .markdown:
+            isAutomaticQuoteSubstitutionEnabled = true
+            isAutomaticDashSubstitutionEnabled = true
+            isAutomaticSpellingCorrectionEnabled = true
+            isAutomaticTextReplacementEnabled = false
+        }
+        
         // Ensure attributes are cleared (no document highlighting).
         clearAllAttributes()
     }

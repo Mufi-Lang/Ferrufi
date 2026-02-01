@@ -604,4 +604,5 @@ public struct FerrufiCommands: Commands {
 extension Notification.Name {
     static let toggleMufiREPL = Notification.Name("toggleMufiREPL")
     static let runMufiScript = Notification.Name("runMufiScript")
+    static let toggleMarkdownPreview = Notification.Name("toggleMarkdownPreview")
 }

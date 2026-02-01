@@ -1060,10 +1060,17 @@ struct EnhancedFileTreeNoteRow: View {
     @EnvironmentObject var themeManager: ThemeManager
 
     private func iconForNote(_ note: Note) -> String {
-        if note.filePath.hasSuffix(".mufi") {
-            return "chevron.left.forwardslash.chevron.right"
-        } else {
+        let path = note.filePath.lowercased()
+        if path.hasSuffix(".mufi") {
+            return "cpu.fill"
+        } else if path.hasSuffix(".md") || path.hasSuffix(".markdown") {
+            return "text.quote"
+        } else if path.hasSuffix(".txt") {
             return "doc.text"
+        } else if path.hasSuffix(".png") || path.hasSuffix(".jpg") || path.hasSuffix(".jpeg") {
+            return "photo"
+        } else {
+            return "doc"
         }
     }
 
@@ -1178,6 +1185,19 @@ struct EnhancedFileTreeNoteRow: View {
                     .easeInOut(duration: 0.15), value: navigationModel.selectedNote?.id == note.id)
 
             Spacer()
+            
+            // Eye toggle for markdown preview
+            if note.filePath.hasSuffix(".md") && navigationModel.selectedNote?.id == note.id {
+                Button {
+                    NotificationCenter.default.post(name: .toggleMarkdownPreview, object: nil)
+                } label: {
+                    Image(systemName: "eye")
+                        .font(.system(size: 10))
+                        .foregroundColor(themeManager.currentTheme.colors.accent)
+                }
+                .buttonStyle(.plain)
+                .padding(.trailing, 8)
+            }
         }
         .frame(height: 24)
         .contentShape(Rectangle())
