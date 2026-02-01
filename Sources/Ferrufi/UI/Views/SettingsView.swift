@@ -402,6 +402,27 @@ struct GeneralSettingsContent: View {
 
             SettingsSection(title: "Performance") {
                 SettingsToggleRow("Metal Acceleration", subtitle: "Use GPU for faster text rendering", isOn: $settings.metalAccelerationEnabled)
+                
+                Divider().padding(.leading, 16)
+                
+                SettingsToggleRow("VSync", subtitle: "Synchronize with display refresh rate", isOn: Binding(
+                    get: { settings.vsyncEnabled },
+                    set: { settings.vsyncEnabled = $0 }
+                ))
+                
+                if !settings.vsyncEnabled {
+                    Divider().padding(.leading, 16)
+                    SettingsSliderRow(
+                        title: "Max FPS", 
+                        value: Binding(
+                            get: { Double(settings.maxFPS) },
+                            set: { settings.maxFPS = Int($0) }
+                        ), 
+                        range: 15...240, 
+                        step: 5, 
+                        unit: " fps"
+                    )
+                }
             }
         }
         .sheet(isPresented: $showingStartupNotePicker) {

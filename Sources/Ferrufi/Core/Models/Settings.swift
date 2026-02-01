@@ -187,6 +187,16 @@ public final class Settings: ObservableObject {
         get { config.ui.metalAccelerationEnabled }
         set { update { $0.ui.metalAccelerationEnabled = newValue } }
     }
+
+    public var vsyncEnabled: Bool {
+        get { config.ui.vsyncEnabled }
+        set { update { $0.ui.vsyncEnabled = newValue } }
+    }
+
+    public var maxFPS: Int {
+        get { config.ui.maxFPS }
+        set { update { $0.ui.maxFPS = newValue } }
+    }
     
     // MARK: - Helper Methods
     

@@ -448,18 +448,16 @@ import SwiftUI
     public struct MetalView: NSViewRepresentable {
         @StateObject private var deviceManager = MetalDeviceManager.shared
         @EnvironmentObject var themeManager: ThemeManager
+        @EnvironmentObject var settings: Settings
 
         private let renderer: MetalRenderable?
-        private let preferredFramesPerSecond: Int
         private let enableSetNeedsDisplay: Bool
 
         public init(
             renderer: MetalRenderable? = nil,
-            preferredFramesPerSecond: Int = 60,
             enableSetNeedsDisplay: Bool = false
         ) {
             self.renderer = renderer
-            self.preferredFramesPerSecond = preferredFramesPerSecond
             self.enableSetNeedsDisplay = enableSetNeedsDisplay
         }
 
@@ -473,7 +471,17 @@ import SwiftUI
 
             mtkView.device = device
             mtkView.delegate = context.coordinator
-            mtkView.preferredFramesPerSecond = preferredFramesPerSecond
+            
+            // Configure FPS based on settings
+            if settings.vsyncEnabled {
+                // Try to match screen refresh rate, default to 60
+                let screenRate = NSScreen.main?.maximumFramesPerSecond ?? 60
+                mtkView.preferredFramesPerSecond = screenRate
+            } else {
+                mtkView.preferredFramesPerSecond = settings.maxFPS
+            }
+            print("MetalView makeNSView: VSync=\(settings.vsyncEnabled), MaxFPS=\(settings.maxFPS) -> Preferred=\(mtkView.preferredFramesPerSecond)")
+            
             mtkView.enableSetNeedsDisplay = enableSetNeedsDisplay
 
             // Configure pixel format for better color representation
@@ -488,6 +496,20 @@ import SwiftUI
 
         public func updateNSView(_ nsView: MTKView, context: Context) {
             context.coordinator.renderer = renderer
+            
+            // Dynamic FPS update
+            let targetFPS: Int
+            if settings.vsyncEnabled {
+                let screenRate = NSScreen.main?.maximumFramesPerSecond ?? 60
+                targetFPS = screenRate
+            } else {
+                targetFPS = settings.maxFPS
+            }
+            
+            if nsView.preferredFramesPerSecond != targetFPS {
+                print("MetalView updateNSView: Changing FPS from \(nsView.preferredFramesPerSecond) to \(targetFPS) (VSync=\(settings.vsyncEnabled))")
+                nsView.preferredFramesPerSecond = targetFPS
+            }
         }
 
         public func makeCoordinator() -> Coordinator {
@@ -510,6 +532,12 @@ import SwiftUI
             }
 
             public func draw(in view: MTKView) {
+                // Report frame to performance monitor with current coordinator as source
+                let sourceId = ObjectIdentifier(self)
+                Task { @MainActor in
+                    PerformanceMonitor.shared.recordFrame(from: sourceId)
+                }
+
                 guard let commandQueue = deviceManager.commandQueue,
                     let commandBuffer = commandQueue.makeCommandBuffer(),
                     let renderPassDescriptor = view.currentRenderPassDescriptor

@@ -304,19 +304,25 @@ public struct UIConfiguration: Codable, Sendable {
     public var showSidebar: Bool
     public var animationsEnabled: Bool
     public var metalAccelerationEnabled: Bool
+    public var vsyncEnabled: Bool
+    public var maxFPS: Int
 
     public init(
         theme: Theme = .system,
         sidebarWidth: Double = 250.0,
         showSidebar: Bool = true,
         animationsEnabled: Bool = true,
-        metalAccelerationEnabled: Bool = true
+        metalAccelerationEnabled: Bool = true,
+        vsyncEnabled: Bool = true,
+        maxFPS: Int = 60
     ) {
         self.theme = theme
         self.sidebarWidth = sidebarWidth
         self.showSidebar = showSidebar
         self.animationsEnabled = animationsEnabled
         self.metalAccelerationEnabled = metalAccelerationEnabled
+        self.vsyncEnabled = vsyncEnabled
+        self.maxFPS = maxFPS
     }
 }
 

@@ -29,6 +29,7 @@ public class PerformanceMonitor: ObservableObject {
     private var frameCount: Int = 0
     private var lastFrameTime: CFTimeInterval = 0
     private var frameTimes: [CFTimeInterval] = []
+    private var lastFrameTimes: [ObjectIdentifier: CFTimeInterval] = [:]
     private var displayLink: CADisplayLink?
     private var updateTimer: Timer?
     private let maxFrameSamples: Int = 60
@@ -77,11 +78,13 @@ public class PerformanceMonitor: ObservableObject {
     }
 
     /// Record a frame for FPS calculation
-    public func recordFrame() {
+    public func recordFrame(from source: ObjectIdentifier? = nil) {
         let currentTime = CACurrentMediaTime()
-
-        if lastFrameTime > 0 {
-            let frameTime = currentTime - lastFrameTime
+        let effectiveSource = source ?? ObjectIdentifier(self)
+        
+        let previousTime = lastFrameTimes[effectiveSource] ?? 0
+        if previousTime > 0 {
+            let frameTime = currentTime - previousTime
             frameTimes.append(frameTime)
 
             // Keep only recent samples
@@ -90,14 +93,24 @@ public class PerformanceMonitor: ObservableObject {
             }
 
             // Calculate FPS from recent frames
-            if frameTimes.count >= 10 {
+            if frameTimes.count >= 5 {
                 let averageFrameTime = frameTimes.reduce(0, +) / Double(frameTimes.count)
-                fps = 1.0 / averageFrameTime
-                self.frameTime = averageFrameTime * 1000.0  // Convert to milliseconds
+                let calculatedFPS = 1.0 / averageFrameTime
+                
+                // We want to show the frame rate of the most active view
+                // if multiple views are reporting.
+                if calculatedFPS > self.fps || self.fps == 0 {
+                    self.fps = calculatedFPS
+                    self.frameTime = averageFrameTime * 1000.0
+                } else {
+                    // Decay the FPS slowly if no source is hitting the high mark
+                    self.fps = self.fps * 0.9 + calculatedFPS * 0.1
+                    self.frameTime = self.frameTime * 0.9 + (averageFrameTime * 1000.0) * 0.1
+                }
             }
         }
 
-        lastFrameTime = currentTime
+        lastFrameTimes[effectiveSource] = currentTime
         frameCount += 1
     }
 
@@ -247,13 +260,8 @@ public struct PerformanceMonitorView: View {
     // MARK: - Private Methods
 
     private func startFrameRecording() {
-        // Use a timer to simulate frame recording
-        // In a real implementation, this would be called from the render loop
-        Timer.scheduledTimer(withTimeInterval: 1.0 / 120.0, repeats: true) { _ in
-            Task { @MainActor in
-                monitor.recordFrame()
-            }
-        }
+        // Frame recording is now driven by the Metal renderer (MetalView.Coordinator)
+        // No simulated timer needed.
     }
 }
 

@@ -853,12 +853,8 @@ private struct FPSCounterView: View {
     }
 
     private func startFrameRecording() {
-        // Use a timer to simulate frame recording
-        Timer.scheduledTimer(withTimeInterval: 1.0 / 120.0, repeats: true) { _ in
-            Task { @MainActor in
-                monitor.recordFrame()
-            }
-        }
+        // Frame recording is now driven by the Metal renderer.
+        // No simulated timer needed.
     }
 }
 
