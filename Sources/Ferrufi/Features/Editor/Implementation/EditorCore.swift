@@ -262,6 +262,7 @@ public struct EditorCoreView: View {
             fileType: fileType,
             placeholder: "Start writing...",
             highlightingEnabled: true,
+            lineNumbersEnabled: true,
             onTextChange: { new in
                 // propagate changes back to the core and document
                 core.content = new

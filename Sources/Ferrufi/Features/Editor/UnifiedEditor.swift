@@ -40,6 +40,8 @@ public struct UnifiedEditor: View {
     public var onSave: (() -> Void)?
     // Enable/disable incremental highlighting (defaults to true)
     public var highlightingEnabled: Bool = true
+    // Enable/disable line numbers
+    public var lineNumbersEnabled: Bool = true
 
     // Environment objects commonly used by other editor components
     @EnvironmentObject private var themeManager: ThemeManager
@@ -57,6 +59,7 @@ public struct UnifiedEditor: View {
         fileType: EditorFileType,
         placeholder: String = "Start writing...",
         highlightingEnabled: Bool = true,
+        lineNumbersEnabled: Bool = true,
         onTextChange: ((String) -> Void)? = nil,
         onSave: (() -> Void)? = nil
     ) {
@@ -65,6 +68,7 @@ public struct UnifiedEditor: View {
         self.fileType = fileType
         self.placeholder = placeholder
         self.highlightingEnabled = highlightingEnabled
+        self.lineNumbersEnabled = lineNumbersEnabled
         self.onTextChange = onTextChange
         self.onSave = onSave
         self._internalText = State(initialValue: text.wrappedValue)
@@ -81,6 +85,7 @@ public struct UnifiedEditor: View {
                     fileType: fileType,
                     placeholder: placeholder,
                     highlightingEnabled: highlightingEnabled,
+                    lineNumbersEnabled: lineNumbersEnabled,
                     onTextChange: { newText in syncText(newText) },
                     onSave: onSave
                 )
@@ -146,6 +151,7 @@ private struct EditorContainerView: NSViewRepresentable {
     var placeholder: String
     // When false, the underlying UnifiedTextView will skip incremental highlighting.
     var highlightingEnabled: Bool = true
+    var lineNumbersEnabled: Bool = true
     var onTextChange: ((String) -> Void)?
     var onSave: (() -> Void)?
 
@@ -257,8 +263,8 @@ private struct EditorContainerView: NSViewRepresentable {
         // Place into scroll view
         scrollView.documentView = unifiedTextView
 
-        // Line number ruler if enabled in settings
-        if ferrufiApp.configuration.editor.showLineNumbers {
+        // Line number ruler if enabled
+        if lineNumbersEnabled || ferrufiApp.configuration.editor.showLineNumbers {
             let ruler = LineNumberRulerView(textView: unifiedTextView)
             scrollView.hasVerticalRuler = true
             scrollView.verticalRulerView = ruler
@@ -318,7 +324,7 @@ private struct EditorContainerView: NSViewRepresentable {
             }
         }
 
-        if settings.showLineNumbers {
+        if lineNumbersEnabled || settings.showLineNumbers {
             if !(nsView.verticalRulerView is LineNumberRulerView) {
                 let ruler = LineNumberRulerView(textView: textView)
                 nsView.verticalRulerView = ruler

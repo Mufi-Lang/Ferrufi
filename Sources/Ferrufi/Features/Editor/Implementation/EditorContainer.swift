@@ -278,30 +278,90 @@ public struct EditorContainer: View {
     }
 
     public var body: some View {
-        GeometryReader { proxy in
-            mainContent
+        HStack(spacing: 0) {
+            // Activity Bar (Far left)
+            activityBar
+            
+            VStack(spacing: 0) {
+                // Breadcrumbs (Top)
+                breadcrumbBar
+                
+                mainContent
+            }
         }
+    }
+
+    private var activityBar: some View {
+        VStack(spacing: 20) {
+            ActivityIcon(icon: "files", isActive: true)
+            ActivityIcon(icon: "magnifyingglass", isActive: false)
+            ActivityIcon(icon: "branch", isActive: false)
+            ActivityIcon(icon: "square.stack.3d.up", isActive: false)
+            Spacer()
+            ActivityIcon(icon: "gearshape", isActive: false)
+        }
+        .padding(.vertical, 15)
+        .frame(width: 48)
+        .background(themeManager.currentTheme.colors.backgroundSecondary)
+        .overlay(
+            Rectangle()
+                .frame(width: 0.5)
+                .foregroundColor(themeManager.currentTheme.colors.border),
+            alignment: .trailing
+        )
+    }
+
+    private var breadcrumbBar: some View {
+        HStack(spacing: 8) {
+            if let doc = host.document {
+                Image(systemName: "folder")
+                    .font(.system(size: 11))
+                Text("Vault")
+                Text("/")
+                    .foregroundColor(themeManager.currentTheme.colors.foregroundTertiary)
+                Text(doc.fileExtension.uppercased())
+                    .font(.system(size: 10, weight: .bold))
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 1)
+                    .background(themeManager.currentTheme.colors.accent.opacity(0.2))
+                    .foregroundColor(themeManager.currentTheme.colors.accent)
+                    .cornerRadius(3)
+                Text("/")
+                    .foregroundColor(themeManager.currentTheme.colors.foregroundTertiary)
+                Text(doc.id.uuidString.prefix(8)) // Placeholder for actual file name logic
+                    .foregroundColor(themeManager.currentTheme.colors.foreground)
+            }
+            Spacer()
+        }
+        .font(.system(size: 11))
+        .foregroundColor(themeManager.currentTheme.colors.foregroundSecondary)
+        .padding(.horizontal, 12)
+        .frame(height: 32)
+        .background(themeManager.currentTheme.colors.background)
         .onReceive(host.documentDidChangePublisher) { _ in
-            // Bind EditorCore whenever host document changes (publisher-driven).
             if let doc = host.document {
-                core.open(document: doc)
-                internalContent = doc.text
-            } else {
-                core.document = nil
-                internalContent = ""
+                self.internalContent = doc.text
+                self.core.open(document: doc)
             }
         }
-        .onReceive(NotificationCenter.default.publisher(for: .unifiedEditorTextViewChanged)) { notification in
-            if let textView = notification.object as? NSTextView {
-                internalContent = textView.string
-            }
-        }
-        .onAppear {
-            // Ensure the core is bound to any pre-existing document when the view appears.
-            if let doc = host.document {
-                core.open(document: doc)
-                internalContent = doc.text
-            }
+    }
+
+    struct ActivityIcon: View {
+        let icon: String
+        let isActive: Bool
+        @EnvironmentObject var themeManager: ThemeManager
+        
+        var body: some View {
+            Image(systemName: icon == "files" ? "doc.on.doc" : (icon == "branch" ? "network" : icon))
+                .font(.system(size: 20))
+                .foregroundColor(isActive ? themeManager.currentTheme.colors.accent : themeManager.currentTheme.colors.foregroundTertiary)
+                .frame(width: 48, height: 40)
+                .overlay(
+                    Rectangle()
+                        .frame(width: 2)
+                        .foregroundColor(isActive ? themeManager.currentTheme.colors.accent : .clear),
+                    alignment: .leading
+                )
         }
     }
 
