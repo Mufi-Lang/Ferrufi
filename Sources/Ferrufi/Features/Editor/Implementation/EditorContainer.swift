@@ -286,6 +286,7 @@ public struct EditorContainer: View {
             EditorCoreView(core: core)
                 .environmentObject(themeManager)
                 .environmentObject(ferrufiApp)
+                .environmentObject(Settings.shared)
                 .padding()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }

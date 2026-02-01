@@ -45,7 +45,7 @@ public class FerrufiApp: ObservableObject {
         self.searchIndex = SearchIndex()
         self.folderManager = FolderManager()
         self.errorHandler = DefaultErrorHandler()
-        self.themeManager = ThemeManager()
+        self.themeManager = ThemeManager.shared
 
         setupSubscriptions()
 

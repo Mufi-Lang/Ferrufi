@@ -169,6 +169,31 @@ struct SidebarItem: View {
 
 // MARK: - Pretty Section Components
 
+struct SettingsThemePickerRow: View {
+    let title: String
+    @Binding var selection: Theme
+    @EnvironmentObject var themeManager: ThemeManager
+
+    var body: some View {
+        HStack {
+            Text(title)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(themeManager.currentTheme.colors.foreground)
+            Spacer()
+            Picker("", selection: $selection) {
+                ForEach(Theme.allCases, id: \.self) { theme in
+                    Text(theme.displayName).tag(theme)
+                }
+            }
+            .pickerStyle(.menu)
+            .frame(width: 180)
+            .controlSize(.small)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+    }
+}
+
 struct SettingsSection<Content: View>: View {
     let title: String?
     let content: Content
@@ -263,10 +288,11 @@ struct SettingsSliderRow: View {
     }
 }
 
-struct SettingsPickerRow<T: Hashable & CustomStringConvertible>: View {
+struct SettingsPickerRow<T: Hashable>: View {
     let title: String
     @Binding var selection: T
     let options: [T]
+    let labelProvider: (T) -> String
     @EnvironmentObject var themeManager: ThemeManager
 
     var body: some View {
@@ -277,7 +303,7 @@ struct SettingsPickerRow<T: Hashable & CustomStringConvertible>: View {
             Spacer()
             Picker("", selection: $selection) {
                 ForEach(options, id: \.self) { option in
-                    Text(option.description).tag(option)
+                    Text(labelProvider(option)).tag(option)
                 }
             }
             .pickerStyle(.menu)
@@ -295,6 +321,7 @@ struct GeneralSettingsContent: View {
     @EnvironmentObject var settings: Settings
     @EnvironmentObject var ferrufiApp: FerrufiApp
     @EnvironmentObject var themeManager: ThemeManager
+    @State private var showingStartupNotePicker = false
 
     var body: some View {
         VStack(spacing: 24) {
@@ -313,6 +340,28 @@ struct GeneralSettingsContent: View {
                     get: { settings.autoUpdateEnabled },
                     set: { settings.autoUpdateEnabled = $0 }
                 ))
+            }
+
+            SettingsSection(title: "Startup") {
+                SettingsPickerRow(title: "At Launch", selection: $settings.startupBehavior, options: StartupBehavior.allCases, labelProvider: { $0.displayName })
+                
+                if settings.startupBehavior == .specific {
+                    Divider().padding(.leading, 16)
+                    HStack {
+                        Text("Startup Note")
+                            .font(.system(size: 13, weight: .medium))
+                        Spacer()
+                        Button(action: { showingStartupNotePicker = true }) {
+                            if let id = settings.startupNoteId, let note = ferrufiApp.notes.first(where: { $0.id == id }) {
+                                Text(note.title)
+                            } else {
+                                Text("Choose Note...")
+                            }
+                        }
+                        .controlSize(.small)
+                    }
+                    .padding(16)
+                }
             }
 
             SettingsSection(title: "Workspace") {
@@ -336,25 +385,32 @@ struct GeneralSettingsContent: View {
                 
                 Divider().padding(.leading, 16)
                 
-                SettingsSliderRow(title: "Auto-save", value: Binding(
-                    get: { Double(settings.config.workspace.autoSaveInterval) },
-                    set: { val in settings.update { $0.workspace.autoSaveInterval = val } }
-                ), range: 5...300, step: 5, unit: "s")
-            }
-            
-            SettingsSection(title: "Appearance") {
-                SettingsPickerRow(title: "Color Theme", selection: Binding(
-                    get: { settings.currentTheme },
-                    set: { settings.currentTheme = $0 }
-                ), options: Theme.allCases)
+                SettingsSliderRow(title: "Auto-save", value: $settings.autoSaveInterval, range: 5...300, step: 5, unit: "s")
                 
                 Divider().padding(.leading, 16)
                 
-                SettingsToggleRow("Enable Animations", isOn: Binding(
-                    get: { settings.animationsEnabled },
-                    set: { settings.animationsEnabled = $0 }
-                ))
+                SettingsToggleRow("Watch for External Changes", isOn: $settings.fileWatchingEnabled)
             }
+            
+            SettingsSection(title: "Appearance") {
+                SettingsThemePickerRow(title: "Color Theme", selection: $settings.currentTheme)
+                
+                Divider().padding(.leading, 16)
+                
+                SettingsToggleRow("Enable Animations", isOn: $settings.animationsEnabled)
+            }
+
+            SettingsSection(title: "Performance") {
+                SettingsToggleRow("Metal Acceleration", subtitle: "Use GPU for faster text rendering", isOn: $settings.metalAccelerationEnabled)
+            }
+        }
+        .sheet(isPresented: $showingStartupNotePicker) {
+            NotePickerView(onNoteSelected: { note in
+                settings.startupNoteId = note.id
+                showingStartupNotePicker = false
+            })
+            .environmentObject(ferrufiApp)
+            .environmentObject(themeManager)
         }
     }
 
@@ -413,7 +469,9 @@ struct EditorSettingsContent: View {
             SettingsSection(title: "Typography") {
                 SettingsSliderRow(title: "Font Size", value: $settings.fontSize, range: 10...32, step: 1, unit: "pt")
                 Divider().padding(.leading, 16)
-                SettingsPickerRow(title: "Font Family", selection: $settings.fontFamily, options: ["SF Mono", "Menlo", "Monaco", "Courier"])
+                SettingsSliderRow(title: "Line Height", value: $settings.lineHeight, range: 1.0...2.5, step: 0.1, unit: "x")
+                Divider().padding(.leading, 16)
+                SettingsPickerRow(title: "Font Family", selection: $settings.fontFamily, options: ["SF Mono", "Menlo", "Monaco", "Courier"], labelProvider: { $0 })
             }
 
             SettingsSection(title: "Interface") {
@@ -443,22 +501,19 @@ struct SearchSettingsContent: View {
     var body: some View {
         VStack(spacing: 24) {
             SettingsSection(title: "Search Engine") {
-                SettingsToggleRow("Indexing Enabled", subtitle: "Faster search across all notes", isOn: Binding(
-                    get: { settings.config.search.indexingEnabled },
-                    set: { val in settings.update { $0.search.indexingEnabled = val } }
-                ))
+                SettingsToggleRow("Indexing Enabled", subtitle: "Faster search across all notes", isOn: $settings.indexingEnabled)
+                Divider().padding(.leading, 16)
+                SettingsSliderRow(title: "Fuzzy Threshold", value: $settings.fuzzySearchThreshold, range: 0.1...1.0, step: 0.1, unit: "")
             }
             
             SettingsSection(title: "Scope") {
-                SettingsToggleRow("Search in Content", isOn: Binding(
-                    get: { settings.config.search.searchInContent },
-                    set: { val in settings.update { $0.search.searchInContent = val } }
-                ))
+                SettingsToggleRow("Search in Content", isOn: $settings.searchInContent)
                 Divider().padding(.leading, 16)
-                SettingsToggleRow("Search in Titles", isOn: Binding(
-                    get: { settings.config.search.searchInTitles },
-                    set: { val in settings.update { $0.search.searchInTitles = val } }
-                ))
+                SettingsToggleRow("Search in Titles", isOn: $settings.searchInTitles)
+            }
+
+            SettingsSection(title: "Advanced") {
+                SettingsToggleRow("Case Sensitive", isOn: $settings.caseSensitive)
             }
         }
     }

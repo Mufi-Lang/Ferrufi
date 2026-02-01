@@ -29,6 +29,7 @@ public struct ContentView: View {
                 .environmentObject(navigationModel)
                 .environmentObject(themeManager)
         }
+        .environmentObject(Settings.shared)
         .navigationSplitViewStyle(.balanced)
         .themedAccent(themeManager)
         .themedBackground(themeManager)
@@ -155,6 +156,7 @@ public struct ContentView: View {
                 .environmentObject(ferrufiApp)
                 .environmentObject(navigationModel)
                 .environmentObject(themeManager)
+                .environmentObject(Settings.shared)
         }
 
         .sheet(isPresented: $navigationModel.showingFolderCreation) {
@@ -162,6 +164,7 @@ public struct ContentView: View {
                 .environmentObject(ferrufiApp)
                 .environmentObject(navigationModel)
                 .environmentObject(themeManager)
+                .environmentObject(Settings.shared)
         }
         .sheet(isPresented: $navigationModel.showingRenameNote) {
             if let note = navigationModel.noteForAction {
@@ -169,6 +172,7 @@ public struct ContentView: View {
                     .environmentObject(ferrufiApp)
                     .environmentObject(navigationModel)
                     .environmentObject(themeManager)
+                    .environmentObject(Settings.shared)
             }
         }
         .sheet(isPresented: $navigationModel.showingMoveNote) {
@@ -177,6 +181,7 @@ public struct ContentView: View {
                     .environmentObject(ferrufiApp)
                     .environmentObject(navigationModel)
                     .environmentObject(themeManager)
+                    .environmentObject(Settings.shared)
             }
         }
         .sheet(isPresented: $navigationModel.showingRenameFolder) {
@@ -185,6 +190,7 @@ public struct ContentView: View {
                     .environmentObject(ferrufiApp)
                     .environmentObject(navigationModel)
                     .environmentObject(themeManager)
+                    .environmentObject(Settings.shared)
             }
         }
         .sheet(isPresented: $navigationModel.showingSettings) {
@@ -193,6 +199,7 @@ public struct ContentView: View {
                 .environmentObject(ferrufiApp)
                 .environmentObject(navigationModel)
                 .environmentObject(themeManager)
+                .environmentObject(Settings.shared)
         }
 
         .onReceive(NotificationCenter.default.publisher(for: .toggleMufiREPL)) { _ in
@@ -216,6 +223,7 @@ public struct ContentView: View {
                     Divider()
                     EmbeddedMufiREPLView()
                         .environmentObject(themeManager)
+                        .environmentObject(Settings.shared)
                         .frame(minHeight: 220, maxHeight: 420)
                         .background(Color(NSColor.windowBackgroundColor))
                 }
@@ -605,10 +613,12 @@ struct ContentView_Samples: PreviewProvider {
         Group {
             ContentView()
                 .environmentObject(FerrufiApp())
+                .environmentObject(Settings.shared)
                 .previewDisplayName("Ghost White")
 
             ContentView()
                 .environmentObject(FerrufiApp())
+                .environmentObject(Settings.shared)
                 .onAppear {
                     let themeManager = ThemeManager()
                     themeManager.setTheme(.tokyoNight)
@@ -617,6 +627,7 @@ struct ContentView_Samples: PreviewProvider {
 
             ContentView()
                 .environmentObject(FerrufiApp())
+                .environmentObject(Settings.shared)
                 .onAppear {
                     let themeManager = ThemeManager()
                     themeManager.setTheme(.catppuccinMocha)

@@ -115,6 +115,28 @@ Helpful docs:
 
 ---
 
+## Settings Implementation Status
+
+Ferrufi features a unified global settings system. Below is the current status of various preferences:
+
+| Category | Feature | Status |
+| :--- | :--- | :--- |
+| **General** | Launch at Login, Confirm Before Quit, Auto-updates | ✅ Fully Functional |
+| | Startup Behavior (Restore / Welcome / Specific Note) | ✅ Fully Functional |
+| **Workspace** | Workspace Location Management (Security-scoped) | ✅ Fully Functional |
+| | Auto-save Interval, External File Watching | ✅ Fully Functional |
+| **Editor** | Font Family & Size, Line Height | ✅ Fully Functional |
+| | Word Wrap, Line Numbers | ✅ Fully Functional |
+| | Syntax Highlighting (Mufi) | ✅ Fully Functional |
+| | Auto-complete, Spell Check | 🚧 In Progress |
+| **Search** | Global Indexing, Fuzzy Threshold | ✅ Fully Functional |
+| | Search Scope (Content vs Titles), Case Sensitivity | ✅ Fully Functional |
+| **UI** | Professional Themes (16+ variants), System Theme sync | ✅ Fully Functional |
+| | Metal Acceleration, Animation Control | ✅ Fully Functional |
+| **Shortcuts** | Custom Key Bindings | 🚧 UI Ready / Logic In Progress |
+
+---
+
 ## License
 This project is licensed under the MIT License — see `LICENSE` for details.
 

@@ -269,6 +269,7 @@ public struct EditorCoreView: View {
             }
         )
         // Ensure monospaced font usage for editor as discussed in the consolidation plan.
-        .environmentObject(ThemeManager())  // lightweight guard; calling code should inject real ThemeManager when available
+        .environmentObject(ThemeManager.shared)
+        .environmentObject(Settings.shared)
     }
 }

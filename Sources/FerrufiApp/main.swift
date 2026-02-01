@@ -115,6 +115,7 @@ struct IronApplication: App {
             ContentView()
                 .environmentObject(ferrufiApp)
                 .environmentObject(ferrufiApp.themeManager)
+                .environmentObject(Settings.shared)
                 .onAppear {
                     // Register the shared FerrufiApp instance and make sure window can receive key events
                     FerrufiApp.shared = ferrufiApp
@@ -175,6 +176,7 @@ struct IronApplication: App {
             SettingsView()
                 .environmentObject(ferrufiApp)
                 .environmentObject(ferrufiApp.themeManager)
+                .environmentObject(Settings.shared)
         }
     }
 }

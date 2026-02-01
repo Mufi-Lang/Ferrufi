@@ -43,6 +43,7 @@ public struct UnifiedEditor: View {
     // Environment objects commonly used by other editor components
     @EnvironmentObject private var themeManager: ThemeManager
     @EnvironmentObject private var ferrufiApp: FerrufiApp
+    @EnvironmentObject private var settings: Settings
 
     // Local state for internal synchronization
     @State private var internalText: String = ""
@@ -82,6 +83,7 @@ public struct UnifiedEditor: View {
                     onTextChange: { newText in syncText(newText) },
                     onSave: onSave
                 )
+                .id("\(settings.showLineNumbers)-\(settings.wordWrap)-\(settings.fontFamily)-\(settings.fontSize)-\(settings.lineHeight)")
             }
         }
         .onAppear {
@@ -148,6 +150,7 @@ private struct EditorContainerView: NSViewRepresentable {
 
     @EnvironmentObject private var themeManager: ThemeManager
     @EnvironmentObject private var ferrufiApp: FerrufiApp
+    @EnvironmentObject private var settings: Settings
 
     func makeNSView(context: Context) -> NSScrollView {
         let scrollView = NSScrollView()
@@ -170,26 +173,65 @@ private struct EditorContainerView: NSViewRepresentable {
         // Propagate highlighting preference from the SwiftUI wrapper to the NSTextView subclass
         unifiedTextView.highlightingEnabled = highlightingEnabled
 
-        // Basic appearance & behavior
-        unifiedTextView.isEditable = true
-        unifiedTextView.isSelectable = true
-        unifiedTextView.allowsUndo = true
-        unifiedTextView.isRichText = false
-        // Use monospaced font so the editor displays like the Mufi script editor
-        // (consistent appearance across script and note editing modes).
-        let chosenFont: NSFont = themeManager.monospacedNSFont
-        unifiedTextView.font = chosenFont
-        // Make the highlighter use the same base family so token-derived fonts match.
-        unifiedTextView.configureHighlighter(
-            baseFontName: unifiedTextView.font?.fontName, baseSize: themeManager.editorFontSize)
-        unifiedTextView.textContainerInset = NSSize(width: 16, height: 16)
-        unifiedTextView.isVerticallyResizable = true
-        unifiedTextView.isHorizontallyResizable = false
-        unifiedTextView.textContainer?.widthTracksTextView = true
-        unifiedTextView.textContainer?.containerSize = NSSize(
-            width: scrollView.contentSize.width, height: .greatestFiniteMagnitude)
+                // Basic appearance & behavior
 
-        // Initial content
+                unifiedTextView.isEditable = true
+
+                unifiedTextView.isSelectable = true
+
+                unifiedTextView.allowsUndo = true
+
+                unifiedTextView.isRichText = false
+
+                // Use monospaced font so the editor displays like the Mufi script editor
+
+                // (consistent appearance across script and note editing modes).
+
+                let chosenFont: NSFont = themeManager.monospacedNSFont
+
+                unifiedTextView.font = chosenFont
+
+                unifiedTextView.textContainerInset = NSSize(width: 16, height: 16)
+
+                unifiedTextView.isVerticallyResizable = true
+
+                
+
+                // Apply Word Wrap based on settings
+
+                if settings.wordWrap {
+
+                    unifiedTextView.isHorizontallyResizable = false
+
+                    unifiedTextView.textContainer?.widthTracksTextView = true
+
+                } else {
+
+                    unifiedTextView.isHorizontallyResizable = true
+
+                    unifiedTextView.textContainer?.widthTracksTextView = false
+
+                    unifiedTextView.textContainer?.containerSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+
+                    scrollView.hasHorizontalScroller = true
+
+                }
+
+        
+
+                // Apply Line Height
+
+                let paragraphStyle = NSMutableParagraphStyle()
+
+                paragraphStyle.lineHeightMultiple = CGFloat(settings.lineHeight)
+
+                unifiedTextView.defaultParagraphStyle = paragraphStyle
+
+        
+
+                // Initial content
+
+        
         unifiedTextView.string = text
 
         // Ensure base font is applied to text storage so raw text matches the preview/editor immediately
@@ -202,6 +244,11 @@ private struct EditorContainerView: NSViewRepresentable {
 
         // Theme
         updateTheme(textView: unifiedTextView)
+
+        // Make the highlighter use the same base family so token-derived fonts match.
+        // Call this AFTER setting initial string and base font attributes.
+        unifiedTextView.configureHighlighter(
+            baseFontName: unifiedTextView.font?.fontName, baseSize: themeManager.editorFontSize)
 
         // Wire formatting notifications (shared across UI)
         context.coordinator.installFormattingObservers()
@@ -242,23 +289,35 @@ private struct EditorContainerView: NSViewRepresentable {
         // keep parity with Mufi files for visual consistency.
         let chosenFont: NSFont = themeManager.monospacedNSFont
         textView.font = chosenFont
-        // Log the actual NSTextView font and size to aid debugging font parity
-        if let f = textView.font {
-            print("EditorContainerView: textView font: \(f.fontName) @ \(f.pointSize)pt")
-        } else {
-            print("EditorContainerView: textView font: <none>")
-        }
-        // Ensure highlighter uses the chosen font family for Mufi files (pass font name) or default for code
-        let highlighterFontName: String? = (fileType == .mufi) ? chosenFont.fontName : nil
-        textView.configureHighlighter(
-            baseFontName: highlighterFontName, baseSize: themeManager.editorFontSize)
+        
+        // Ensure base font is applied to the whole storage again to reset any external attribute changes
         if let ts = textView.textStorage, let base = textView.font {
             let full = NSRange(location: 0, length: ts.length)
             ts.addAttribute(.font, value: base, range: full)
         }
 
-        updateTheme(textView: textView)
-        if ferrufiApp.configuration.editor.showLineNumbers {
+        // Re-run highlighting AFTER font/theme updates
+        let highlighterFontName: String? = (fileType == .mufi) ? chosenFont.fontName : nil
+        textView.configureHighlighter(
+            baseFontName: highlighterFontName, baseSize: themeManager.editorFontSize)
+        
+        // Word wrap handling in update
+        if settings.wordWrap {
+            if textView.textContainer?.widthTracksTextView == false {
+                textView.isHorizontallyResizable = false
+                textView.textContainer?.widthTracksTextView = true
+                nsView.hasHorizontalScroller = false
+            }
+        } else {
+            if textView.textContainer?.widthTracksTextView == true {
+                textView.isHorizontallyResizable = true
+                textView.textContainer?.widthTracksTextView = false
+                textView.textContainer?.containerSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+                nsView.hasHorizontalScroller = true
+            }
+        }
+
+        if settings.showLineNumbers {
             if !(nsView.verticalRulerView is LineNumberRulerView) {
                 let ruler = LineNumberRulerView(textView: textView)
                 nsView.verticalRulerView = ruler
@@ -273,14 +332,17 @@ private struct EditorContainerView: NSViewRepresentable {
 
         // Update coordinator state
         context.coordinator.textView = textView
+        context.coordinator.themeManager = themeManager
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(
+        let coordinator = Coordinator(
             text: $text,
             isEditing: $isEditing,
             onTextChange: onTextChange,
             onSave: onSave)
+        coordinator.themeManager = themeManager
+        return coordinator
     }
 
     private func updateTheme(textView: NSTextView) {
@@ -305,6 +367,7 @@ private struct EditorContainerView: NSViewRepresentable {
         var isEditingBinding: Binding<Bool>
         var onTextChange: ((String) -> Void)?
         var onSave: (() -> Void)?
+        var themeManager: ThemeManager?
 
         weak var textView: UnifiedTextView? {
             didSet {
@@ -416,6 +479,7 @@ private class UnifiedTextView: NSTextView {
     private var mode: EditorFileType = .mufi
     // When false, skip incremental highlighting (useful for performance-sensitive cases)
     var highlightingEnabled: Bool = true
+    private var highlighter: MufiHighlighter?
 
     override func awakeFromNib() {
         super.awakeFromNib()
@@ -455,9 +519,10 @@ private class UnifiedTextView: NSTextView {
         clearAllAttributes()
     }
 
-    // Apply syntax highlighting to the entire document (removed)
+    // Apply syntax highlighting to the entire document
     private func applyHighlightingWhole() {
-        // Syntax highlighting removed — no-op.
+        guard let ts = textStorage, highlightingEnabled else { return }
+        highlighter?.highlight(in: ts)
     }
 
     private func clearAllAttributes() {
@@ -474,18 +539,26 @@ private class UnifiedTextView: NSTextView {
     /// Configure the highlighter fonts to match the provided editor font settings.
     /// This keeps the visual appearance of highlighted text consistent with the editor font.
     func configureHighlighter(baseFontName: String?, baseSize: Double) {
-        // Highlighter configuration removed — no-op.
+        let theme = coordinator?.themeManager?.currentTheme ?? .ghostWhite
+        
+        if let highlighter = highlighter {
+            highlighter.updateConfig(theme: theme, baseFontName: baseFontName, baseSize: baseSize)
+        } else {
+            highlighter = MufiHighlighter(theme: theme, baseFontName: baseFontName, baseSize: baseSize)
+        }
+        
+        if highlightingEnabled {
+            applyHighlightingWhole()
+        }
     }
 
     // MARK: - Editing hooks
 
     override func didChangeText() {
         super.didChangeText()
-        // Incremental highlighting removed — previously this re-highlighted edited regions
-        // (to cover multiline constructs like lists, code fences, and blockquotes) instead of
-        // re-highlighting the whole document on every keystroke.
-        // Incremental highlighting removed — no-op in this editor build.
-        // Notify coordinator via NotificationCenter callback (textDidChange will call delegate)
+        if highlightingEnabled {
+            applyHighlightingWhole()
+        }
     }
 
     // Toolbar formatting helper removed.

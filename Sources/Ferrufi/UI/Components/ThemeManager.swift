@@ -307,6 +307,7 @@ public enum IronTheme: String, CaseIterable, Sendable {
     case synthwave = "synthwave"
     case forestGreen = "forest_green"
     case lavenderMist = "lavender_mist"
+    case system = "system"
 
     public var displayName: String {
         switch self {
@@ -326,11 +327,17 @@ public enum IronTheme: String, CaseIterable, Sendable {
         case .synthwave: return "Synthwave"
         case .forestGreen: return "Forest Green"
         case .lavenderMist: return "Lavender Mist"
+        case .system: return "System"
         }
     }
 
     public var colors: ThemeColors {
         switch self {
+        case .system:
+            // Dynamic theme that follows system appearance
+            return NSApp.effectiveAppearance.name == .darkAqua 
+                ? IronTheme.midnightBlue.colors 
+                : IronTheme.ghostWhite.colors
         case .ghostWhite:
             return ThemeColors(
                 background: Color(hex: "fafafa"),

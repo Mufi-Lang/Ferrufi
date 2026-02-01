@@ -343,10 +343,12 @@ public struct GeneralConfiguration: Codable, Sendable {
     }
 }
 
-public enum StartupBehavior: String, Codable, CaseIterable, Sendable {
+public enum StartupBehavior: String, Codable, CaseIterable, Sendable, CustomStringConvertible {
     case restore = "restore"
     case welcome = "welcome"
     case specific = "specific"
+
+    public var description: String { displayName }
 
     public var displayName: String {
         switch self {
@@ -439,16 +441,44 @@ public struct ShortcutsConfiguration: Codable, Sendable {
 // MARK: - Enums
 
 public enum Theme: String, Codable, CaseIterable, Sendable, CustomStringConvertible {
-    case light = "light"
-    case dark = "dark"
+    case ghostWhite = "ghost_white"
+    case midnightBlue = "midnight_blue"
+    case tokyoNight = "tokyo_night"
+    case nordLight = "nord_light"
+    case nordDark = "nord_dark"
+    case catppuccinLatte = "catppuccin_latte"
+    case catppuccinMocha = "catppuccin_mocha"
+    case solarizedLight = "solarized_light"
+    case solarizedDark = "solarized_dark"
+    case draculaClassic = "dracula_classic"
+    case gruvboxLight = "gruvbox_light"
+    case gruvboxDark = "gruvbox_dark"
+    case oneDarkPro = "one_dark_pro"
+    case synthwave = "synthwave"
+    case forestGreen = "forest_green"
+    case lavenderMist = "lavender_mist"
     case system = "system"
 
     public var description: String { displayName }
 
     public var displayName: String {
         switch self {
-        case .light: return "Light"
-        case .dark: return "Dark"
+        case .ghostWhite: return "Ghost White"
+        case .midnightBlue: return "Midnight Blue"
+        case .tokyoNight: return "Tokyo Night"
+        case .nordLight: return "Nord Light"
+        case .nordDark: return "Nord Dark"
+        case .catppuccinLatte: return "Catppuccin Latte"
+        case .catppuccinMocha: return "Catppuccin Mocha"
+        case .solarizedLight: return "Solarized Light"
+        case .solarizedDark: return "Solarized Dark"
+        case .draculaClassic: return "Dracula Classic"
+        case .gruvboxLight: return "Gruvbox Light"
+        case .gruvboxDark: return "Gruvbox Dark"
+        case .oneDarkPro: return "One Dark Pro"
+        case .synthwave: return "Synthwave"
+        case .forestGreen: return "Forest Green"
+        case .lavenderMist: return "Lavender Mist"
         case .system: return "System"
         }
     }
