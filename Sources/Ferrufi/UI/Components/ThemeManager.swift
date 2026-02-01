@@ -14,6 +14,8 @@ import SwiftUI
 /// Manages beautiful themes with carefully crafted color palettes
 @MainActor
 public class ThemeManager: ObservableObject {
+    /// The shared singleton instance
+    public static let shared = ThemeManager()
 
     // MARK: - Published Properties
 

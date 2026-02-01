@@ -2,946 +2,14 @@
 //  SettingsView.swift
 //  Ferrufi
 //
-//  Settings view for configuring the Ferrufi application
+//  A beautiful, modern settings view for configuring the Ferrufi application.
+//  Uses a sidebar-based navigation for a polished, IDE-like feel.
 //
 
 import AppKit
 import SwiftUI
 
-// Compact layout constants used across the settings UI
-private let settingsLabelWidth: CGFloat = 140
-private let settingsCompactPadding: CGFloat = 10
-
-// A small helper that ensures consistent label alignment for rows in the settings UI.
-// Usage:
-// SettingsRow("Label:") {
-//     // controls go here (TextField, Toggle, Button, etc.)
-// }
-private struct SettingsRow<Content: View>: View {
-    let label: String
-    let content: Content
-
-    init(_ label: String, @ViewBuilder content: () -> Content) {
-        self.label = label
-        self.content = content()
-    }
-
-    var body: some View {
-        HStack(alignment: .center) {
-            Text(label)
-                .frame(width: settingsLabelWidth, alignment: .leading)
-            Spacer()
-            content
-        }
-        .padding(.vertical, settingsCompactPadding / 2)
-    }
-}
-
-public struct SettingsView: View {
-    @EnvironmentObject var ferrufiApp: FerrufiApp
-    @EnvironmentObject var themeManager: ThemeManager
-    @State private var selectedTab: SettingsTab
-
-    public init() {
-        self._selectedTab = State(initialValue: .general)
-    }
-
-    init(initialTab: SettingsTab? = nil) {
-        self._selectedTab = State(initialValue: initialTab ?? .general)
-    }
-
-    public var body: some View {
-        TabView(selection: $selectedTab) {
-            GeneralSettingsView()
-                .environmentObject(ferrufiApp)
-                .tabItem {
-                    Label("General", systemImage: "gearshape")
-                }
-                .tag(SettingsTab.general)
-
-            EditorSettingsView()
-                .environmentObject(ferrufiApp)
-                .tabItem {
-                    Label("Editor", systemImage: "pencil")
-                }
-                .tag(SettingsTab.editor)
-
-            // Graph settings removed (feature deprecated)
-            // Appearance tab removed per product direction — theme-related controls remain available via theme selector UI
-
-            ShortcutsSettingsView()
-                .environmentObject(ferrufiApp)
-                .tabItem {
-                    Label("Shortcuts", systemImage: "keyboard")
-                }
-                .tag(SettingsTab.shortcuts)
-
-            AboutSettingsView()
-                .tabItem {
-                    Label("About", systemImage: "info.circle")
-                }
-                .tag(SettingsTab.about)
-        }
-        .frame(minWidth: 740, minHeight: 520)
-        // Use a slightly more compact control size by default for settings
-        .environment(\.controlSize, .small)
-        .themedAccent(themeManager)
-        .themedBackground(themeManager)
-        .themedForeground(themeManager)
-        .preferredColorScheme(themeManager.currentTheme.isDark ? .dark : .light)
-    }
-}
-
-// MARK: - General Settings
-
-struct GeneralSettingsView: View {
-    @EnvironmentObject var ferrufiApp: FerrufiApp
-    @EnvironmentObject var themeManager: ThemeManager
-    @State private var showingStartupNotePicker: Bool = false
-    @State private var showResetConfirm: Bool = false
-    @State private var showErrorAlert: Bool = false
-    @State private var errorMessage: String = ""
-
-    // Workspace management states
-    @State private var showWorkspaceInfoAlert: Bool = false
-    @State private var workspaceInfoMessage: String = ""
-
-    public init() {}
-
-    var body: some View {
-        VStack(alignment: .leading) {
-            // Header with reset action (styled consistently with Shortcuts tab)
-            HStack {
-                Text("General")
-                    .font(.title3)
-                    .bold()
-                Spacer()
-                Button("Reset to Defaults") {
-                    // Reset configuration and ensure services reflect defaults
-                    ferrufiApp.configuration.resetToDefaults()
-
-                    if ferrufiApp.configuration.general.autoUpdateEnabled {
-                        UpdateManager.shared.startAutoCheck()
-                    } else {
-                        UpdateManager.shared.stopAutoCheck()
-                    }
-
-                    Task { @MainActor in
-                        do {
-                            try await LaunchAtLoginManager.shared.setEnabled(
-                                ferrufiApp.configuration.general.launchAtLogin)
-                        } catch {
-                            errorMessage = error.localizedDescription
-                            showErrorAlert = true
-                        }
-                    }
-                }
-                .help("Reset all preferences to their defaults")
-                .controlSize(.small)
-            }
-            .padding(.bottom, 6)
-
-            // Debug banner to confirm General tab is visible
-            Text("DEBUG: General tab is visible")
-                .font(.caption)
-                .padding(8)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.red.opacity(0.12))
-                .foregroundColor(.red)
-                .cornerRadius(6)
-
-            GroupBox(label: Label("Workspace", systemImage: "folder")) {
-                VStack(alignment: .leading, spacing: 8) {
-                    // Compute currently initialized workspace path (expand '~' if present)
-                    let homeURL = FileManager.default.homeDirectoryForCurrentUser
-                    let rawWorkspacePath =
-                        ferrufiApp.currentWorkspacePath
-                        ?? ferrufiApp.configuration.workspace.defaultWorkspacePath
-                    let workspacePath = URL(
-                        fileURLWithPath: (rawWorkspacePath as NSString).expandingTildeInPath)
-                    let bookmarkedParent = SecurityScopedBookmarkManager.shared
-                        .allBookmarkedPaths()
-                        .first { workspacePath.path.hasPrefix($0) }
-
-                    HStack(alignment: .center) {
-                        Text("Workspace location:")
-                            .frame(width: settingsLabelWidth, alignment: .leading)
-                        Spacer()
-                        Text(bookmarkedParent ?? workspacePath.path)
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                            .truncationMode(.middle)
-                    }
-
-                    // Trusted state
-                    let trustedList = ferrufiApp.configuration.trustedWorkspacePaths ?? []
-                    HStack(alignment: .center) {
-                        Text("Trusted:")
-                            .frame(width: settingsLabelWidth, alignment: .leading)
-                        Spacer()
-                        if trustedList.isEmpty {
-                            Text("Not trusted")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        } else {
-                            VStack(alignment: .trailing, spacing: 2) {
-                                ForEach(trustedList, id: \.self) { p in
-                                    Text(p)
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-                            }
-                        }
-                    }
-
-                    // Bookmarked paths
-                    let bookmarks = SecurityScopedBookmarkManager.shared.allBookmarkedPaths()
-                    HStack(alignment: .center) {
-                        Text("Bookmarked:")
-                            .frame(width: settingsLabelWidth, alignment: .leading)
-                        Spacer()
-                        if bookmarks.isEmpty {
-                            Text("None")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        } else {
-                            VStack(alignment: .trailing, spacing: 2) {
-                                ForEach(bookmarks, id: \.self) { b in
-                                    Text(b)
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-                            }
-                        }
-                    }
-
-                    HStack(spacing: 10) {
-
-                        Button("Change Workspace Folder") {
-                            SecurityScopedBookmarkManager.shared.requestFolderAccess(
-                                message:
-                                    "Select a folder to contain your Ferrufi workspace (select Home to use ~/.ferrufi/)",
-                                defaultDirectory: homeURL,
-                                showHidden: true
-                            ) { selectedURL in
-                                guard let parentURL = selectedURL else { return }
-                                Task {
-                                    do {
-                                        // If the user picked Home, create ~/.ferrufi inside it
-                                        let ferrufiDir: URL
-                                        if parentURL.path == homeURL.path {
-                                            ferrufiDir = parentURL.appendingPathComponent(
-                                                ".ferrufi")
-                                        } else {
-                                            ferrufiDir = parentURL
-                                        }
-
-                                        // Create the chosen folder (or ~/.ferrufi when Home was selected)
-                                        try FileManager.default.createDirectory(
-                                            at: ferrufiDir, withIntermediateDirectories: true,
-                                            attributes: nil)
-
-                                        // Reinitialize Ferrufi storage to point at the new workspace (use the folder itself)
-                                        try await ferrufiApp.initialize(
-                                            workspacePath: ferrufiDir.path)
-
-                                        // Refresh explorer selection using the shared navigation model so the
-                                        // sidebar updates correctly across windows
-                                        await MainActor.run {
-                                            FerrufiApp.sharedNavigationModel?.selectFolder(
-                                                ferrufiApp.folderManager.rootFolder,
-                                                ferrufiApp: ferrufiApp)
-                                            if let welcome = ferrufiApp.notes.first(where: {
-                                                $0.title == "Welcome"
-                                            }) {
-                                                FerrufiApp.sharedNavigationModel?.selectNote(
-                                                    welcome, ferrufiApp: ferrufiApp)
-                                            }
-
-                                            // Debug: log workspace change for diagnostics
-                                            print(
-                                                "✅ Workspace changed to: \(ferrufiDir.path). notes: \(ferrufiApp.notes.count), root: \(ferrufiApp.folderManager.rootFolder.path)"
-                                            )
-
-                                            workspaceInfoMessage = "Workspace folder updated."
-                                            showWorkspaceInfoAlert = true
-                                        }
-                                    } catch {
-                                        errorMessage = error.localizedDescription
-                                        showErrorAlert = true
-                                    }
-                                }
-                            }
-                        }
-                        .controlSize(.small)
-
-                        Button("Revoke Permission") {
-                            if let parent = SecurityScopedBookmarkManager.shared
-                                .allBookmarkedPaths()
-                                .first(where: { workspacePath.path.hasPrefix($0) })
-                            {
-                                SecurityScopedBookmarkManager.shared.removeBookmark(forPath: parent)
-                                workspaceInfoMessage =
-                                    "Permission revoked. App will prompt again on next initialization."
-                                showWorkspaceInfoAlert = true
-                            } else {
-                                errorMessage = "No workspace permission found to revoke."
-                                showErrorAlert = true
-                            }
-                        }
-                        .controlSize(.small)
-
-                        Button("Open Workspace in Finder") {
-                            NSWorkspace.shared.open(workspacePath)
-                        }
-                        .controlSize(.small)
-                    }  // HStack
-                }  // VStack
-            }  // GroupBox
-            .padding(.vertical, 8)
-            .alert("Workspace", isPresented: $showWorkspaceInfoAlert) {
-                Button("OK") {}
-            } message: {
-                Text(workspaceInfoMessage)
-            }
-
-            ScrollView(.vertical) {
-                VStack(alignment: .leading, spacing: 14) {
-                    GroupBox(label: Label("Application", systemImage: "gearshape")) {
-                        VStack(spacing: 12) {
-                            Toggle(
-                                "Launch at login",
-                                isOn: Binding(
-                                    get: { ferrufiApp.configuration.general.launchAtLogin },
-                                    set: { newValue in
-                                        ferrufiApp.configuration.updateConfiguration { config in
-                                            config.general.launchAtLogin = newValue
-                                        }
-                                        // Perform the main-actor operation asynchronously and handle failures by reverting
-                                        Task { @MainActor in
-                                            do {
-                                                try await LaunchAtLoginManager.shared.setEnabled(
-                                                    newValue)
-                                            } catch {
-                                                ferrufiApp.configuration.updateConfiguration {
-                                                    config in
-                                                    config.general.launchAtLogin = !newValue
-                                                }
-                                                errorMessage = error.localizedDescription
-                                                showErrorAlert = true
-                                            }
-                                        }
-                                    }
-                                )
-                            )
-                            .controlSize(.small)
-
-                            Toggle(
-                                "Confirm before quit",
-                                isOn: Binding(
-                                    get: { ferrufiApp.configuration.general.confirmBeforeQuit },
-                                    set: { newValue in
-                                        ferrufiApp.configuration.updateConfiguration { config in
-                                            config.general.confirmBeforeQuit = newValue
-                                        }
-                                    }
-                                )
-                            )
-                            .controlSize(.small)
-
-                            HStack(alignment: .center) {
-                                Text("Startup behavior:")
-                                    .frame(width: settingsLabelWidth, alignment: .leading)
-
-                                Picker(
-                                    "",
-                                    selection: Binding(
-                                        get: { ferrufiApp.configuration.general.startupBehavior },
-                                        set: { newValue in
-                                            ferrufiApp.configuration.updateConfiguration { config in
-                                                config.general.startupBehavior = newValue
-                                            }
-                                        }
-                                    )
-                                ) {
-                                    ForEach(StartupBehavior.allCases, id: \.self) { behavior in
-                                        Text(behavior.displayName).tag(behavior)
-                                    }
-                                }
-                                .pickerStyle(.menu)
-
-                                if ferrufiApp.configuration.general.startupBehavior == .specific {
-                                    Spacer()
-                                    HStack(spacing: 8) {
-                                        if let id = ferrufiApp.configuration.general.startupNoteId,
-                                            let note = ferrufiApp.notes.first(where: { $0.id == id }
-                                            )
-                                        {
-                                            Text(note.title)
-                                                .foregroundColor(.secondary)
-                                                .truncationMode(.tail)
-                                        } else {
-                                            Text("No note selected")
-                                                .foregroundColor(.secondary)
-                                        }
-
-                                        Button("Choose…") {
-                                            showingStartupNotePicker = true
-                                        }
-                                        .controlSize(.small)
-                                    }
-                                }
-                            }
-                        }
-                        .padding(8)
-                    }
-
-                    GroupBox(label: Label("Updates", systemImage: "arrow.triangle.2.circlepath")) {
-                        VStack(spacing: 10) {
-                            Toggle(
-                                "Check for updates automatically",
-                                isOn: Binding(
-                                    get: { ferrufiApp.configuration.general.autoUpdateEnabled },
-                                    set: { newValue in
-                                        ferrufiApp.configuration.updateConfiguration { config in
-                                            config.general.autoUpdateEnabled = newValue
-                                        }
-                                        if newValue {
-                                            UpdateManager.shared.startAutoCheck()
-                                        } else {
-                                            UpdateManager.shared.stopAutoCheck()
-                                        }
-                                    }
-                                )
-                            )
-                            .controlSize(.small)
-
-                            HStack {
-                                Spacer()
-                                Button("Check now") {
-                                    UpdateManager.shared.checkForUpdatesAndNotify()
-                                }
-                                .controlSize(.small)
-                            }
-                        }
-                        .padding(8)
-                    }
-
-                    GroupBox(label: Label("Workspace", systemImage: "folder")) {
-                        VStack(spacing: 12) {
-                            SettingsRow("Workspace Location:") {
-                                HStack(spacing: 8) {
-                                    Text(ferrufiApp.configuration.workspace.defaultWorkspacePath)
-                                        .foregroundColor(.secondary)
-                                        .truncationMode(.middle)
-                                    Button("Change") {
-                                        // TODO: Implement workspace location picker
-                                    }
-                                }
-                            }
-
-                            Toggle(
-                                "Watch for external changes",
-                                isOn: Binding(
-                                    get: { ferrufiApp.configuration.workspace.fileWatchingEnabled },
-                                    set: { newValue in
-                                        ferrufiApp.configuration.updateConfiguration { config in
-                                            config.workspace.fileWatchingEnabled = newValue
-                                        }
-                                    }
-                                )
-                            )
-                            .controlSize(.small)
-
-                            SettingsRow("Auto-save interval:") {
-                                HStack {
-                                    TextField(
-                                        "Seconds",
-                                        value: Binding(
-                                            get: {
-                                                ferrufiApp.configuration.workspace.autoSaveInterval
-                                            },
-                                            set: { newValue in
-                                                ferrufiApp.configuration.updateConfiguration {
-                                                    config in
-                                                    config.workspace.autoSaveInterval = newValue
-                                                }
-                                            }
-                                        ), format: .number
-                                    )
-                                    .textFieldStyle(.roundedBorder)
-                                    .frame(width: 80)
-                                    .controlSize(.small)
-                                    Text("seconds").foregroundColor(.secondary)
-                                }
-                            }
-                        }
-                        .padding(8)
-                    }
-
-                    // Backup settings removed.
-
-                    GroupBox(label: Label("Performance", systemImage: "speedometer")) {
-                        VStack(spacing: 12) {
-                            Toggle(
-                                "Enable Metal acceleration",
-                                isOn: Binding(
-                                    get: { ferrufiApp.configuration.ui.metalAccelerationEnabled },
-                                    set: { newValue in
-                                        ferrufiApp.configuration.updateConfiguration { config in
-                                            config.ui.metalAccelerationEnabled = newValue
-                                        }
-                                    }
-                                )
-                            )
-                            .controlSize(.small)
-                            .help("Use Metal graphics acceleration for better performance")
-
-                            Toggle(
-                                "Enable animations",
-                                isOn: Binding(
-                                    get: { ferrufiApp.configuration.ui.animationsEnabled },
-                                    set: { newValue in
-                                        ferrufiApp.configuration.updateConfiguration { config in
-                                            config.ui.animationsEnabled = newValue
-                                        }
-                                    }
-                                )
-                            )
-                            .controlSize(.small)
-                        }
-                        .padding(8)
-                    }
-                }
-                .padding()
-            }
-            .scrollIndicators(.visible)
-        }
-        .sheet(isPresented: $showingStartupNotePicker) {
-            NotePickerView(onNoteSelected: { note in
-                ferrufiApp.configuration.updateConfiguration { config in
-                    config.general.startupNoteId = note.id
-                }
-                showingStartupNotePicker = false
-            })
-            .environmentObject(ferrufiApp)
-            .environmentObject(themeManager)
-        }
-        .alert("Reset all settings?", isPresented: $showResetConfirm) {
-            Button("Reset", role: .destructive) {
-                // Perform the global reset when the user confirms
-                ferrufiApp.configuration.resetToDefaults()
-
-                // Apply auto-update preference immediately
-                if ferrufiApp.configuration.general.autoUpdateEnabled {
-                    UpdateManager.shared.startAutoCheck()
-                } else {
-                    UpdateManager.shared.stopAutoCheck()
-                }
-
-                // Apply launch-at-login state; handle errors gracefully
-                Task { @MainActor in
-                    do {
-                        try await LaunchAtLoginManager.shared.setEnabled(
-                            ferrufiApp.configuration.general.launchAtLogin)
-                    } catch {
-                        errorMessage = error.localizedDescription
-                        showErrorAlert = true
-                    }
-                }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("This will restore all preferences to their default values and cannot be undone.")
-        }
-        .alert(isPresented: $showErrorAlert) {
-            Alert(
-                title: Text("Error"), message: Text(errorMessage),
-                dismissButton: .default(Text("OK")))
-        }
-    }
-}
-
-// MARK: - Editor Settings
-
-struct EditorSettingsView: View {
-    @EnvironmentObject var ferrufiApp: FerrufiApp
-
-    var body: some View {
-        VStack {
-            Text(
-                "DEBUG: Editor settings view is visible. Line numbers: \(ferrufiApp.configuration.editor.showLineNumbers ? "On" : "Off")"
-            )
-            .font(.caption)
-            .padding(8)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.green.opacity(0.12))
-            .foregroundColor(.green)
-            .cornerRadius(6)
-
-            ScrollView(.vertical) {
-                Form {
-                    Section("Text Editing") {
-                        HStack(spacing: 12) {
-                            Text("Font size:")
-                                .frame(width: settingsLabelWidth, alignment: .leading)
-
-                            Slider(
-                                value: Binding(
-                                    get: { ferrufiApp.configuration.editor.fontSize },
-                                    set: { newValue in
-                                        ferrufiApp.configuration.updateConfiguration { config in
-                                            config.editor.fontSize = newValue
-                                        }
-                                    }
-                                ),
-                                in: 10...24,
-                                step: 1
-                            )
-                            .frame(width: 150)
-
-                            Text("\(Int(ferrufiApp.configuration.editor.fontSize))pt")
-                                .foregroundColor(.secondary)
-                                .frame(width: 40)
-                        }
-                        .padding(.vertical, settingsCompactPadding)
-
-                        HStack(spacing: 12) {
-                            Text("Font family:")
-                                .frame(width: settingsLabelWidth, alignment: .leading)
-
-                            Picker(
-                                "Font",
-                                selection: Binding(
-                                    get: { ferrufiApp.configuration.editor.fontFamily },
-                                    set: { newValue in
-                                        ferrufiApp.configuration.updateConfiguration { config in
-                                            config.editor.fontFamily = newValue
-                                        }
-                                    }
-                                )
-                            ) {
-                                Text("SF Mono").tag("SF Mono")
-                                Text("Menlo").tag("Menlo")
-                                Text("Monaco").tag("Monaco")
-                                Text("Courier New").tag("Courier New")
-                            }
-                            .pickerStyle(.menu)
-                            .frame(width: 140)
-                        }
-                        .padding(.vertical, settingsCompactPadding)
-
-                        HStack(spacing: 12) {
-                            Text("Line height:")
-                                .frame(width: settingsLabelWidth, alignment: .leading)
-
-                            Slider(
-                                value: Binding(
-                                    get: { ferrufiApp.configuration.editor.lineHeight },
-                                    set: { newValue in
-                                        ferrufiApp.configuration.updateConfiguration { config in
-                                            config.editor.lineHeight = newValue
-                                        }
-                                    }
-                                ),
-                                in: 1...2.5,
-                                step: 0.1
-                            )
-                            .frame(width: 150)
-
-                            Text(String(format: "%.1f", ferrufiApp.configuration.editor.lineHeight))
-                                .foregroundColor(.secondary)
-                                .frame(width: 40)
-                        }
-                        .padding(.vertical, settingsCompactPadding)
-                    }
-
-                    Section("Features") {
-                        Toggle(
-                            "Word wrap",
-                            isOn: Binding(
-                                get: { ferrufiApp.configuration.editor.wordWrap },
-                                set: { newValue in
-                                    ferrufiApp.configuration.updateConfiguration { config in
-                                        config.editor.wordWrap = newValue
-                                    }
-                                }
-                            )
-                        )
-
-                        Toggle(
-                            "Show line numbers",
-                            isOn: Binding(
-                                get: { ferrufiApp.configuration.editor.showLineNumbers },
-                                set: { newValue in
-                                    ferrufiApp.configuration.updateConfiguration { config in
-                                        config.editor.showLineNumbers = newValue
-                                    }
-                                }
-                            )
-                        )
-
-                        Toggle(
-                            "Syntax highlighting",
-                            isOn: Binding(
-                                get: { ferrufiApp.configuration.editor.syntaxHighlighting },
-                                set: { newValue in
-                                    ferrufiApp.configuration.updateConfiguration { config in
-                                        config.editor.syntaxHighlighting = newValue
-                                    }
-                                }
-                            )
-                        )
-
-                        Toggle(
-                            "Auto-complete",
-                            isOn: Binding(
-                                get: { ferrufiApp.configuration.editor.autoComplete },
-                                set: { newValue in
-                                    ferrufiApp.configuration.updateConfiguration { config in
-                                        config.editor.autoComplete = newValue
-                                    }
-                                }
-                            )
-                        )
-
-                        Toggle(
-                            "Live preview",
-                            isOn: Binding(
-                                get: { ferrufiApp.configuration.editor.livePreview },
-                                set: { newValue in
-                                    ferrufiApp.configuration.updateConfiguration { config in
-                                        config.editor.livePreview = newValue
-                                    }
-                                }
-                            )
-                        )
-
-                        Toggle(
-                            "Spell check",
-                            isOn: Binding(
-                                get: { ferrufiApp.configuration.editor.spellCheck },
-                                set: { newValue in
-                                    ferrufiApp.configuration.updateConfiguration { config in
-                                        config.editor.spellCheck = newValue
-                                    }
-                                }
-                            )
-                        )
-                    }
-                }
-                .padding(settingsCompactPadding)
-            }
-            .scrollIndicators(.visible)
-        }
-    }
-}
-
-// MARK: - Search Settings
-
-struct SearchSettingsView: View {
-    @EnvironmentObject var ferrufiApp: FerrufiApp
-
-    var body: some View {
-        ScrollView(.vertical) {
-            Form {
-                Section("Search Behavior") {
-                    Toggle(
-                        "Enable search indexing",
-                        isOn: Binding(
-                            get: { ferrufiApp.configuration.search.indexingEnabled },
-                            set: { newValue in
-                                ferrufiApp.configuration.updateConfiguration { config in
-                                    config.search.indexingEnabled = newValue
-                                }
-                            }
-                        )
-                    )
-                    .help("Enables fast search across all notes")
-
-                    HStack {
-                        Text("Fuzzy search threshold:")
-                            .frame(width: 160, alignment: .leading)
-                        Spacer()
-                        Slider(
-                            value: Binding(
-                                get: { ferrufiApp.configuration.search.fuzzySearchThreshold },
-                                set: { newValue in
-                                    ferrufiApp.configuration.updateConfiguration { config in
-                                        config.search.fuzzySearchThreshold = newValue
-                                    }
-                                }
-                            ),
-                            in: 0.1...1.0,
-                            step: 0.1
-                        )
-                        .frame(width: 150)
-                        Text(
-                            String(
-                                format: "%.1f", ferrufiApp.configuration.search.fuzzySearchThreshold
-                            )
-                        )
-                        .frame(width: 40)
-                        .foregroundColor(.secondary)
-                    }
-                    .help("Lower values allow more fuzzy matching")
-
-                    HStack {
-                        Text("Max search results:")
-                            .frame(width: 160, alignment: .leading)
-                        Spacer()
-                        TextField(
-                            "Results",
-                            value: Binding(
-                                get: { ferrufiApp.configuration.search.maxSearchResults },
-                                set: { newValue in
-                                    ferrufiApp.configuration.updateConfiguration { config in
-                                        config.search.maxSearchResults = newValue
-                                    }
-                                }
-                            ), format: .number
-                        )
-                        .textFieldStyle(.roundedBorder)
-                        .frame(width: 80)
-                    }
-                }
-
-                Section("Search Scope") {
-                    Toggle(
-                        "Search in content",
-                        isOn: Binding(
-                            get: { ferrufiApp.configuration.search.searchInContent },
-                            set: { newValue in
-                                ferrufiApp.configuration.updateConfiguration { config in
-                                    config.search.searchInContent = newValue
-                                }
-                            }
-                        ))
-
-                    Toggle(
-                        "Search in titles",
-                        isOn: Binding(
-                            get: { ferrufiApp.configuration.search.searchInTitles },
-                            set: { newValue in
-                                ferrufiApp.configuration.updateConfiguration { config in
-                                    config.search.searchInTitles = newValue
-                                }
-                            }
-                        ))
-
-                    Toggle(
-                        "Search in tags",
-                        isOn: Binding(
-                            get: { ferrufiApp.configuration.search.searchInTags },
-                            set: { newValue in
-                                ferrufiApp.configuration.updateConfiguration { config in
-                                    config.search.searchInTags = newValue
-                                }
-                            }
-                        ))
-                }
-
-                Section("Advanced") {
-                    Toggle(
-                        "Case sensitive",
-                        isOn: Binding(
-                            get: { ferrufiApp.configuration.search.caseSensitive },
-                            set: { newValue in
-                                ferrufiApp.configuration.updateConfiguration { config in
-                                    config.search.caseSensitive = newValue
-                                }
-                            }
-                        ))
-
-                    Toggle(
-                        "Whole words only",
-                        isOn: Binding(
-                            get: { ferrufiApp.configuration.search.wholeWordOnly },
-                            set: { newValue in
-                                ferrufiApp.configuration.updateConfiguration { config in
-                                    config.search.wholeWordOnly = newValue
-                                }
-                            }
-                        ))
-
-                    Button("Rebuild Search Index") {
-                        Task {
-                            try await ferrufiApp.rebuildSearchIndex()
-                        }
-                    }
-                    .help("Recreates the search index from scratch")
-                }
-
-            }
-            .padding(settingsCompactPadding)
-        }
-        .scrollIndicators(.visible)
-    }
-}
-
-// Appearance settings removed from the Preferences window per product direction.
-// Theme and appearance are adjustable via the theme selector elsewhere in the UI.
-
-// MARK: - Graph Settings
-
-// Graph settings removed - feature deprecated. If graph functionality is reintroduced in the future, add a dedicated settings UI back with a focused, minimal configuration set.
-
-// MARK: - About Settings
-
-struct AboutSettingsView: View {
-    var body: some View {
-        ScrollView(.vertical) {
-            VStack(spacing: 12) {
-                Image(systemName: "brain")
-                    .font(.system(size: 56))
-                    .foregroundColor(.accentColor)
-
-                Text("Ferrufi")
-                    .font(.title)
-                    .fontWeight(.bold)
-
-                Text("Knowledge Management System")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-
-                Text("Version 1.0.0")
-                    .font(.body)
-                    .foregroundColor(.secondary)
-
-                Divider()
-
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Built with:")
-                        .font(.headline)
-
-                    Text("• SwiftUI for native macOS experience")
-                    Text("• Metal for hardware-accelerated graphics")
-                    Text("• Swift 6.2 with modern concurrency")
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-                Spacer(minLength: 12)
-
-                HStack(spacing: 12) {
-                    Button("GitHub") {
-                        // TODO: Open GitHub repository
-                    }
-
-                    Button("Documentation") {
-                        // TODO: Open documentation
-                    }
-                }
-            }
-            .padding(settingsCompactPadding)
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .scrollIndicators(.visible)
-    }
-}
-
-// MARK: - Supporting Types
-
-enum SettingsTab: String, CaseIterable {
+public enum SettingsTab: String, CaseIterable {
     case general = "general"
     case editor = "editor"
     case search = "search"
@@ -949,9 +17,528 @@ enum SettingsTab: String, CaseIterable {
     case about = "about"
 }
 
-struct SettingsView_Samples: PreviewProvider {
-    public static var previews: some View {
+public struct SettingsView: View {
+    @EnvironmentObject var ferrufiApp: FerrufiApp
+    @StateObject private var settings = Settings.shared
+    @EnvironmentObject var themeManager: ThemeManager
+    @State private var selectedTab: SettingsTab = .general
+
+    public init() {}
+
+    public init(initialTab: SettingsTab? = nil) {
+        self._selectedTab = State(initialValue: initialTab ?? .general)
+    }
+
+    public var body: some View {
+        HStack(spacing: 0) {
+            // Sidebar Navigation
+            settingsSidebar
+            
+            Divider()
+                .frame(width: 1)
+                .background(themeManager.currentTheme.colors.border.opacity(0.5))
+
+            // Content Area
+            VStack(alignment: .leading, spacing: 0) {
+                // Header
+                HStack {
+                    Text(selectedTab.displayName)
+                        .font(.system(size: 24, weight: .bold, design: .rounded))
+                        .foregroundColor(themeManager.currentTheme.colors.foreground)
+                    
+                    Spacer()
+                    
+                    Button(action: { settings.resetToDefaults() }) {
+                        Label("Reset Defaults", systemImage: "arrow.counterclockwise")
+                            .font(.system(size: 11, weight: .medium))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundColor(themeManager.currentTheme.colors.foregroundSecondary)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(themeManager.currentTheme.colors.backgroundSecondary)
+                    .cornerRadius(6)
+                }
+                .padding(.horizontal, 32)
+                .padding(.top, 32)
+                .padding(.bottom, 20)
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 24) {
+                        switch selectedTab {
+                        case .general:
+                            GeneralSettingsContent()
+                        case .editor:
+                            EditorSettingsContent()
+                        case .search:
+                            SearchSettingsContent()
+                        case .shortcuts:
+                            ShortcutsSettingsView()
+                                .environmentObject(ferrufiApp)
+                        case .about:
+                            AboutSettingsContent()
+                        }
+                    }
+                    .padding(.horizontal, 32)
+                    .padding(.bottom, 40)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(themeManager.currentTheme.colors.background)
+        }
+        .frame(minWidth: 850, minHeight: 600)
+        .preferredColorScheme(themeManager.currentTheme.isDark ? .dark : .light)
+        .environmentObject(settings)
+    }
+
+    private var settingsSidebar: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("SETTINGS")
+                .font(.system(size: 10, weight: .bold))
+                .foregroundColor(themeManager.currentTheme.colors.foregroundTertiary)
+                .padding(.horizontal, 16)
+                .padding(.top, 32)
+                .padding(.bottom, 12)
+
+            ForEach(SettingsTab.allCases, id: \.self) { tab in
+                SidebarItem(
+                    title: tab.displayName,
+                    icon: tab.iconName,
+                    isSelected: selectedTab == tab,
+                    action: { selectedTab = tab }
+                )
+            }
+            
+            Spacer()
+            
+            // Footer Info
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Ferrufi v\(Version.current)")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(themeManager.currentTheme.colors.foregroundTertiary)
+                Text("Mufi IDE Engine 1.0")
+                    .font(.system(size: 9))
+                    .foregroundColor(themeManager.currentTheme.colors.foregroundTertiary.opacity(0.7))
+            }
+            .padding(20)
+        }
+        .frame(width: 200)
+        .background(themeManager.currentTheme.colors.backgroundSecondary.opacity(0.5))
+    }
+}
+
+// MARK: - Sidebar Item
+
+struct SidebarItem: View {
+    let title: String
+    let icon: String
+    let isSelected: Bool
+    let action: () -> Void
+    @EnvironmentObject var themeManager: ThemeManager
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Image(systemName: icon)
+                    .font(.system(size: 14, weight: .medium))
+                    .frame(width: 20)
+                
+                Text(title)
+                    .font(.system(size: 13, weight: isSelected ? .semibold : .medium))
+                
+                Spacer()
+                
+                if isSelected {
+                    Circle()
+                        .fill(themeManager.currentTheme.colors.accent)
+                        .frame(width: 6, height: 6)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(isSelected ? themeManager.currentTheme.colors.accent.opacity(0.1) : Color.clear)
+                    .padding(.horizontal, 8)
+            )
+            .foregroundColor(isSelected ? themeManager.currentTheme.colors.accent : themeManager.currentTheme.colors.foregroundSecondary)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Pretty Section Components
+
+struct SettingsSection<Content: View>: View {
+    let title: String?
+    let content: Content
+    @EnvironmentObject var themeManager: ThemeManager
+
+    init(title: String? = nil, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if let title = title {
+                Text(title)
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(themeManager.currentTheme.colors.foreground)
+                    .padding(.leading, 4)
+            }
+            
+            VStack(spacing: 0) {
+                content
+            }
+            .background(themeManager.currentTheme.colors.backgroundSecondary.opacity(0.3))
+            .cornerRadius(12)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(themeManager.currentTheme.colors.border.opacity(0.5), lineWidth: 1)
+            )
+        }
+    }
+}
+
+struct SettingsToggleRow: View {
+    let title: String
+    let subtitle: String?
+    @Binding var isOn: Bool
+    @EnvironmentObject var themeManager: ThemeManager
+
+    init(_ title: String, subtitle: String? = nil, isOn: Binding<Bool>) {
+        self.title = title
+        self.subtitle = subtitle
+        self._isOn = isOn
+    }
+
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(themeManager.currentTheme.colors.foreground)
+                if let subtitle = subtitle {
+                    Text(subtitle)
+                        .font(.system(size: 11))
+                        .foregroundColor(themeManager.currentTheme.colors.foregroundTertiary)
+                }
+            }
+            Spacer()
+            Toggle("", isOn: $isOn)
+                .toggleStyle(.switch)
+                .controlSize(.small)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+    }
+}
+
+struct SettingsSliderRow: View {
+    let title: String
+    @Binding var value: Double
+    let range: ClosedRange<Double>
+    let step: Double
+    let unit: String
+    @EnvironmentObject var themeManager: ThemeManager
+
+    var body: some View {
+        HStack {
+            Text(title)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(themeManager.currentTheme.colors.foreground)
+                .frame(width: 120, alignment: .leading)
+            
+            Slider(value: $value, in: range, step: step)
+                .controlSize(.small)
+            
+            Text("\(Int(value))\(unit)")
+                .font(.system(size: 12, design: .monospaced))
+                .foregroundColor(themeManager.currentTheme.colors.accent)
+                .frame(width: 45, alignment: .trailing)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+    }
+}
+
+struct SettingsPickerRow<T: Hashable & CustomStringConvertible>: View {
+    let title: String
+    @Binding var selection: T
+    let options: [T]
+    @EnvironmentObject var themeManager: ThemeManager
+
+    var body: some View {
+        HStack {
+            Text(title)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(themeManager.currentTheme.colors.foreground)
+            Spacer()
+            Picker("", selection: $selection) {
+                ForEach(options, id: \.self) { option in
+                    Text(option.description).tag(option)
+                }
+            }
+            .pickerStyle(.menu)
+            .frame(width: 180)
+            .controlSize(.small)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+    }
+}
+
+// MARK: - Content Views
+
+struct GeneralSettingsContent: View {
+    @EnvironmentObject var settings: Settings
+    @EnvironmentObject var ferrufiApp: FerrufiApp
+    @EnvironmentObject var themeManager: ThemeManager
+
+    var body: some View {
+        VStack(spacing: 24) {
+            SettingsSection(title: "Application") {
+                SettingsToggleRow("Launch at Login", subtitle: "Automatically start Ferrufi when you log in", isOn: Binding(
+                    get: { settings.launchAtLogin },
+                    set: { settings.launchAtLogin = $0 }
+                ))
+                Divider().padding(.leading, 16)
+                SettingsToggleRow("Confirm Before Quit", subtitle: "Ask for confirmation before closing the app", isOn: Binding(
+                    get: { settings.confirmBeforeQuit },
+                    set: { settings.confirmBeforeQuit = $0 }
+                ))
+                Divider().padding(.leading, 16)
+                SettingsToggleRow("Automatic Updates", subtitle: "Keep Ferrufi up to date with new features", isOn: Binding(
+                    get: { settings.autoUpdateEnabled },
+                    set: { settings.autoUpdateEnabled = $0 }
+                ))
+            }
+
+            SettingsSection(title: "Workspace") {
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Workspace Location")
+                            .font(.system(size: 13, weight: .medium))
+                        Text(ferrufiApp.configuration.workspace.defaultWorkspacePath)
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundColor(themeManager.currentTheme.colors.foregroundTertiary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                    Spacer()
+                    Button("Change...") {
+                        openWorkspacePicker()
+                    }
+                    .controlSize(.small)
+                }
+                .padding(16)
+                
+                Divider().padding(.leading, 16)
+                
+                SettingsSliderRow(title: "Auto-save", value: Binding(
+                    get: { Double(settings.config.workspace.autoSaveInterval) },
+                    set: { val in settings.update { $0.workspace.autoSaveInterval = val } }
+                ), range: 5...300, step: 5, unit: "s")
+            }
+            
+            SettingsSection(title: "Appearance") {
+                SettingsPickerRow(title: "Color Theme", selection: Binding(
+                    get: { settings.currentTheme },
+                    set: { settings.currentTheme = $0 }
+                ), options: Theme.allCases)
+                
+                Divider().padding(.leading, 16)
+                
+                SettingsToggleRow("Enable Animations", isOn: Binding(
+                    get: { settings.animationsEnabled },
+                    set: { settings.animationsEnabled = $0 }
+                ))
+            }
+        }
+    }
+
+    private func openWorkspacePicker() {
+        let homeURL = FileManager.default.homeDirectoryForCurrentUser
+        let rawWorkspacePath = ferrufiApp.currentWorkspacePath ?? ferrufiApp.configuration.workspace.defaultWorkspacePath
+        let defaultDir = URL(fileURLWithPath: (rawWorkspacePath as NSString).expandingTildeInPath)
+
+        SecurityScopedBookmarkManager.shared.requestFolderAccess(
+            message: "Select a folder to contain your Ferrufi workspace",
+            defaultDirectory: defaultDir,
+            showHidden: true
+        ) { selectedURL in
+            guard let parentURL = selectedURL else { return }
+            Task {
+                do {
+                    // If the user picked Home, create ~/.ferrufi inside it
+                    let ferrufiDir: URL
+                    if parentURL.path == homeURL.path {
+                        ferrufiDir = parentURL.appendingPathComponent(".ferrufi")
+                    } else {
+                        ferrufiDir = parentURL
+                    }
+
+                    try FileManager.default.createDirectory(at: ferrufiDir, withIntermediateDirectories: true, attributes: nil)
+                    try await ferrufiApp.initialize(workspacePath: ferrufiDir.path)
+
+                    await MainActor.run {
+                        // Persist trust
+                        let canonicalParent = URL(fileURLWithPath: (parentURL.path as NSString).expandingTildeInPath).standardizedFileURL.path
+                        ferrufiApp.configuration.updateConfiguration { config in
+                            var arr = config.trustedWorkspacePaths ?? []
+                            if !arr.contains(canonicalParent) {
+                                arr.append(canonicalParent)
+                                config.trustedWorkspacePaths = arr
+                            }
+                        }
+
+                        // Refresh explorer
+                        FerrufiApp.sharedNavigationModel?.selectFolder(ferrufiApp.folderManager.rootFolder, ferrufiApp: ferrufiApp)
+                    }
+                } catch {
+                    print("Failed to change workspace: \(error)")
+                }
+            }
+        }
+    }
+}
+
+struct EditorSettingsContent: View {
+    @EnvironmentObject var settings: Settings
+    @EnvironmentObject var themeManager: ThemeManager
+
+    var body: some View {
+        VStack(spacing: 24) {
+            SettingsSection(title: "Typography") {
+                SettingsSliderRow(title: "Font Size", value: $settings.fontSize, range: 10...32, step: 1, unit: "pt")
+                Divider().padding(.leading, 16)
+                SettingsPickerRow(title: "Font Family", selection: $settings.fontFamily, options: ["SF Mono", "Menlo", "Monaco", "Courier"])
+            }
+
+            SettingsSection(title: "Interface") {
+                SettingsToggleRow("Show Line Numbers", isOn: $settings.showLineNumbers)
+                Divider().padding(.leading, 16)
+                SettingsToggleRow("Word Wrap", isOn: $settings.wordWrap)
+            }
+            
+            SettingsSection(title: "Mufi Scripting") {
+                SettingsToggleRow("Syntax Highlighting", isOn: Binding(
+                    get: { settings.config.editor.syntaxHighlighting },
+                    set: { val in settings.update { $0.editor.syntaxHighlighting = val } }
+                ))
+                Divider().padding(.leading, 16)
+                SettingsToggleRow("Auto-complete", isOn: Binding(
+                    get: { settings.config.editor.autoComplete },
+                    set: { val in settings.update { $0.editor.autoComplete = val } }
+                ))
+            }
+        }
+    }
+}
+
+struct SearchSettingsContent: View {
+    @EnvironmentObject var settings: Settings
+
+    var body: some View {
+        VStack(spacing: 24) {
+            SettingsSection(title: "Search Engine") {
+                SettingsToggleRow("Indexing Enabled", subtitle: "Faster search across all notes", isOn: Binding(
+                    get: { settings.config.search.indexingEnabled },
+                    set: { val in settings.update { $0.search.indexingEnabled = val } }
+                ))
+            }
+            
+            SettingsSection(title: "Scope") {
+                SettingsToggleRow("Search in Content", isOn: Binding(
+                    get: { settings.config.search.searchInContent },
+                    set: { val in settings.update { $0.search.searchInContent = val } }
+                ))
+                Divider().padding(.leading, 16)
+                SettingsToggleRow("Search in Titles", isOn: Binding(
+                    get: { settings.config.search.searchInTitles },
+                    set: { val in settings.update { $0.search.searchInTitles = val } }
+                ))
+            }
+        }
+    }
+}
+
+struct AboutSettingsContent: View {
+    @EnvironmentObject var themeManager: ThemeManager
+
+    var body: some View {
+        VStack(spacing: 32) {
+            VStack(spacing: 16) {
+                ZStack {
+                    Circle()
+                        .fill(themeManager.currentTheme.colors.accent.opacity(0.1))
+                        .frame(width: 100, height: 100)
+                    
+                    Image(systemName: "chevron.left.forwardslash.chevron.right")
+                        .font(.system(size: 40, weight: .bold, design: .rounded))
+                        .foregroundColor(themeManager.currentTheme.colors.accent)
+                }
+                
+                VStack(spacing: 4) {
+                    Text("Ferrufi")
+                        .font(.system(size: 32, weight: .bold, design: .rounded))
+                    Text("Native Mufi-Lang IDE")
+                        .font(.system(size: 14))
+                        .foregroundColor(themeManager.currentTheme.colors.foregroundSecondary)
+                }
+            }
+            
+            SettingsSection {
+                HStack {
+                    Text("Version")
+                    Spacer()
+                    Text(Version.current)
+                        .foregroundColor(.secondary)
+                }
+                .padding(16)
+                
+                Divider().padding(.leading, 16)
+                
+                HStack {
+                    Text("Build Number")
+                    Spacer()
+                    Text("2026.01.31")
+                        .foregroundColor(.secondary)
+                }
+                .padding(16)
+            }
+            
+            Text("© 2026 Mufi-Lang Team. All rights reserved.")
+                .font(.system(size: 11))
+                .foregroundColor(themeManager.currentTheme.colors.foregroundTertiary)
+        }
+        .padding(.top, 20)
+    }
+}
+
+// MARK: - Tab Extension
+
+extension SettingsTab {
+    var displayName: String {
+        self.rawValue.capitalized
+    }
+    
+    var iconName: String {
+        switch self {
+        case .general: return "gearshape"
+        case .editor: return "pencil.and.outline"
+        case .search: return "magnifyingglass"
+        case .shortcuts: return "keyboard"
+        case .about: return "info.circle"
+        }
+    }
+}
+
+struct SettingsView_Previews: PreviewProvider {
+    static var previews: some View {
         SettingsView()
             .environmentObject(FerrufiApp())
+            .environmentObject(ThemeManager())
     }
 }

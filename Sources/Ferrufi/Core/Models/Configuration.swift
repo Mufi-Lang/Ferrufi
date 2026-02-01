@@ -438,10 +438,12 @@ public struct ShortcutsConfiguration: Codable, Sendable {
 
 // MARK: - Enums
 
-public enum Theme: String, Codable, CaseIterable, Sendable {
+public enum Theme: String, Codable, CaseIterable, Sendable, CustomStringConvertible {
     case light = "light"
     case dark = "dark"
     case system = "system"
+
+    public var description: String { displayName }
 
     public var displayName: String {
         switch self {

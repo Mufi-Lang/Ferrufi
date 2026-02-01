@@ -9,7 +9,12 @@
 import Foundation
 
 /// Application version information
-public struct AppVersion {
+public struct Version {
+    /// Full version string (e.g., "1.0.0")
+    public static var current: String {
+        return "\(major).\(minor).\(patch)"
+    }
+
     /// Major version number
     public static let major = 0
 
@@ -53,7 +58,7 @@ public struct AppVersion {
 
 // MARK: - Version Comparison
 
-extension AppVersion {
+extension Version {
     /// Compare with another version string
     /// - Parameter versionString: Version string to compare (e.g., "1.0.0")
     /// - Returns: true if current version is greater than or equal to the provided version
@@ -73,7 +78,7 @@ extension AppVersion {
 
 // MARK: - Build Information
 
-extension AppVersion {
+extension Version {
     /// Git commit SHA (set by build system)
     public static var gitCommitSHA: String? {
         // This can be set during build time using build settings

@@ -53,7 +53,7 @@ public final class SettingsWindow {
         win.title = "Settings"
         win.identifier = NSUserInterfaceItemIdentifier("Ferrufi.settingsWindow")
         win.styleMask = [.titled, .closable, .miniaturizable, .resizable]
-        win.setContentSize(NSSize(width: 720, height: 520))
+        win.setContentSize(NSSize(width: 850, height: 600))
 
         // Persist the window frame between launches and restore it automatically.
         // Only center the window on first open (when no saved frame exists).
@@ -72,7 +72,7 @@ public final class SettingsWindow {
         self.windowDelegate = delegate
 
         // Present window
-        win.makeKeyAndOrderFront(nil)
+        win.makeKeyAndOrderFront(self)
         NSApp.activate(ignoringOtherApps: true)
     }
 
