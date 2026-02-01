@@ -17,7 +17,6 @@ struct NativeSplitEditor: View {
 
     @State private var isEditing = false
 
-    @State private var isREPLVisible = false
     @State private var splitRatio: CGFloat = 0.5
     @State private var isDraggingSplitter = false
     @State private var showingNotePicker = false
@@ -61,17 +60,6 @@ struct NativeSplitEditor: View {
                 )
                 .environmentObject(themeManager)
                 .frame(maxWidth: .infinity)
-
-                if isREPLVisible {
-                    // Splitter for REPL
-                    Rectangle()
-                        .fill(themeManager.currentTheme.colors.accent.opacity(0.3))
-                        .frame(width: 2)
-
-                    // Right: Embedded Mufi REPL
-                    EmbeddedMufiREPLView()
-                        .frame(maxWidth: .infinity)
-                }
             }
 
             // Terminal output (if enabled)
@@ -104,9 +92,6 @@ struct NativeSplitEditor: View {
             })
             .environmentObject(ferrufiApp)
             .environmentObject(themeManager)
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .toggleMufiREPL)) { _ in
-            isREPLVisible.toggle()
         }
         .onReceive(NotificationCenter.default.publisher(for: .runMufiScript)) { _ in
             runMufiScript()
@@ -142,14 +127,6 @@ struct NativeSplitEditor: View {
             .buttonStyle(.plain)
             .help("Run Mufi Script (⌘R)")
             .disabled(isRunningScript)
-
-            // REPL toggle
-            Button(action: { isREPLVisible.toggle() }) {
-                Image(systemName: isREPLVisible ? "terminal.fill" : "terminal")
-                    .font(.system(size: 12))
-            }
-            .buttonStyle(.plain)
-            .help(isREPLVisible ? "Hide Mufi REPL" : "Show Mufi REPL")
 
             Divider()
                 .frame(height: 16)
