@@ -43,52 +43,48 @@ public final class MufiHighlighter {
     }
     
     /// Apply syntax highlighting to the provided text storage
-    public func highlight(in storage: NSTextStorage) {
-        let range = NSRange(location: 0, length: storage.length)
-        guard range.length > 0 else { return }
+    public func highlight(in storage: NSTextStorage, range: NSRange? = nil) {
+        let highlightRange = range ?? NSRange(location: 0, length: storage.length)
+        guard highlightRange.length > 0 else { return }
         
-        // 1. Reset all attributes to theme default
-        storage.addAttribute(.foregroundColor, value: NSColor(theme.colors.foreground), range: range)
-        
-        // 2. Clear previous token-specific attributes (except the base font/color)
-        // Note: we assume base font is already set by the editor
+        // 1. Reset all attributes to theme default in the target range
+        storage.removeAttribute(.foregroundColor, range: highlightRange)
+        storage.addAttribute(.foregroundColor, value: NSColor(theme.colors.foreground), range: highlightRange)
         
         let text = storage.string
         
-        // 3. Apply highlighting patterns in order
-        // Order matters: strings and comments should usually be processed last or carefully to avoid overlap issues,
-        // but here we apply specific colors over the default.
+        // 3. Apply highlighting patterns
+        // Keywords
+        apply(pattern: #"\b(var|let|fn|func|if|else|while|for|return|break|continue|in|import|import_dynamic|extern|as|is|nil|true|false|class|new|print|self|super|type|interface|impl|match|case|pub|priv|mut)\b"#, 
+              type: .keyword, in: storage, text: text, range: highlightRange)
         
-                // Keywords
-                apply(pattern: #"\b(var|let|fn|func|if|else|while|for|return|break|continue|in|import|import_dynamic|extern|as|is|nil|true|false|class|new|print|self|super|type|interface|impl|match|case|pub|priv|mut)\b"#, 
-                      type: .keyword, in: storage, text: text)
-                
-                // Built-in Types
-                apply(pattern: #"\b(Int|Float|String|Bool|Array|Dict|Map|Any|Void|Vector|Matrix|Complex)\b"#, 
-                      type: .type, in: storage, text: text)
-                // Numbers
+        // Built-in Types
+        apply(pattern: #"\b(Int|Float|String|Bool|Array|Dict|Map|Any|Void|Vector|Matrix|Complex)\b"#, 
+              type: .type, in: storage, text: text, range: highlightRange)
+        
+        // Numbers
         apply(pattern: #"\b([0-9]+(\.[0-9]+)?)\b"#,
-              type: .number, in: storage, text: text)
+              type: .number, in: storage, text: text, range: highlightRange)
         
         // Constants (UPPER_CASE)
         apply(pattern: #"\b([A-Z_][A-Z0-9_]*)\b"#,
-              type: .constant, in: storage, text: text)
+              type: .constant, in: storage, text: text, range: highlightRange)
         
         // Function calls
         apply(pattern: #"([a-zA-Z_][a-zA-Z0-9_]*)\s*(?=\()"#,
-              type: .function, in: storage, text: text)
+              type: .function, in: storage, text: text, range: highlightRange)
         
         // Strings (double quotes)
         apply(pattern: #""[^"\\]*(\\.[^"\\]*)*""#,
-              type: .string, in: storage, text: text)
+              type: .string, in: storage, text: text, range: highlightRange)
         
         // Comments (single line)
         apply(pattern: #"//.*$"#,
-              type: .comment, in: storage, text: text)
+              type: .comment, in: storage, text: text, range: highlightRange)
         
-        // Comments (block) - simple implementation
+        // Comments (block)
         apply(pattern: #"/\*[^*]*\*+(?:[^/*][^*]*\*+)*/"#,
-              type: .comment, in: storage, text: text)
+              type: .comment, in: storage, text: text, range: highlightRange)
     }
     
     // MARK: - Private Helpers
@@ -132,11 +128,11 @@ public final class MufiHighlighter {
         ]
     }
     
-    private func apply(pattern: String, type: TokenType, in storage: NSTextStorage, text: String) {
+    private func apply(pattern: String, type: TokenType, in storage: NSTextStorage, text: String, range: NSRange) {
         guard let regex = try? NSRegularExpression(pattern: pattern, options: [.anchorsMatchLines]) else { return }
         guard let attrs = attributes[type] else { return }
         
-        let matches = regex.matches(in: text, options: [], range: NSRange(location: 0, length: text.utf16.count))
+        let matches = regex.matches(in: text, options: [], range: range)
         for match in matches {
             storage.addAttributes(attrs, range: match.range)
         }

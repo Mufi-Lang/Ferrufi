@@ -480,8 +480,10 @@ private class UnifiedTextView: NSTextView {
     private var mode: EditorFileType = .mufi
     // When false, skip incremental highlighting (useful for performance-sensitive cases)
     var highlightingEnabled: Bool = true
+    private var highlighter: MufiHighlighter? // Placeholder for future use
     private var mufiHighlighter: MufiHighlighter?
     private var markdownHighlighter: MarkdownHighlighter?
+    private var shouldHighlightWhole: Bool = true
 
     override func awakeFromNib() {
         super.awakeFromNib()
@@ -584,7 +586,35 @@ private class UnifiedTextView: NSTextView {
     override func didChangeText() {
         super.didChangeText()
         if highlightingEnabled {
+            if shouldHighlightWhole {
+                applyHighlightingWhole()
+                shouldHighlightWhole = false
+            } else {
+                applyHighlightingIncremental()
+            }
+        }
+    }
+    
+    private func applyHighlightingIncremental() {
+        guard let ts = textStorage, highlightingEnabled else { return }
+        
+        // Get the edited range
+        let editedRange = self.rangeForUserTextChange
+        if editedRange.location == NSNotFound {
             applyHighlightingWhole()
+            return
+        }
+        
+        // Expand range to include full lines for context
+        let nsString = ts.string as NSString
+        let lineRange = nsString.lineRange(for: editedRange)
+        
+        // Dispatch to appropriate highlighter with specific range
+        switch mode {
+        case .mufi:
+            mufiHighlighter?.highlight(in: ts, range: lineRange)
+        case .markdown:
+            markdownHighlighter?.highlight(in: ts, range: lineRange)
         }
     }
 
