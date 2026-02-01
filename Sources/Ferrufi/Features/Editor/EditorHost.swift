@@ -18,7 +18,12 @@ import Combine
 import Foundation
 import SwiftUI
 
-/// Editor view modes removed; editor surfaces are editor-only.
+/// Editor view modes for the unified container.
+public enum EditorViewMode: String, CaseIterable, Codable, Sendable {
+    case editorOnly = "Editor"
+    case previewOnly = "Preview"
+    case split = "Split"
+}
 
 /// Common editor formatting/structuring commands that toolbars or shortcuts will issue.
 ///
@@ -97,8 +102,11 @@ public protocol EditorDocument: AnyObject {
 
     // MARK: View mode & layout
 
-    /// Note: split view modes have been removed; the editor surface is editor-only.
-    /// Implementations may expose layout preferences via other APIs if needed.
+    /// The current view mode (Editor, Preview, or Split).
+    var viewMode: EditorViewMode { get set }
+
+    /// Publisher fired when the view mode changes.
+    var viewModeDidChangePublisher: AnyPublisher<EditorViewMode, Never> { get }
 
     // MARK: Selection & editing helpers
 
@@ -169,5 +177,9 @@ extension EditorHost {
 
     public var selectionDidChangePublisher: AnyPublisher<NSRange?, Never> {
         return Just(nil).eraseToAnyPublisher()
+    }
+
+    public var viewModeDidChangePublisher: AnyPublisher<EditorViewMode, Never> {
+        return Just(.editorOnly).eraseToAnyPublisher()
     }
 }

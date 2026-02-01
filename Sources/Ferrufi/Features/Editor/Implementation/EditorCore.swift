@@ -27,6 +27,15 @@ public final class EditorCore: ObservableObject, EditorHost {
     @Published public var document: EditorDocument?
     @Published public var content: String = ""
     @Published public var isEditing: Bool = false
+    
+    public var viewMode: EditorViewMode {
+        get { .editorOnly }
+        set { /* EditorCore is always editor-only */ }
+    }
+    
+    public var viewModeDidChangePublisher: AnyPublisher<EditorViewMode, Never> {
+        Just(.editorOnly).eraseToAnyPublisher()
+    }
 
     // Editor host properties
     // Preview/split mode removed; editor surfaces are editor-only.

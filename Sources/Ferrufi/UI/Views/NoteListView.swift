@@ -542,12 +542,16 @@ struct NoteListView_Samples: PreviewProvider {
             SidebarView()
                 .environmentObject(FerrufiApp())
                 .environmentObject(NavigationModel())
+                .environmentObject(ThemeManager.shared)
         } content: {
             NoteListView()
                 .environmentObject(FerrufiApp())
                 .environmentObject(NavigationModel())
         } detail: {
-            Text("Detail")
+            EditorContainer(document: NoteWrapper(note: Note.sample, ferrufiApp: FerrufiApp()))
+                .environmentObject(FerrufiApp())
+                .environmentObject(ThemeManager.shared)
+                .environmentObject(Settings.shared)
         }
     }
 }

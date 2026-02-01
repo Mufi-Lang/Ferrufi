@@ -232,27 +232,15 @@ struct DetailView: View {
     // MARK: - Main Content
 
     private var nativeSplitEditingView: some View {
-        // Clean native split editor without extra headers or toolbars
-        let isMarkdown = navigationModel.selectedNote?.filePath.hasSuffix(".md") ?? false
-        
-        return HStack(spacing: 0) {
-            NativeSplitEditor(
-                note: navigationModel.selectedNote,
-                text: $editingText,
-                placeholder: "Start writing your note...",
-                onTextChange: { newText in
-                    scheduleAutoSave()
-                }
-            )
-            .environmentObject(ferrufiApp)
-            .environmentObject(themeManager)
-            .frame(maxWidth: .infinity)
-            
-            if isMarkdown && showPreview {
-                Divider()
-                WebView(htmlContent: MarkdownParser.shared.parse(editingText, theme: themeManager.currentTheme.colors))
-                    .frame(maxWidth: .infinity)
-                    .background(themeManager.currentTheme.colors.background)
+        Group {
+            if let note = navigationModel.selectedNote {
+                let wrapper = NoteWrapper(note: note, ferrufiApp: ferrufiApp)
+                EditorContainer(document: wrapper)
+                    .environmentObject(ferrufiApp)
+                    .environmentObject(themeManager)
+                    .environmentObject(Settings.shared)
+            } else {
+                Color.clear
             }
         }
         .background(themeManager.currentTheme.colors.background)

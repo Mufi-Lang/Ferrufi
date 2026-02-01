@@ -34,6 +34,13 @@ public final class EditorContainerHost: NSObject, ObservableObject, EditorHost {
     // Internal subjects backing the public publishers
     private let documentDidChangeSubject = PassthroughSubject<Void, Never>()
     private let selectionDidChangeSubject = CurrentValueSubject<NSRange?, Never>(nil)
+    private let viewModeDidChangeSubject = CurrentValueSubject<EditorViewMode, Never>(.editorOnly)
+
+    @Published public var viewMode: EditorViewMode = .editorOnly {
+        didSet {
+            viewModeDidChangeSubject.send(viewMode)
+        }
+    }
 
     // Toolbar target (hidden backing NSTextView used for toolbar/responder routing).
     // We keep a lightweight, non-visible NSTextView instance that toolbars and responder
@@ -70,6 +77,10 @@ public final class EditorContainerHost: NSObject, ObservableObject, EditorHost {
 
     public var selectionDidChangePublisher: AnyPublisher<NSRange?, Never> {
         selectionDidChangeSubject.eraseToAnyPublisher()
+    }
+
+    public var viewModeDidChangePublisher: AnyPublisher<EditorViewMode, Never> {
+        viewModeDidChangeSubject.eraseToAnyPublisher()
     }
 
     // MARK: - Initialization
@@ -173,8 +184,10 @@ public final class EditorContainerHost: NSObject, ObservableObject, EditorHost {
     }
 
     public func save() throws {
-        // Stub: no-op save. Concrete implementation should write to disk and update state.
-        // Throwing behavior can be implemented when integrating FileStorage.
+        guard let doc = document as? NoteWrapper else { return }
+        Task {
+            try await doc.persist()
+        }
     }
 
     public func close() {
@@ -234,37 +247,102 @@ public struct EditorContainer: View {
     // Propagate real environment objects into the EditorCoreView (injected by callers)
     @EnvironmentObject private var themeManager: ThemeManager
     @EnvironmentObject private var ferrufiApp: FerrufiApp
+    @State private var internalContent: String = ""
 
     // Allow embedding code to optionally provide an initial document
     public init(document: EditorDocument? = nil) {
         let h = EditorContainerHost()
         if let doc = document {
             h.open(document: doc)
-            // Note: we intentionally do not call core.open here because @StateObject
-            // initialization isn't guaranteed within init; we bind core in onAppear/onChange.
+            // Default to split view for markdown
+            if doc.fileExtension == "md" {
+                h.viewMode = .split
+            }
         }
         _host = StateObject(wrappedValue: h)
     }
 
     public var body: some View {
-        GeometryReader { proxy in
-            Group {
-                // Secondary pane removed — always show the editor pane
+        VStack(spacing: 0) {
+            // Optional: Header/Toolbar for mode selection
+            modePicker
+            
+            GeometryReader { proxy in
+                mainContent
+            }
+        }
+        .onReceive(host.documentDidChangePublisher) { _ in
+            // Bind EditorCore whenever host document changes (publisher-driven).
+            if let doc = host.document {
+                core.open(document: doc)
+                internalContent = doc.text
+            } else {
+                core.document = nil
+                internalContent = ""
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .unifiedEditorTextViewChanged)) { notification in
+            if let textView = notification.object as? NSTextView {
+                internalContent = textView.string
+            }
+        }
+        .onAppear {
+            // Ensure the core is bound to any pre-existing document when the view appears.
+            if let doc = host.document {
+                core.open(document: doc)
+                internalContent = doc.text
+            }
+        }
+    }
+
+    private var modePicker: some View {
+        HStack(spacing: 0) {
+            Spacer()
+            
+            HStack(spacing: 2) {
+                ModeButton(mode: .editorOnly, current: $host.viewMode, icon: "doc.text")
+                ModeButton(mode: .split, current: $host.viewMode, icon: "square.split.2x1")
+                ModeButton(mode: .previewOnly, current: $host.viewMode, icon: "eye")
+            }
+            .padding(4)
+            .background(Color(NSColor.controlBackgroundColor).opacity(0.5))
+            .cornerRadius(8)
+            .padding(8)
+        }
+        .background(Color(NSColor.windowBackgroundColor))
+    }
+
+    struct ModeButton: View {
+        let mode: EditorViewMode
+        @Binding var current: EditorViewMode
+        let icon: String
+        @EnvironmentObject var themeManager: ThemeManager
+        
+        var body: some View {
+            Button(action: { current = mode }) {
+                Image(systemName: icon)
+                    .font(.system(size: 12, weight: .medium))
+                    .frame(width: 28, height: 22)
+                    .background(current == mode ? themeManager.currentTheme.colors.accent.opacity(0.15) : Color.clear)
+                    .foregroundColor(current == mode ? themeManager.currentTheme.colors.accent : themeManager.currentTheme.colors.foregroundSecondary)
+                    .cornerRadius(5)
+            }
+            .buttonStyle(.plain)
+            .help(mode.rawValue)
+        }
+    }
+
+    @ViewBuilder
+    private var mainContent: some View {
+        switch host.viewMode {
+        case .editorOnly:
+            editorPane
+        case .previewOnly:
+            previewPane
+        case .split:
+            HSplitView {
                 editorPane
-            }
-            .onReceive(host.documentDidChangePublisher) { _ in
-                // Bind EditorCore whenever host document changes (publisher-driven).
-                if let doc = host.document {
-                    core.open(document: doc)
-                } else {
-                    core.document = nil
-                }
-            }
-            .onAppear {
-                // Ensure the core is bound to any pre-existing document when the view appears.
-                if let doc = host.document {
-                    core.open(document: doc)
-                }
+                previewPane
             }
         }
     }
@@ -273,24 +351,26 @@ public struct EditorContainer: View {
 
     private var editorPane: some View {
         VStack(spacing: 0) {
-            HStack {
-                Text("Editor")
-                    .font(themeManager.monospacedCaption)
-                    .foregroundColor(.secondary)
-                Spacer()
-                // Mode controls could be added here
-            }
-            .padding(8)
-            Divider()
             // Real editor surface: EditorCoreView bound to the EditorCore adapter.
             EditorCoreView(core: core)
                 .environmentObject(themeManager)
                 .environmentObject(ferrufiApp)
                 .environmentObject(Settings.shared)
-                .padding()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .background(Color(NSColor.textBackgroundColor))
+    }
+
+    private var previewPane: some View {
+        VStack(spacing: 0) {
+            if host.document != nil {
+                WebView(htmlContent: MarkdownParser.shared.parse(internalContent, theme: themeManager.currentTheme.colors))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                Color.clear
+            }
+        }
+        .background(themeManager.currentTheme.colors.background)
     }
 
     // Secondary pane removed

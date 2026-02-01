@@ -1185,19 +1185,6 @@ struct EnhancedFileTreeNoteRow: View {
                     .easeInOut(duration: 0.15), value: navigationModel.selectedNote?.id == note.id)
 
             Spacer()
-            
-            // Eye toggle for markdown preview
-            if note.filePath.hasSuffix(".md") && navigationModel.selectedNote?.id == note.id {
-                Button {
-                    NotificationCenter.default.post(name: .toggleMarkdownPreview, object: nil)
-                } label: {
-                    Image(systemName: "eye")
-                        .font(.system(size: 10))
-                        .foregroundColor(themeManager.currentTheme.colors.accent)
-                }
-                .buttonStyle(.plain)
-                .padding(.trailing, 8)
-            }
         }
         .frame(height: 24)
         .contentShape(Rectangle())

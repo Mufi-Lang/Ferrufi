@@ -272,3 +272,35 @@ extension Note {
         )
     }
 }
+
+/// A class wrapper for Note that conforms to EditorDocument, allowing it to be used with EditorHost.
+public final class NoteWrapper: EditorDocument {
+    public let id: UUID
+    private let ferrufiApp: FerrufiApp
+    private var note: Note
+    
+    public var text: String {
+        get { note.content }
+        set { 
+            note.content = newValue
+            // We don't save to disk immediately here, EditorHost.save() will handle it.
+        }
+    }
+    
+    public var fileURL: URL? { note.url }
+    
+    public var fileExtension: String {
+        note.url?.pathExtension ?? "mufi"
+    }
+    
+    public init(note: Note, ferrufiApp: FerrufiApp) {
+        self.id = note.id
+        self.note = note
+        self.ferrufiApp = ferrufiApp
+    }
+    
+    /// Persist the wrapped note back to the application state and disk.
+    public func persist() async throws {
+        try await ferrufiApp.updateNote(note)
+    }
+}
