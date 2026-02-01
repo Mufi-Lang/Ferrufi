@@ -19,6 +19,9 @@ public struct WebView: NSViewRepresentable {
         let configuration = WKWebViewConfiguration()
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
         configuration.setValue(true, forKey: "allowUniversalAccessFromFileURLs")
+        
+        // Add script message handler for running code
+        configuration.userContentController.add(context.coordinator, name: "ferrufiRunCode")
 
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.navigationDelegate = context.coordinator
@@ -26,22 +29,15 @@ public struct WebView: NSViewRepresentable {
 
         // Enable smooth scrolling
         if #available(macOS 13.3, *) {
-            webView.isInspectable = false
+            webView.isInspectable = true // Set to true for debugging
         }
 
         return webView
     }
 
     public func updateNSView(_ webView: WKWebView, context: Context) {
-        print("🌐 WebView updateNSView called")
-        print("📄 HTML content length: \(htmlContent.count)")
-        print("📄 HTML excerpt: \(String(htmlContent.prefix(100)))...")
-
         if !htmlContent.isEmpty {
             webView.loadHTMLString(htmlContent, baseURL: nil)
-            print("✅ WebView loadHTMLString called")
-        } else {
-            print("⚠️ HTML content is empty, not loading")
         }
     }
 
@@ -49,17 +45,44 @@ public struct WebView: NSViewRepresentable {
         Coordinator(self)
     }
 
-    public class Coordinator: NSObject, WKNavigationDelegate {
+    public class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
         var parent: WebView
+        var webView: WKWebView?
 
         init(_ parent: WebView) {
             self.parent = parent
+        }
+        
+        public func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+            if message.name == "ferrufiRunCode", let body = message.body as? [String: Any],
+               let code = body["code"] as? String,
+               let id = body["id"] as? String {
+                
+                // We need a way to send the output back to this specific WebView instance.
+                // Store the blockId in the notification userInfo so listeners know which block to update.
+                NotificationCenter.default.post(
+                    name: .runMufiInPreview, 
+                    object: code, 
+                    userInfo: ["blockId": id, "coordinator": self]
+                )
+            }
+        }
+        
+        public func updateOutput(id: String, output: String) {
+            let escapedOutput = output.replacingOccurrences(of: "\\", with: "\\\\")
+                                     .replacingOccurrences(of: "\"", with: "\\\"")
+                                     .replacingOccurrences(of: "\n", with: "\\n")
+                                     .replacingOccurrences(of: "\r", with: "")
+            
+            let js = "window.updateMufiOutput('\(id)', \"\(escapedOutput)\");"
+            webView?.evaluateJavaScript(js, completionHandler: nil)
         }
 
         public func webView(
             _ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
             decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void
         ) {
+            self.webView = webView
             print("🌐 WebView navigation decision requested")
             if let url = navigationAction.request.url {
                 print("🔗 URL: \(url.absoluteString)")
@@ -113,9 +136,7 @@ public struct WebView: NSViewRepresentable {
         }
 
         public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-            print("✅ WebView finished loading")
-
-            // Inject CSS for better scrollbar appearance
+            // Inject CSS for better scrollbar appearance and general styling
             let css = """
                     ::-webkit-scrollbar {
                         width: 8px;
@@ -127,36 +148,22 @@ public struct WebView: NSViewRepresentable {
                         background: rgba(0, 0, 0, 0.3);
                         border-radius: 4px;
                     }
-                    ::-webkit-scrollbar-thumb:hover {
-                        background: rgba(0, 0, 0, 0.5);
-                    }
                     @media (prefers-color-scheme: dark) {
                         ::-webkit-scrollbar-thumb {
                             background: rgba(255, 255, 255, 0.3);
                         }
-                        ::-webkit-scrollbar-thumb:hover {
-                            background: rgba(255, 255, 255, 0.5);
-                        }
                     }
                 """
 
-            let script = """
+            let js = """
+                (function() {
                     var style = document.createElement('style');
-                    style.type = 'text/css';
-                    style.innerHTML = '\(css)';
+                    style.innerHTML = `\(css)`;
                     document.head.appendChild(style);
+                })();
+            """
 
-                    console.log('WebView loaded successfully');
-                    console.log('Document body: ', document.body.innerHTML.substring(0, 200));
-                """
-
-            webView.evaluateJavaScript(script) { result, error in
-                if let error = error {
-                    print("❌ JavaScript error: \(error)")
-                } else {
-                    print("✅ JavaScript executed successfully")
-                }
-            }
+            webView.evaluateJavaScript(js, completionHandler: nil)
         }
     }
 }

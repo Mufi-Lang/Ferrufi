@@ -605,4 +605,5 @@ extension Notification.Name {
     static let toggleMufiREPL = Notification.Name("toggleMufiREPL")
     static let runMufiScript = Notification.Name("runMufiScript")
     static let toggleMarkdownPreview = Notification.Name("toggleMarkdownPreview")
+    static let runMufiInPreview = Notification.Name("runMufiInPreview")
 }

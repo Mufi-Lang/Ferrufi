@@ -480,7 +480,8 @@ private class UnifiedTextView: NSTextView {
     private var mode: EditorFileType = .mufi
     // When false, skip incremental highlighting (useful for performance-sensitive cases)
     var highlightingEnabled: Bool = true
-    private var highlighter: MufiHighlighter?
+    private var mufiHighlighter: MufiHighlighter?
+    private var markdownHighlighter: MarkdownHighlighter?
 
     override func awakeFromNib() {
         super.awakeFromNib()
@@ -533,7 +534,13 @@ private class UnifiedTextView: NSTextView {
     // Apply syntax highlighting to the entire document
     private func applyHighlightingWhole() {
         guard let ts = textStorage, highlightingEnabled else { return }
-        highlighter?.highlight(in: ts)
+        
+        switch mode {
+        case .mufi:
+            mufiHighlighter?.highlight(in: ts)
+        case .markdown:
+            markdownHighlighter?.highlight(in: ts)
+        }
     }
 
     private func clearAllAttributes() {
@@ -552,10 +559,19 @@ private class UnifiedTextView: NSTextView {
     func configureHighlighter(baseFontName: String?, baseSize: Double) {
         let theme = coordinator?.themeManager?.currentTheme ?? .ghostWhite
         
-        if let highlighter = highlighter {
-            highlighter.updateConfig(theme: theme, baseFontName: baseFontName, baseSize: baseSize)
-        } else {
-            highlighter = MufiHighlighter(theme: theme, baseFontName: baseFontName, baseSize: baseSize)
+        switch mode {
+        case .mufi:
+            if let highlighter = mufiHighlighter {
+                highlighter.updateConfig(theme: theme, baseFontName: baseFontName, baseSize: baseSize)
+            } else {
+                mufiHighlighter = MufiHighlighter(theme: theme, baseFontName: baseFontName, baseSize: baseSize)
+            }
+        case .markdown:
+            if let highlighter = markdownHighlighter {
+                highlighter.updateConfig(theme: theme, baseFontName: baseFontName, baseSize: baseSize)
+            } else {
+                markdownHighlighter = MarkdownHighlighter(theme: theme, baseFontName: baseFontName, baseSize: baseSize)
+            }
         }
         
         if highlightingEnabled {

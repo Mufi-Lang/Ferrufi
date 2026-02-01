@@ -62,6 +62,28 @@ struct DetailView: View {
                 showPreview.toggle()
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .runMufiInPreview)) { notification in
+            guard let code = notification.object as? String,
+                  let userInfo = notification.userInfo,
+                  let blockId = userInfo["blockId"] as? String,
+                  let coordinator = userInfo["coordinator"] as? WebView.Coordinator else { return }
+            
+            Task {
+                do {
+                    let (status, output) = try await MufiBridge.shared.interpret(code)
+                    let result = output.isEmpty ? "[No output]" : output
+                    let finalResult = status == 0 ? result : "Error (Exit \(status)):\n\(result)"
+                    
+                    await MainActor.run {
+                        coordinator.updateOutput(id: blockId, output: finalResult)
+                    }
+                } catch {
+                    await MainActor.run {
+                        coordinator.updateOutput(id: blockId, output: "Execution Error: \(error.localizedDescription)")
+                    }
+                }
+            }
+        }
         .sheet(isPresented: $showingExportSheet) {
             ExportSheet(note: navigationModel.selectedNote!)
                 .environmentObject(themeManager)
@@ -228,7 +250,7 @@ struct DetailView: View {
             
             if isMarkdown && showPreview {
                 Divider()
-                WebView(htmlContent: MarkdownParser.shared.parse(editingText))
+                WebView(htmlContent: MarkdownParser.shared.parse(editingText, theme: themeManager.currentTheme.colors))
                     .frame(maxWidth: .infinity)
                     .background(themeManager.currentTheme.colors.background)
             }
