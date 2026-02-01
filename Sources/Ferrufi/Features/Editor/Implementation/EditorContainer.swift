@@ -279,9 +279,6 @@ public struct EditorContainer: View {
 
     public var body: some View {
         HStack(spacing: 0) {
-            // Activity Bar (Far left)
-            activityBar
-            
             VStack(spacing: 0) {
                 // Breadcrumbs (Top)
                 breadcrumbBar
@@ -289,26 +286,6 @@ public struct EditorContainer: View {
                 mainContent
             }
         }
-    }
-
-    private var activityBar: some View {
-        VStack(spacing: 20) {
-            ActivityIcon(icon: "files", isActive: true)
-            ActivityIcon(icon: "magnifyingglass", isActive: false)
-            ActivityIcon(icon: "branch", isActive: false)
-            ActivityIcon(icon: "square.stack.3d.up", isActive: false)
-            Spacer()
-            ActivityIcon(icon: "gearshape", isActive: false)
-        }
-        .padding(.vertical, 15)
-        .frame(width: 48)
-        .background(themeManager.currentTheme.colors.backgroundSecondary)
-        .overlay(
-            Rectangle()
-                .frame(width: 0.5)
-                .foregroundColor(themeManager.currentTheme.colors.border),
-            alignment: .trailing
-        )
     }
 
     private var breadcrumbBar: some View {
@@ -343,25 +320,6 @@ public struct EditorContainer: View {
                 self.internalContent = doc.text
                 self.core.open(document: doc)
             }
-        }
-    }
-
-    struct ActivityIcon: View {
-        let icon: String
-        let isActive: Bool
-        @EnvironmentObject var themeManager: ThemeManager
-        
-        var body: some View {
-            Image(systemName: icon == "files" ? "doc.on.doc" : (icon == "branch" ? "network" : icon))
-                .font(.system(size: 20))
-                .foregroundColor(isActive ? themeManager.currentTheme.colors.accent : themeManager.currentTheme.colors.foregroundTertiary)
-                .frame(width: 48, height: 40)
-                .overlay(
-                    Rectangle()
-                        .frame(width: 2)
-                        .foregroundColor(isActive ? themeManager.currentTheme.colors.accent : .clear),
-                    alignment: .leading
-                )
         }
     }
 
