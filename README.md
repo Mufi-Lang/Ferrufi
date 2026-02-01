@@ -18,42 +18,20 @@ It focuses on a smooth, native experience with fast text rendering, an integrate
 
 ## Quick Install (macOS)
 
-Recommended: inspect before running any remote script.
+Ferrufi can be built from source and installed to your Applications folder with a single command:
 
-- One-liner (downloads the latest release; falls back to `experimental` prerelease if no official `latest` exists):
 ```bash
-# Run the release installer (downloads and installs latest release)
-curl -fsSL https://raw.githubusercontent.com/Mufi-Lang/Ferrufi/main/scripts/install_release.sh | sh
-
-# Optional: to automatically add Ferrufi to Gatekeeper's allowed list (so the app won't be blocked on first open),
-# set the environment variable `ALLOW_GATEKEEPER=1` when running the installer:
-ALLOW_GATEKEEPER=1 curl -fsSL https://raw.githubusercontent.com/Mufi-Lang/Ferrufi/main/scripts/install_release.sh | sh
+curl -fsSL https://raw.githubusercontent.com/Mufi-Lang/Ferrufi/main/scripts/installer.sh | bash
 ```
 
-- Safer: download first, inspect, then run:
-```bash
-curl -fsSL -o /tmp/install_release.sh https://raw.githubusercontent.com/Mufi-Lang/Ferrufi/main/scripts/install_release.sh
-less /tmp/install_release.sh
-sh /tmp/install_release.sh
-```
+This script will:
+1. Clone the repository into a temporary folder.
+2. Build the application and its dependencies (requires Xcode Command Line Tools).
+3. Install `Ferrufi.app` to `/Applications`.
+4. Create a CLI launcher at `/usr/local/bin/ferrufi`.
+5. Clean up the temporary build files.
 
-- Install from a locally-built `.app`:
-  - System (requires `sudo`):
-    ```bash
-    sudo ./scripts/install_app.sh /path/to/Ferrufi.app
-    ```
-  - Per-user (no `sudo`):
-    ```bash
-    ./scripts/install_app.sh /path/to/Ferrufi.app --user
-    ```
-
-- Manual alternative:
-```bash
-sudo ditto -v /path/to/Ferrufi.app /usr/local/bin/Ferrufi.app
-sudo ln -sfn /usr/local/bin/Ferrufi.app /Applications/Ferrufi.app
-sudo ln -sf /usr/local/bin/Ferrufi.app/Contents/MacOS/Ferrufi /usr/local/bin/ferrufi
-sudo xattr -dr com.apple.quarantine /usr/local/bin/Ferrufi.app || true
-```
+---
 
 Usage:
 - Open a folder as workspace from terminal:
@@ -67,23 +45,8 @@ open -a Ferrufi --args /path/to/folder
 
 ---
 
-## Build (for distribution)
-
-- Quick build and zip (recommended for producing distributable `.app` + `.zip`):
-```bash
-./scripts/build_app.sh --zip
-```
-
-- Create a DMG:
-```bash
-./scripts/build_dmg_local.sh
-```
-
-See `DISTRIBUTION_QUICKSTART.md` and `docs/DISTRIBUTION.md` for more details and packaging guidance.
-
----
-
 ## Roadmap (high level)
+
 Planned/ongoing improvements:
 - Language Server Protocol (LSP) integration
 - Code folding, linting, and formatter hooks
