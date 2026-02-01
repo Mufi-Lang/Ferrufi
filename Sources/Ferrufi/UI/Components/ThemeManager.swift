@@ -331,6 +331,7 @@ public enum IronTheme: String, CaseIterable, Sendable {
         }
     }
 
+    @MainActor
     public var colors: ThemeColors {
         switch self {
         case .system:
@@ -612,8 +613,13 @@ public enum IronTheme: String, CaseIterable, Sendable {
         }
     }
 
+    @MainActor
     public var isDark: Bool {
         switch self {
+        case .system:
+            // Dynamic theme that follows system appearance
+            return NSApp.effectiveAppearance.name == .darkAqua 
+                ? true : false // simplified check for the property
         case .ghostWhite, .nordLight, .catppuccinLatte, .solarizedLight, .gruvboxLight,
             .lavenderMist:
             return false

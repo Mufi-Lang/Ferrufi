@@ -11,6 +11,8 @@ struct DetailView: View {
     @EnvironmentObject var ferrufiApp: FerrufiApp
     @EnvironmentObject var navigationModel: NavigationModel
     @EnvironmentObject var themeManager: ThemeManager
+    
+    @StateObject private var editorHost = EditorContainerHost()
 
     @State private var editingText = ""
     @State private var isEditorFocused = false
@@ -18,6 +20,7 @@ struct DetailView: View {
     @State private var showingExportSheet = false
     @State private var isFullscreen = false
     @State private var showPreview = false
+    @State private var isRunningScript = false
 
     // Removed DetailViewMode enum - using only Notion-style live editing
 
@@ -83,6 +86,9 @@ struct DetailView: View {
                     }
                 }
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .runMufiScript)) { _ in
+            runMufiScript()
         }
         .sheet(isPresented: $showingExportSheet) {
             ExportSheet(note: navigationModel.selectedNote!)
@@ -173,7 +179,38 @@ struct DetailView: View {
             Spacer()
 
             // Action buttons with beautiful styling
-            HStack(spacing: 6) {
+            HStack(spacing: 12) {
+                if note.filePath.hasSuffix(".mufi") {
+                    // Run button for Mufi scripts
+                    Button(action: { runMufiScript() }) {
+                        if isRunningScript {
+                            ProgressView()
+                                .progressViewStyle(.circular)
+                                .scaleEffect(0.7)
+                        } else {
+                            Image(systemName: "play.fill")
+                                .font(.system(size: 12))
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .frame(width: 28, height: 22)
+                    .background(themeManager.currentTheme.colors.accent.opacity(0.1))
+                    .foregroundColor(themeManager.currentTheme.colors.accent)
+                    .cornerRadius(6)
+                    .help("Run Mufi Script (⌘R)")
+                    .disabled(isRunningScript)
+                } else if note.filePath.hasSuffix(".md") {
+                    // Mode Toggle Group for Markdown
+                    HStack(spacing: 2) {
+                        HeaderModeButton(mode: .editorOnly, current: $editorHost.viewMode, icon: "doc.text")
+                        HeaderModeButton(mode: .split, current: $editorHost.viewMode, icon: "square.split.2x1")
+                        HeaderModeButton(mode: .previewOnly, current: $editorHost.viewMode, icon: "eye")
+                    }
+                    .padding(2)
+                    .background(themeManager.currentTheme.colors.backgroundSecondary.opacity(0.5))
+                    .cornerRadius(6)
+                }
+
                 // Theme selector
                 ThemeToggleButton()
                     .environmentObject(themeManager)
@@ -234,8 +271,25 @@ struct DetailView: View {
     private var nativeSplitEditingView: some View {
         Group {
             if let note = navigationModel.selectedNote {
-                let wrapper = NoteWrapper(note: note, ferrufiApp: ferrufiApp)
-                EditorContainer(document: wrapper)
+                EditorContainer(host: editorHost)
+                    .onAppear {
+                        let wrapper = NoteWrapper(note: note, ferrufiApp: ferrufiApp)
+                        editorHost.open(document: wrapper)
+                        if wrapper.fileExtension == "md" {
+                            editorHost.viewMode = .split
+                        } else {
+                            editorHost.viewMode = .editorOnly
+                        }
+                    }
+                    .onChange(of: note) { _, newNote in
+                        let wrapper = NoteWrapper(note: newNote, ferrufiApp: ferrufiApp)
+                        editorHost.open(document: wrapper)
+                        if wrapper.fileExtension == "md" {
+                            editorHost.viewMode = .split
+                        } else {
+                            editorHost.viewMode = .editorOnly
+                        }
+                    }
                     .environmentObject(ferrufiApp)
                     .environmentObject(themeManager)
                     .environmentObject(Settings.shared)
@@ -481,6 +535,39 @@ struct DetailView: View {
 
     // MARK: - Actions
 
+    private func runMufiScript() {
+        guard !isRunningScript else { return }
+        isRunningScript = true
+        
+        // Show terminal immediately
+        withAnimation {
+            editorHost.showTerminal = true
+        }
+
+        let startTime = Date()
+        Task {
+            do {
+                let (status, output) = try await MufiBridge.shared.interpret(editingText)
+                let duration = Date().timeIntervalSince(startTime)
+                
+                await MainActor.run {
+                    editorHost.mufiOutput = output
+                    editorHost.mufiExitStatus = status
+                    editorHost.mufiExecutionTime = duration
+                    isRunningScript = false
+                }
+            } catch {
+                let duration = Date().timeIntervalSince(startTime)
+                await MainActor.run {
+                    editorHost.mufiOutput = "Execution error: \(error.localizedDescription)"
+                    editorHost.mufiExitStatus = 1
+                    editorHost.mufiExecutionTime = duration
+                    isRunningScript = false
+                }
+            }
+        }
+    }
+
     private func saveNote() {
         guard let note = navigationModel.selectedNote else { return }
 
@@ -585,6 +672,28 @@ struct DetailView: View {
 
     private func insertText(_ text: String) {
         editingText += text
+    }
+}
+
+// MARK: - Header Components
+
+struct HeaderModeButton: View {
+    let mode: EditorViewMode
+    @Binding var current: EditorViewMode
+    let icon: String
+    @EnvironmentObject var themeManager: ThemeManager
+    
+    var body: some View {
+        Button(action: { current = mode }) {
+            Image(systemName: icon)
+                .font(.system(size: 10, weight: .medium))
+                .frame(width: 24, height: 18)
+                .background(current == mode ? themeManager.currentTheme.colors.accent.opacity(0.15) : Color.clear)
+                .foregroundColor(current == mode ? themeManager.currentTheme.colors.accent : themeManager.currentTheme.colors.foregroundSecondary)
+                .cornerRadius(4)
+        }
+        .buttonStyle(.plain)
+        .help(mode.rawValue)
     }
 }
 

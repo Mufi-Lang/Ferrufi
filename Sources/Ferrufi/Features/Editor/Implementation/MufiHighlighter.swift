@@ -9,6 +9,7 @@ import AppKit
 import Foundation
 
 /// A fast, regex-based syntax highlighter for the Mufi programming language.
+@MainActor
 public final class MufiHighlighter {
     
     // MARK: - Token Types
@@ -43,6 +44,7 @@ public final class MufiHighlighter {
     }
     
     /// Apply syntax highlighting to the provided text storage
+    @MainActor
     public func highlight(in storage: NSTextStorage, range: NSRange? = nil) {
         let highlightRange = range ?? NSRange(location: 0, length: storage.length)
         guard highlightRange.length > 0 else { return }
@@ -89,6 +91,7 @@ public final class MufiHighlighter {
     
     // MARK: - Private Helpers
     
+    @MainActor
     private func setupAttributes(baseFontName: String?, baseSize: Double) {
         let fontName = baseFontName ?? NSFont.monospacedSystemFont(ofSize: CGFloat(baseSize), weight: .regular).fontName
         let baseFont = NSFont(name: fontName, size: CGFloat(baseSize)) ?? NSFont.monospacedSystemFont(ofSize: CGFloat(baseSize), weight: .regular)

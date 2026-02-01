@@ -337,7 +337,7 @@
     // MARK: - Enhanced Scroll View with Text Rendering
 
     public struct EnhancedTextScrollView: View {
-        @State private var textRenderer: MetalTextRenderer?
+        @State private var textRenderer: LegacyMetalTextRenderer?
         @StateObject private var deviceManager = MetalDeviceManager.shared
 
         private let text: String
@@ -368,17 +368,18 @@
                 return
             }
 
-            let renderer = MetalTextRenderer(device: device, commandQueue: commandQueue)
+            let renderer = LegacyMetalTextRenderer(device: device, commandQueue: commandQueue)
             renderer.setText(text, font: font)
 
             self.textRenderer = renderer
         }
     }
 
-    // MARK: - Metal Text Renderer
+    // MARK: - Legacy Metal Text Renderer
 
     @MainActor
-    public class MetalTextRenderer: BaseMetalRenderer {
+    @available(*, deprecated, message: "Use the new global MetalTextRenderer in MetalRenderer.swift instead.")
+    public class LegacyMetalTextRenderer: BaseMetalRenderer {
         private var textTexture: MTLTexture?
         private var pipelineState: MTLRenderPipelineState?
 

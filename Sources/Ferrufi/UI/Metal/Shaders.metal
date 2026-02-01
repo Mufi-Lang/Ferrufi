@@ -162,6 +162,22 @@ fragment float4 fragment_fast_blur(VertexOut in [[stage_in]],
     return color / 25.0;
 }
 
+// High-performance glyph rendering
+vertex VertexOut vertex_glyph(VertexIn in [[stage_in]],
+                             constant float4x4& projectionMatrix [[buffer(1)]],
+                             constant float2& offset [[buffer(2)]]) {
+    VertexOut out;
+    
+    // Position the glyph quad and apply offset
+    float4 pos = float4(in.position.xy + offset, 0.0, 1.0);
+    out.position = projectionMatrix * pos;
+    
+    out.color = in.color;
+    out.texCoords = in.texCoords;
+    
+    return out;
+}
+
 // High-performance line rendering
 vertex VertexOut vertex_line(VertexIn in [[stage_in]],
                             constant float& lineWidth [[buffer(1)]],
@@ -223,6 +239,37 @@ fragment float4 fragment_graph_edge(VertexOut in [[stage_in]],
     return float4(in.color.rgb, alpha);
 }
 
+// MARK: - Compute Shaders for Syntax Highlighting
+
+// Token types for lexing
+// 0: Default, 1: Keyword, 2: Type, 3: String, 4: Comment, 5: Number
+kernel void lex_mufi(device const uint16_t* chars [[buffer(0)]],
+                    device uint8_t* attributes [[buffer(1)]],
+                    constant uint& length [[buffer(2)]],
+                    uint index [[thread_position_in_grid]]) {
+    if (index >= length) return;
+    
+    // Default to plain text
+    attributes[index] = 0;
+    
+    uint16_t c = chars[index];
+    
+    // Simple number detection
+    if (c >= '0' && c <= '9') {
+        attributes[index] = 5;
+        return;
+    }
+    
+    // Simple comment detection (starts with //)
+    if (index + 1 < length && chars[index] == '/' && chars[index+1] == '/') {
+        // This is a naive implementation; a real one would use a state machine
+        for (uint i = index; i < length && chars[i] != '\n'; i++) {
+            // Note: In a real parallel lexer, we'd use a prefix sum or global state
+            // For now, we'll mark the start
+        }
+    }
+}
+
 // MARK: - Compute Shaders for Text Layout
 
 kernel void compute_text_layout(device float4* positions [[buffer(0)]],
@@ -244,7 +291,48 @@ kernel void compute_text_layout(device float4* positions [[buffer(0)]],
     );
 }
 
+// MARK: - Navigation Shaders
+
+// Code minimap shader
+fragment float4 fragment_minimap(VertexOut in [[stage_in]],
+                                constant float4& accentColor [[buffer(0)]]) {
+    float2 uv = in.texCoords;
+    
+    // Simulate code structure with blocks
+    float line_width = fract(uv.y * 50.0) > 0.3 ? 1.0 : 0.0;
+    float indent = step(0.1 + 0.2 * sin(floor(uv.y * 50.0)), uv.x);
+    float length = step(uv.x, 0.4 + 0.5 * cos(floor(uv.y * 50.0)));
+    
+    float alpha = line_width * indent * length * 0.3;
+    
+    return float4(accentColor.rgb, alpha);
+}
+
 // MARK: - Special Effect Shaders
+
+// Animated mesh gradient background
+fragment float4 fragment_background_mesh(VertexOut in [[stage_in]],
+                                        constant float& time [[buffer(0)]],
+                                        constant float4& accentColor [[buffer(1)]]) {
+    float2 uv = in.texCoords;
+    
+    // Create multiple moving centers for the gradient
+    float2 p1 = float2(0.5 + 0.3 * sin(time * 0.5), 0.5 + 0.3 * cos(time * 0.3));
+    float2 p2 = float2(0.5 + 0.3 * cos(time * 0.4), 0.5 + 0.3 * sin(time * 0.6));
+    
+    float d1 = distance(uv, p1);
+    float d2 = distance(uv, p2);
+    
+    // Calculate color based on distance to moving points
+    float intensity = (sin(d1 * 10.0 - time) + 1.0) * 0.5;
+    intensity += (cos(d2 * 12.0 + time * 0.8) + 1.0) * 0.5;
+    intensity *= 0.2; // Keep it subtle
+    
+    float4 baseColor = accentColor;
+    baseColor.a = 0.03 + intensity * 0.05; // Very subtle transparency
+    
+    return baseColor;
+}
 
 // Shimmer effect for loading states
 fragment float4 fragment_shimmer(VertexOut in [[stage_in]],

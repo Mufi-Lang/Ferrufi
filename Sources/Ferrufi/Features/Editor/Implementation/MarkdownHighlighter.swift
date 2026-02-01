@@ -9,6 +9,7 @@ import AppKit
 import Foundation
 
 /// A regex-based syntax highlighter for Markdown.
+@MainActor
 public final class MarkdownHighlighter {
     
     private enum TokenType {
@@ -29,9 +30,15 @@ public final class MarkdownHighlighter {
         setupAttributes(baseFontName: baseFontName, baseSize: baseSize)
     }
     
-    public func updateConfig(theme: IronTheme, baseFontName: String?, baseSize: Double) {
-        setupAttributes(baseFontName: baseFontName, baseSize: baseSize)
-    }
+        public func updateConfig(theme: IronTheme, baseFontName: String?, baseSize: Double) {
+    
+            setupAttributes(baseFontName: baseFontName, baseSize: baseSize)
+    
+        }
+    
+        
+    
+        @MainActor
     
         public func highlight(in storage: NSTextStorage, range: NSRange? = nil) {
     
@@ -105,6 +112,8 @@ public final class MarkdownHighlighter {
     
         
     
+        @MainActor
+    
         private func setupAttributes(baseFontName: String?, baseSize: Double) {
     
             let fontName = baseFontName ?? NSFont.monospacedSystemFont(ofSize: CGFloat(baseSize), weight: .regular).fontName
@@ -175,6 +184,8 @@ public final class MarkdownHighlighter {
     
         }
     
+    
+    
         
     
         private func apply(pattern: String, type: TokenType, in storage: NSTextStorage, text: String, range: NSRange, options: NSRegularExpression.Options = []) {
@@ -186,7 +197,6 @@ public final class MarkdownHighlighter {
             
     
             let matches = regex.matches(in: text, options: [], range: range)
-    
             for match in matches {
                 storage.addAttributes(attrs, range: match.range)
                 }

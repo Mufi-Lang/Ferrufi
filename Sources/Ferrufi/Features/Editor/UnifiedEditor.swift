@@ -483,6 +483,7 @@ private class UnifiedTextView: NSTextView {
     private var highlighter: MufiHighlighter? // Placeholder for future use
     private var mufiHighlighter: MufiHighlighter?
     private var markdownHighlighter: MarkdownHighlighter?
+    private var computeHighlighter: MufiComputeHighlighter?
     private var shouldHighlightWhole: Bool = true
 
     override func awakeFromNib() {
@@ -567,6 +568,11 @@ private class UnifiedTextView: NSTextView {
                 highlighter.updateConfig(theme: theme, baseFontName: baseFontName, baseSize: baseSize)
             } else {
                 mufiHighlighter = MufiHighlighter(theme: theme, baseFontName: baseFontName, baseSize: baseSize)
+            }
+            
+            // Initialize compute highlighter if not present
+            if computeHighlighter == nil {
+                computeHighlighter = MufiComputeHighlighter(theme: theme)
             }
         case .markdown:
             if let highlighter = markdownHighlighter {

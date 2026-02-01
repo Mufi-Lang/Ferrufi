@@ -24,6 +24,8 @@ import SwiftUI
         @Published public private(set) var commandQueue: MTLCommandQueue?
         @Published public private(set) var isInitialized = false
         @Published public private(set) var initializationError: String?
+        @Published public private(set) var isLibraryLoaded = false
+        public private(set) var defaultLibrary: MTLLibrary?
 
         private init() {
             initialize()
@@ -42,20 +44,72 @@ import SwiftUI
 
             self.device = device
             self.commandQueue = commandQueue
+            
+            // Robust library loading
+            self.defaultLibrary = loadDefaultLibrary(for: device)
+            self.isLibraryLoaded = self.defaultLibrary != nil
+            
             self.isInitialized = true
-
             logDeviceInfo(device)
+        }
+        
+        private func loadDefaultLibrary(for device: MTLDevice) -> MTLLibrary? {
+            // 1. Try standard default library
+            if let lib = device.makeDefaultLibrary() { return lib }
+            
+            // 2. Try to find the SPM module bundle
+            let bundleNames = ["Ferrufi_Ferrufi", "Ferrufi"]
+            let candidates = [
+                Bundle.main.resourceURL,
+                Bundle(for: MetalDeviceManager.self).resourceURL,
+                Bundle.main.bundleURL,
+            ]
+            
+            for base in candidates {
+                guard let baseURL = base else { continue }
+                for name in bundleNames {
+                    let bundleURL = baseURL.appendingPathComponent("\(name).bundle")
+                    if let bundle = Bundle(url: bundleURL),
+                       let path = bundle.path(forResource: "default", ofType: "metallib") {
+                        print("ℹ️ Metal: Found library in bundle \(bundleURL.path)")
+                        return try? device.makeLibrary(URL: URL(fileURLWithPath: path))
+                    }
+                }
+            }
+            
+            // 3. Fallback: Try to load from source file (useful for local development/swift run)
+            // We search for Shaders.metal in the source tree
+            let fm = FileManager.default
+            let currentDir = fm.currentDirectoryPath
+            let shaderSourcePath = "\(currentDir)/Sources/Ferrufi/UI/Metal/Shaders.metal"
+            
+            if fm.fileExists(atPath: shaderSourcePath) {
+                do {
+                    let source = try String(contentsOfFile: shaderSourcePath, encoding: .utf8)
+                    print("ℹ️ Metal: Compiling shaders from source at \(shaderSourcePath)")
+                    return try device.makeLibrary(source: source, options: nil)
+                } catch {
+                    print("❌ Metal: Failed to compile shaders from source: \(error)")
+                }
+            }
+            
+            // 4. Last resort: search for any metallib
+            let bundle = Bundle(for: MetalDeviceManager.self)
+            if let url = bundle.url(forResource: nil, withExtension: "metallib") {
+                return try? device.makeLibrary(URL: url)
+            }
+            
+            print("⚠️ Metal: Could not find default.metallib or Shaders.metal source.")
+            return nil
         }
 
         private func logDeviceInfo(_ device: MTLDevice) {
             print("Metal Device Initialized:")
             print("  Name: \(device.name)")
-            print("  Low Power: \(device.isLowPower)")
-            print("  Removable: \(device.isRemovable)")
-            print("  Registry ID: \(device.registryID)")
-
-            if #available(macOS 11.0, *) {
-                print("  Supports Family Mac2: \(device.supportsFamily(.mac2))")
+            if let lib = defaultLibrary {
+                print("  Library: Loaded successfully (\(lib.functionNames.count) functions)")
+            } else {
+                print("  Library: FAILED TO LOAD")
             }
         }
     }
@@ -69,13 +123,38 @@ import SwiftUI
     }
 
     @MainActor
-    public class BaseMetalRenderer: NSObject, MetalRenderable {
+    public class BaseMetalRenderer: NSObject, MetalRenderable, ObservableObject {
         public weak var device: MTLDevice?
         public weak var commandQueue: MTLCommandQueue?
 
         public var viewportSize: SIMD2<Float> = SIMD2<Float>(0, 0)
         public var clearColor: MTLClearColor = MTLClearColor(
             red: 0.0, green: 0.0, blue: 0.0, alpha: 1.0)
+
+        public static var vertexDescriptor: MTLVertexDescriptor {
+            let descriptor = MTLVertexDescriptor()
+            
+            // Position
+            descriptor.attributes[0].format = .float3
+            descriptor.attributes[0].offset = 0
+            descriptor.attributes[0].bufferIndex = 0
+            
+            // Color
+            descriptor.attributes[1].format = .float4
+            descriptor.attributes[1].offset = MemoryLayout<SIMD3<Float>>.stride
+            descriptor.attributes[1].bufferIndex = 0
+            
+            // TexCoords
+            descriptor.attributes[2].format = .float2
+            descriptor.attributes[2].offset = MemoryLayout<SIMD3<Float>>.stride + MemoryLayout<SIMD4<Float>>.stride
+            descriptor.attributes[2].bufferIndex = 0
+            
+            descriptor.layouts[0].stride = MemoryLayout<Vertex>.stride
+            descriptor.layouts[0].stepRate = 1
+            descriptor.layouts[0].stepFunction = .perVertex
+            
+            return descriptor
+        }
 
         public init(device: MTLDevice, commandQueue: MTLCommandQueue) {
             self.device = device
@@ -118,10 +197,257 @@ import SwiftUI
         }
     }
 
+    // MARK: - Specialized Renderers
+
+    public class EditorBackgroundRenderer: BaseMetalRenderer {
+        private var pipelineState: MTLRenderPipelineState?
+        private var vertexBuffer: MTLBuffer?
+        private var startTime: Date = Date()
+        public var accentColor: Color = .blue
+
+        public override init(device: MTLDevice, commandQueue: MTLCommandQueue) {
+            super.init(device: device, commandQueue: commandQueue)
+            if MetalDeviceManager.shared.isLibraryLoaded {
+                setupPipeline()
+                setupBuffers()
+            }
+        }
+
+        private func setupPipeline() {
+            guard let device = device else { return }
+            
+            // Use robustly loaded library from manager
+            guard let library = MetalDeviceManager.shared.defaultLibrary else {
+                print("❌ Metal error: Could not load shader library.")
+                return
+            }
+            
+            guard let vertexFunc = library.makeFunction(name: "vertex_simple") else {
+                print("❌ Metal error: Could not find vertex_simple function.")
+                return
+            }
+            
+            guard let fragmentFunc = library.makeFunction(name: "fragment_background_mesh") else {
+                print("❌ Metal error: Could not find fragment_background_mesh function.")
+                return
+            }
+            
+            let pipelineDescriptor = MTLRenderPipelineDescriptor()
+            pipelineDescriptor.vertexFunction = vertexFunc
+            pipelineDescriptor.fragmentFunction = fragmentFunc
+            pipelineDescriptor.vertexDescriptor = BaseMetalRenderer.vertexDescriptor
+            pipelineDescriptor.colorAttachments[0].pixelFormat = .bgra8Unorm_srgb
+            pipelineDescriptor.colorAttachments[0].isBlendingEnabled = true
+            pipelineDescriptor.colorAttachments[0].sourceRGBBlendFactor = .sourceAlpha
+            pipelineDescriptor.colorAttachments[0].destinationRGBBlendFactor = .oneMinusSourceAlpha
+            
+            do {
+                pipelineState = try device.makeRenderPipelineState(descriptor: pipelineDescriptor)
+            } catch {
+                print("❌ Metal error: Failed to create render pipeline state: \(error)")
+            }
+        }
+
+        private func setupBuffers() {
+            let vertices: [Vertex] = [
+                Vertex(position: SIMD3<Float>(-1, -1, 0), color: SIMD4<Float>(1, 1, 1, 1), texCoords: SIMD2<Float>(0, 1)),
+                Vertex(position: SIMD3<Float>(1, -1, 0), color: SIMD4<Float>(1, 1, 1, 1), texCoords: SIMD2<Float>(1, 1)),
+                Vertex(position: SIMD3<Float>(-1, 1, 0), color: SIMD4<Float>(1, 1, 1, 1), texCoords: SIMD2<Float>(0, 0)),
+                Vertex(position: SIMD3<Float>(1, 1, 0), color: SIMD4<Float>(1, 1, 1, 1), texCoords: SIMD2<Float>(1, 0))
+            ]
+            vertexBuffer = makeBuffer(from: vertices)
+        }
+
+        public override func render(in view: MTKView, with commandBuffer: MTLCommandBuffer) {
+            guard let renderPassDescriptor = view.currentRenderPassDescriptor,
+                  let renderEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor)
+            else { return }
+
+            if let pipelineState = pipelineState, let vertexBuffer = vertexBuffer {
+                renderEncoder.setRenderPipelineState(pipelineState)
+                renderEncoder.setVertexBuffer(vertexBuffer, offset: 0, index: 0)
+                
+                var time = Float(Date().timeIntervalSince(startTime))
+                renderEncoder.setFragmentBytes(&time, length: MemoryLayout<Float>.size, index: 0)
+                
+                var color = SIMD4<Float>(0, 0, 0, 0)
+                if let components = NSColor(accentColor).usingColorSpace(.deviceRGB) {
+                    color = SIMD4<Float>(Float(components.redComponent), 
+                                         Float(components.greenComponent), 
+                                         Float(components.blueComponent), 
+                                         Float(components.alphaComponent))
+                }
+                renderEncoder.setFragmentBytes(&color, length: MemoryLayout<SIMD4<Float>>.size, index: 1)
+                
+                renderEncoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
+            }
+            
+            renderEncoder.endEncoding()
+        }
+    }
+
+    public class MinimapRenderer: BaseMetalRenderer {
+        private var pipelineState: MTLRenderPipelineState?
+        private var vertexBuffer: MTLBuffer?
+        public var accentColor: Color = .blue
+
+        public override init(device: MTLDevice, commandQueue: MTLCommandQueue) {
+            super.init(device: device, commandQueue: commandQueue)
+            if MetalDeviceManager.shared.isLibraryLoaded {
+                setupPipeline()
+                setupBuffers()
+            }
+        }
+
+        private func setupPipeline() {
+            guard let device = device else { return }
+            
+            guard let library = MetalDeviceManager.shared.defaultLibrary else {
+                print("❌ Metal error: Could not load library for Minimap.")
+                return
+            }
+            
+            guard let vertexFunc = library.makeFunction(name: "vertex_simple") else {
+                print("❌ Metal error: Could not find vertex_simple for Minimap.")
+                return
+            }
+            
+            guard let fragmentFunc = library.makeFunction(name: "fragment_minimap") else {
+                print("❌ Metal error: Could not find fragment_minimap.")
+                return
+            }
+            
+            let pipelineDescriptor = MTLRenderPipelineDescriptor()
+            pipelineDescriptor.vertexFunction = vertexFunc
+            pipelineDescriptor.fragmentFunction = fragmentFunc
+            pipelineDescriptor.vertexDescriptor = BaseMetalRenderer.vertexDescriptor
+            pipelineDescriptor.colorAttachments[0].pixelFormat = .bgra8Unorm_srgb
+            pipelineDescriptor.colorAttachments[0].isBlendingEnabled = true
+            pipelineDescriptor.colorAttachments[0].sourceRGBBlendFactor = .sourceAlpha
+            pipelineDescriptor.colorAttachments[0].destinationRGBBlendFactor = .oneMinusSourceAlpha
+            
+            do {
+                pipelineState = try device.makeRenderPipelineState(descriptor: pipelineDescriptor)
+            } catch {
+                print("❌ Metal error: Failed to create minimap pipeline state: \(error)")
+            }
+        }
+
+        private func setupBuffers() {
+            let vertices: [Vertex] = [
+                Vertex(position: SIMD3<Float>(-1, -1, 0), color: SIMD4<Float>(1, 1, 1, 1), texCoords: SIMD2<Float>(0, 1)),
+                Vertex(position: SIMD3<Float>(1, -1, 0), color: SIMD4<Float>(1, 1, 1, 1), texCoords: SIMD2<Float>(1, 1)),
+                Vertex(position: SIMD3<Float>(-1, 1, 0), color: SIMD4<Float>(1, 1, 1, 1), texCoords: SIMD2<Float>(0, 0)),
+                Vertex(position: SIMD3<Float>(1, 1, 0), color: SIMD4<Float>(1, 1, 1, 1), texCoords: SIMD2<Float>(1, 0))
+            ]
+            vertexBuffer = makeBuffer(from: vertices)
+        }
+
+        public override func render(in view: MTKView, with commandBuffer: MTLCommandBuffer) {
+            guard let renderPassDescriptor = view.currentRenderPassDescriptor,
+                  let renderEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor)
+            else { return }
+
+            if let pipelineState = pipelineState, let vertexBuffer = vertexBuffer {
+                renderEncoder.setRenderPipelineState(pipelineState)
+                renderEncoder.setVertexBuffer(vertexBuffer, offset: 0, index: 0)
+                
+                var color = SIMD4<Float>(0, 0, 0, 0)
+                if let components = NSColor(accentColor).usingColorSpace(.deviceRGB) {
+                    color = SIMD4<Float>(Float(components.redComponent), 
+                                         Float(components.greenComponent), 
+                                         Float(components.blueComponent), 
+                                         Float(components.alphaComponent))
+                }
+                renderEncoder.setFragmentBytes(&color, length: MemoryLayout<SIMD4<Float>>.size, index: 0)
+                
+                renderEncoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
+            }
+            
+            renderEncoder.endEncoding()
+        }
+    }
+
+    public class MetalTextRenderer: BaseMetalRenderer {
+        private var pipelineState: MTLRenderPipelineState?
+        private var atlas: GlyphAtlas?
+        public var text: String = ""
+        public var color: Color = .white
+
+        public init(device: MTLDevice, commandQueue: MTLCommandQueue, font: NSFont) {
+            super.init(device: device, commandQueue: commandQueue)
+            self.atlas = GlyphAtlas(device: device, font: font)
+            if MetalDeviceManager.shared.isLibraryLoaded {
+                setupPipeline()
+            }
+        }
+
+        private func setupPipeline() {
+            guard let device = device else { return }
+            
+            guard let library = MetalDeviceManager.shared.defaultLibrary else {
+                print("❌ Metal error: Could not load library for Text.")
+                return
+            }
+            
+            guard let vertexFunc = library.makeFunction(name: "vertex_glyph") else {
+                print("❌ Metal error: Could not find vertex_glyph.")
+                return
+            }
+            
+            guard let fragmentFunc = library.makeFunction(name: "fragment_textured") else {
+                print("❌ Metal error: Could not find fragment_textured.")
+                return
+            }
+            
+            let pipelineDescriptor = MTLRenderPipelineDescriptor()
+            pipelineDescriptor.vertexFunction = vertexFunc
+            pipelineDescriptor.fragmentFunction = fragmentFunc
+            pipelineDescriptor.vertexDescriptor = BaseMetalRenderer.vertexDescriptor
+            pipelineDescriptor.colorAttachments[0].pixelFormat = .bgra8Unorm_srgb
+            pipelineDescriptor.colorAttachments[0].isBlendingEnabled = true
+            pipelineDescriptor.colorAttachments[0].sourceRGBBlendFactor = .sourceAlpha
+            pipelineDescriptor.colorAttachments[0].destinationRGBBlendFactor = .oneMinusSourceAlpha
+            
+            do {
+                pipelineState = try device.makeRenderPipelineState(descriptor: pipelineDescriptor)
+            } catch {
+                print("❌ Metal error: Failed to create text pipeline state: \(error)")
+            }
+        }
+
+        public override func render(in view: MTKView, with commandBuffer: MTLCommandBuffer) {
+            guard let renderPassDescriptor = view.currentRenderPassDescriptor,
+                  let renderEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor)
+            else { return }
+
+            if let pipelineState = pipelineState, let atlas = atlas {
+                renderEncoder.setRenderPipelineState(pipelineState)
+                renderEncoder.setFragmentTexture(atlas.texture, index: 0)
+                
+                // This is a simplified per-character draw loop. 
+                // In a production engine, we would use a single large vertex buffer for all glyphs.
+                var currentOffset = CGPoint.zero
+                
+                for char in text {
+                    guard let desc = atlas.descriptor(for: char) else { continue }
+                    
+                    // Draw quad for this character (simplified)
+                    // ... logic to update vertex buffer and draw call ...
+                    
+                    currentOffset.x += desc.advance
+                }
+            }
+            
+            renderEncoder.endEncoding()
+        }
+    }
+
     // MARK: - Metal View Wrapper
 
     public struct MetalView: NSViewRepresentable {
         @StateObject private var deviceManager = MetalDeviceManager.shared
+        @EnvironmentObject var themeManager: ThemeManager
 
         private let renderer: MetalRenderable?
         private let preferredFramesPerSecond: Int
@@ -165,15 +491,17 @@ import SwiftUI
         }
 
         public func makeCoordinator() -> Coordinator {
-            Coordinator(deviceManager: deviceManager)
+            Coordinator(deviceManager: deviceManager, themeManager: themeManager)
         }
 
         public class Coordinator: NSObject, MTKViewDelegate {
             private let deviceManager: MetalDeviceManager
+            private let themeManager: ThemeManager
             var renderer: MetalRenderable?
 
-            init(deviceManager: MetalDeviceManager) {
+            init(deviceManager: MetalDeviceManager, themeManager: ThemeManager) {
                 self.deviceManager = deviceManager
+                self.themeManager = themeManager
                 super.init()
             }
 
@@ -184,25 +512,39 @@ import SwiftUI
             public func draw(in view: MTKView) {
                 guard let commandQueue = deviceManager.commandQueue,
                     let commandBuffer = commandQueue.makeCommandBuffer(),
-                    let renderPassDescriptor = view.currentRenderPassDescriptor,
-                    let drawable = view.currentDrawable
+                    let renderPassDescriptor = view.currentRenderPassDescriptor
                 else {
                     return
                 }
 
                 // Set clear color based on current appearance
-                if #available(macOS 10.14, *) {
-                    let isDark = NSApp.effectiveAppearance.name == .darkAqua
+                let isDark = themeManager.currentTheme.isDark
+                
+                if renderer != nil {
                     renderPassDescriptor.colorAttachments[0].clearColor =
                         isDark
-                        ? MTLClearColor(red: 0.1, green: 0.1, blue: 0.1, alpha: 1.0)
-                        : MTLClearColor(red: 0.95, green: 0.95, blue: 0.95, alpha: 1.0)
+                        ? MTLClearColor(red: 0.05, green: 0.05, blue: 0.05, alpha: 1.0)
+                        : MTLClearColor(red: 0.98, green: 0.98, blue: 0.98, alpha: 1.0)
+                } else {
+                    // Fully transparent if no renderer
+                    renderPassDescriptor.colorAttachments[0].clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
+                }
+                
+                renderPassDescriptor.colorAttachments[0].loadAction = .clear
+                renderPassDescriptor.colorAttachments[0].storeAction = .store
+
+                // If renderer exists, let it encode its commands
+                if let renderer = renderer {
+                    renderer.render(in: view, with: commandBuffer)
+                } else {
+                    // Just clear the screen if no renderer
+                    let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor)
+                    encoder?.endEncoding()
                 }
 
-                // Render content
-                renderer?.render(in: view, with: commandBuffer)
-
-                commandBuffer.present(drawable)
+                if let drawable = view.currentDrawable {
+                    commandBuffer.present(drawable)
+                }
                 commandBuffer.commit()
             }
         }

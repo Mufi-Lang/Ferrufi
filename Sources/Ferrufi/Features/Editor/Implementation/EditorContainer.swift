@@ -42,6 +42,11 @@ public final class EditorContainerHost: NSObject, ObservableObject, EditorHost {
         }
     }
 
+    @Published public var mufiOutput: String = ""
+    @Published public var mufiExitStatus: UInt8 = 0
+    @Published public var mufiExecutionTime: TimeInterval? = nil
+    @Published public var showTerminal: Bool = false
+
     // Toolbar target (hidden backing NSTextView used for toolbar/responder routing).
     // We keep a lightweight, non-visible NSTextView instance that toolbars and responder
     // actions can target when the visible editor is not the first responder.
@@ -241,35 +246,40 @@ public final class EditorContainerHost: NSObject, ObservableObject, EditorHost {
 public struct EditorContainer: View {
 
     // Host drives behavior and implements EditorHost
-    @StateObject private var host: EditorContainerHost
+    @ObservedObject public var host: EditorContainerHost
     // Core editor adapter that will be bound to the host.document when available.
     @StateObject private var core: EditorCore = EditorCore()
+    // Metal background renderer
+    @StateObject private var bgRenderer: EditorBackgroundRenderer
+    // Metal minimap renderer
+    @StateObject private var minimapRenderer: MinimapRenderer
     // Propagate real environment objects into the EditorCoreView (injected by callers)
     @EnvironmentObject private var themeManager: ThemeManager
     @EnvironmentObject private var ferrufiApp: FerrufiApp
     @State private var internalContent: String = ""
 
     // Allow embedding code to optionally provide an initial document
-    public init(document: EditorDocument? = nil) {
-        let h = EditorContainerHost()
-        if let doc = document {
-            h.open(document: doc)
-            // Default to split view for markdown
-            if doc.fileExtension == "md" {
-                h.viewMode = .split
-            }
+    public init(host: EditorContainerHost) {
+        self.host = host
+        
+        // Initialize Metal renderers if device and library are available
+        if let device = MTLCreateSystemDefaultDevice(),
+           let queue = device.makeCommandQueue(),
+           MetalDeviceManager.shared.isLibraryLoaded {
+            _bgRenderer = StateObject(wrappedValue: EditorBackgroundRenderer(device: device, commandQueue: queue))
+            _minimapRenderer = StateObject(wrappedValue: MinimapRenderer(device: device, commandQueue: queue))
+        } else {
+            // Provide dummy renderers to satisfy StateObject requirements without crashing
+            let device = MTLCreateSystemDefaultDevice() ?? MetalDeviceManager.shared.device!
+            let queue = device.makeCommandQueue() ?? MetalDeviceManager.shared.commandQueue!
+            _bgRenderer = StateObject(wrappedValue: EditorBackgroundRenderer(device: device, commandQueue: queue))
+            _minimapRenderer = StateObject(wrappedValue: MinimapRenderer(device: device, commandQueue: queue))
         }
-        _host = StateObject(wrappedValue: h)
     }
 
     public var body: some View {
-        VStack(spacing: 0) {
-            // Optional: Header/Toolbar for mode selection
-            modePicker
-            
-            GeometryReader { proxy in
-                mainContent
-            }
+        GeometryReader { proxy in
+            mainContent
         }
         .onReceive(host.documentDidChangePublisher) { _ in
             // Bind EditorCore whenever host document changes (publisher-driven).
@@ -295,43 +305,6 @@ public struct EditorContainer: View {
         }
     }
 
-    private var modePicker: some View {
-        HStack(spacing: 0) {
-            Spacer()
-            
-            HStack(spacing: 2) {
-                ModeButton(mode: .editorOnly, current: $host.viewMode, icon: "doc.text")
-                ModeButton(mode: .split, current: $host.viewMode, icon: "square.split.2x1")
-                ModeButton(mode: .previewOnly, current: $host.viewMode, icon: "eye")
-            }
-            .padding(4)
-            .background(Color(NSColor.controlBackgroundColor).opacity(0.5))
-            .cornerRadius(8)
-            .padding(8)
-        }
-        .background(Color(NSColor.windowBackgroundColor))
-    }
-
-    struct ModeButton: View {
-        let mode: EditorViewMode
-        @Binding var current: EditorViewMode
-        let icon: String
-        @EnvironmentObject var themeManager: ThemeManager
-        
-        var body: some View {
-            Button(action: { current = mode }) {
-                Image(systemName: icon)
-                    .font(.system(size: 12, weight: .medium))
-                    .frame(width: 28, height: 22)
-                    .background(current == mode ? themeManager.currentTheme.colors.accent.opacity(0.15) : Color.clear)
-                    .foregroundColor(current == mode ? themeManager.currentTheme.colors.accent : themeManager.currentTheme.colors.foregroundSecondary)
-                    .cornerRadius(5)
-            }
-            .buttonStyle(.plain)
-            .help(mode.rawValue)
-        }
-    }
-
     @ViewBuilder
     private var mainContent: some View {
         switch host.viewMode {
@@ -340,7 +313,7 @@ public struct EditorContainer: View {
         case .previewOnly:
             previewPane
         case .split:
-            HSplitView {
+            HStack(spacing: 0) {
                 editorPane
                 previewPane
             }
@@ -349,19 +322,82 @@ public struct EditorContainer: View {
 
     // MARK: - Subviews (placeholders to be replaced by real adapters)
 
-    private var editorPane: some View {
-        VStack(spacing: 0) {
-            // Real editor surface: EditorCoreView bound to the EditorCore adapter.
-            EditorCoreView(core: core)
-                .environmentObject(themeManager)
-                .environmentObject(ferrufiApp)
-                .environmentObject(Settings.shared)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
-        .background(Color(NSColor.textBackgroundColor))
-    }
+                private var editorPane: some View {
 
-    private var previewPane: some View {
+                    VStack(spacing: 0) {
+
+                        // Real editor surface: EditorCoreView bound to the EditorCore adapter.
+
+                        EditorCoreView(core: core)
+
+                            .environmentObject(themeManager)
+
+                            .environmentObject(ferrufiApp)
+
+                            .environmentObject(Settings.shared)
+
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                            .background(
+
+                                ZStack {
+
+                                    if Settings.shared.metalAccelerationEnabled && MetalDeviceManager.shared.isLibraryLoaded {
+
+                                        MetalView(renderer: bgRenderer)
+
+                                            .onAppear {
+
+                                                bgRenderer.accentColor = themeManager.currentTheme.colors.accent
+
+                                            }
+
+                                            .onChange(of: themeManager.currentTheme.colors.accent) { _, newColor in
+
+                                                bgRenderer.accentColor = newColor
+
+                                            }
+
+                                    }
+
+                                }
+
+                            )
+
+                        
+
+                        // Terminal/Output Area
+
+                        if host.showTerminal {
+
+                            MufiTerminalView(
+
+                                output: host.mufiOutput,
+
+                                exitStatus: host.mufiExitStatus,
+
+                                executionTime: host.mufiExecutionTime,
+
+                                onClear: { host.mufiOutput = "" },
+
+                                onClose: { withAnimation { host.showTerminal = false } }
+
+                            )
+
+                            .frame(height: 200)
+
+                            .transition(.move(edge: .bottom))
+
+                        }
+
+                    }
+
+                }
+
+            
+
+        
+        private var previewPane: some View {
         VStack(spacing: 0) {
             if host.document != nil {
                 WebView(htmlContent: MarkdownParser.shared.parse(internalContent, theme: themeManager.currentTheme.colors))
@@ -385,11 +421,16 @@ public struct EditorContainer: View {
             var id: UUID = UUID()
             var text: String = "# Hello\n\nSample content"
             var fileURL: URL? = nil
-            var fileExtension: String = ".mufi"
+            var fileExtension: String = "mufi"
         }
 
         static var previews: some View {
-            EditorContainer(document: DummyDoc())
+            let host = EditorContainerHost()
+            host.open(document: DummyDoc())
+            return EditorContainer(host: host)
+                .environmentObject(FerrufiApp())
+                .environmentObject(ThemeManager.shared)
+                .environmentObject(Settings.shared)
                 .frame(width: 900, height: 600)
         }
     }

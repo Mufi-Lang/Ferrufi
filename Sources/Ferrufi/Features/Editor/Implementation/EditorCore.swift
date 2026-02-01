@@ -246,8 +246,8 @@ public struct EditorCoreView: View {
     }
 
     public var body: some View {
-        // Force all files to be treated as Mufi (legacy note-format support removed)
-        let fileType: EditorFileType = .mufi
+        // Determine file type from document
+        let fileType: EditorFileType = (core.document?.fileExtension.lowercased() == "md") ? .markdown : .mufi
 
         // UnifiedEditor is the existing SwiftUI wrapper around the NSTextView implementation.
         UnifiedEditor(
@@ -277,6 +277,7 @@ public struct EditorCoreView: View {
                 }
             }
         )
+        .background(Color.clear)
         // Ensure monospaced font usage for editor as discussed in the consolidation plan.
         .environmentObject(ThemeManager.shared)
         .environmentObject(Settings.shared)

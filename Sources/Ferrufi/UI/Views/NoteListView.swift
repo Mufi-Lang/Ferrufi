@@ -548,7 +548,9 @@ struct NoteListView_Samples: PreviewProvider {
                 .environmentObject(FerrufiApp())
                 .environmentObject(NavigationModel())
         } detail: {
-            EditorContainer(document: NoteWrapper(note: Note.sample, ferrufiApp: FerrufiApp()))
+            let host = EditorContainerHost()
+            host.open(document: NoteWrapper(note: Note.sample, ferrufiApp: FerrufiApp()))
+            return EditorContainer(host: host)
                 .environmentObject(FerrufiApp())
                 .environmentObject(ThemeManager.shared)
                 .environmentObject(Settings.shared)
