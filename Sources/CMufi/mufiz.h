@@ -32,6 +32,35 @@ extern "C" {
 #define MUFIZ_ERR_NOT_INITIALIZED -2
 #define MUFIZ_ERR_GENERIC -3
 
+// LSP Support Types
+typedef enum {
+    MUFIZ_DIAGNOSTIC_ERROR = 1,
+    MUFIZ_DIAGNOSTIC_WARNING = 2
+} MufizDiagnosticSeverity;
+
+typedef struct {
+    uint32_t line;
+    uint32_t column;
+} MufizPosition;
+
+typedef struct {
+    MufizPosition start;
+    MufizPosition end;
+} MufizRange;
+
+typedef struct {
+    MufizRange range;
+    MufizDiagnosticSeverity severity;
+    const char* message;
+} MufizDiagnostic;
+
+typedef struct {
+    const char* name;
+    const char* type_name;
+    const char* doc_string;
+    uint8_t kind; // 1=Variable, 2=Function, 3=Struct
+} MufizCompletionItem;
+
 // Function prototypes
 
 MUFIZ_API int32_t mufiz_init(bool enable_leak_detection, bool enable_tracking, bool enable_safety);
@@ -41,6 +70,16 @@ MUFIZ_API bool mufiz_has_memory_leaks(void);
 MUFIZ_API void mufiz_print_memory_stats(void);
 MUFIZ_API char * mufiz_strdup(const char * src);
 MUFIZ_API void mufiz_free_cstring(char * ptr);
+
+// Analysis API
+MUFIZ_API void* mufiz_create_analysis_context(void);
+MUFIZ_API void mufiz_destroy_analysis_context(void* context);
+MUFIZ_API bool mufiz_update_source(void* context, const char* filename, const char* source);
+MUFIZ_API int mufiz_get_diagnostic_count(void* context);
+MUFIZ_API MufizDiagnostic* mufiz_get_diagnostic(void* context, int index);
+MUFIZ_API int mufiz_compute_completions(void* context, uint32_t line, uint32_t column);
+MUFIZ_API MufizCompletionItem* mufiz_get_completion_item(void* context, int index);
+MUFIZ_API MufizCompletionItem* mufiz_get_hover_info(void* context, uint32_t line, uint32_t column);
 
 #ifdef __cplusplus
 }

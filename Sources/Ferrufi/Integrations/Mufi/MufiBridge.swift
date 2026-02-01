@@ -158,6 +158,96 @@ public actor MufiBridge {
         mufiz_print_memory_stats()
     }
 
+    // MARK: - Analysis API (LSP Support)
+
+    private var analysisContext: UnsafeMutableRawPointer?
+
+    private func ensureAnalysisContext() -> UnsafeMutableRawPointer? {
+        if analysisContext == nil {
+            analysisContext = mufiz_create_analysis_context()
+        }
+        return analysisContext
+    }
+
+    /// Update the source code in the internal context and trigger re-parsing.
+    /// Returns true if parsing was successful (no fatal errors).
+    public func updateSource(filename: String, source: String) -> Bool {
+        guard initialized, let context = ensureAnalysisContext() else { return false }
+        
+        let (success, _) = Self.captureStdoutAndStderr {
+            filename.withCString { cFilename in
+                source.withCString { cSource in
+                    mufiz_update_source(context, cFilename, cSource)
+                }
+            }
+        }
+        return success
+    }
+
+    /// Get diagnostics for the current context.
+    public func getDiagnostics() -> [MufiDiagnostic] {
+        guard initialized, let context = analysisContext else { return [] }
+        let count = mufiz_get_diagnostic_count(context)
+        var diagnostics: [MufiDiagnostic] = []
+        
+        for i in 0..<count {
+            if let diag = mufiz_get_diagnostic(context, Int32(i)) {
+                let range = MufiRange(
+                    start: MufiPosition(line: diag.pointee.range.start.line, column: diag.pointee.range.start.column),
+                    end: MufiPosition(line: diag.pointee.range.end.line, column: diag.pointee.range.end.column)
+                )
+                let severity = MufiDiagnosticSeverity(rawValue: Int(diag.pointee.severity.rawValue)) ?? .error
+                let message = String(cString: diag.pointee.message)
+                
+                diagnostics.append(MufiDiagnostic(range: range, severity: severity, message: message))
+            }
+        }
+        
+        return diagnostics
+    }
+
+    /// Compute and retrieve completions at a specific position.
+    public func getCompletions(line: UInt32, column: UInt32) -> [MufiCompletionItem] {
+        guard initialized, let context = ensureAnalysisContext() else { return [] }
+        let count = mufiz_compute_completions(context, line, column)
+        var completions: [MufiCompletionItem] = []
+        
+        for i in 0..<count {
+            if let item = mufiz_get_completion_item(context, Int32(i)) {
+                let kind = MufiCompletionKind(rawValue: item.pointee.kind) ?? .variable
+                let name = String(cString: item.pointee.name)
+                let typeName = item.pointee.type_name != nil ? String(cString: item.pointee.type_name!) : nil
+                let docString = item.pointee.doc_string != nil ? String(cString: item.pointee.doc_string!) : nil
+                
+                completions.append(MufiCompletionItem(name: name, typeName: typeName, docString: docString, kind: kind))
+            }
+        }
+        
+        return completions
+    }
+
+    /// Get hover information at a specific position.
+    public func getHoverInfo(line: UInt32, column: UInt32) -> MufiCompletionItem? {
+        guard initialized, let context = ensureAnalysisContext() else { return nil }
+        if let item = mufiz_get_hover_info(context, line, column) {
+            let kind = MufiCompletionKind(rawValue: item.pointee.kind) ?? .variable
+            let name = String(cString: item.pointee.name)
+            let typeName = item.pointee.type_name != nil ? String(cString: item.pointee.type_name!) : nil
+            let docString = item.pointee.doc_string != nil ? String(cString: item.pointee.doc_string!) : nil
+            
+            return MufiCompletionItem(name: name, typeName: typeName, docString: docString, kind: kind)
+        }
+        return nil
+    }
+
+    /// Reset the internal analysis context.
+    public func resetAnalysisContext() {
+        if let context = analysisContext {
+            mufiz_destroy_analysis_context(context)
+            analysisContext = nil
+        }
+    }
+
     /// If you need to interoperate with C-allocated strings returned by the runtime,
     /// use this helper to duplicate and auto-free the C string into a Swift String.
     /// This properly manages memory allocated by the Mufi runtime.

@@ -257,6 +257,7 @@ public struct EditorContainer: View {
     @EnvironmentObject private var themeManager: ThemeManager
     @EnvironmentObject private var ferrufiApp: FerrufiApp
     @State private var internalContent: String = ""
+    @State private var selectedTerminalTab: Int = 0 // 0 = Output, 1 = Problems
 
     // Allow embedding code to optionally provide an initial document
     public init(host: EditorContainerHost) {
@@ -385,32 +386,76 @@ public struct EditorContainer: View {
                         
 
                         // Terminal/Output Area
-
                         if host.showTerminal {
-
-                            MufiTerminalView(
-
-                                output: host.mufiOutput,
-
-                                exitStatus: host.mufiExitStatus,
-
-                                executionTime: host.mufiExecutionTime,
-
-                                onClear: { host.mufiOutput = "" },
-
-                                onClose: { withAnimation { host.showTerminal = false } }
-
-                            )
-
+                            VStack(spacing: 0) {
+                                // Mini Tab Bar
+                                HStack(spacing: 16) {
+                                    TerminalTabButton(title: "Output", isSelected: selectedTerminalTab == 0) {
+                                        selectedTerminalTab = 0
+                                    }
+                                    
+                                    TerminalTabButton(title: "Problems", isSelected: selectedTerminalTab == 1) {
+                                        selectedTerminalTab = 1
+                                    }
+                                    
+                                    Spacer()
+                                    
+                                    Button(action: { withAnimation { host.showTerminal = false } }) {
+                                        Image(systemName: "xmark")
+                                            .font(.system(size: 10, weight: .bold))
+                                    }
+                                    .buttonStyle(.plain)
+                                    .foregroundColor(themeManager.currentTheme.colors.foregroundTertiary)
+                                }
+                                .padding(.horizontal, 12)
+                                .frame(height: 28)
+                                .background(themeManager.currentTheme.colors.backgroundSecondary)
+                                
+                                Divider()
+                                
+                                if selectedTerminalTab == 0 {
+                                    MufiTerminalView(
+                                        output: host.mufiOutput,
+                                        exitStatus: host.mufiExitStatus,
+                                        executionTime: host.mufiExecutionTime,
+                                        onClear: { host.mufiOutput = "" },
+                                        onClose: { withAnimation { host.showTerminal = false } }
+                                    )
+                                } else {
+                                    ProblemsListView()
+                                        .environmentObject(themeManager)
+                                }
+                            }
                             .frame(height: 200)
-
+                            .background(themeManager.currentTheme.colors.background)
                             .transition(.move(edge: .bottom))
-
                         }
-
                     }
-
                 }
+
+    struct TerminalTabButton: View {
+        let title: String
+        let isSelected: Bool
+        let action: () -> Void
+        @EnvironmentObject var themeManager: ThemeManager
+        
+        var body: some View {
+            Button(action: action) {
+                VStack(spacing: 0) {
+                    Spacer()
+                    Text(title)
+                        .font(.system(size: 11, weight: isSelected ? .bold : .medium))
+                        .foregroundColor(isSelected ? themeManager.currentTheme.colors.accent : themeManager.currentTheme.colors.foregroundTertiary)
+                    Spacer()
+                    // Active indicator
+                    Rectangle()
+                        .frame(height: 2)
+                        .foregroundColor(isSelected ? themeManager.currentTheme.colors.accent : .clear)
+                }
+            }
+            .buttonStyle(.plain)
+        }
+    }
 
             
 

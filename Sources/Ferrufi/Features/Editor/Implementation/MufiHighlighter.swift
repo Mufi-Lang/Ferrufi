@@ -17,6 +17,7 @@ public final class MufiHighlighter {
     private enum TokenType {
         case keyword
         case type
+        case stdlib
         case string
         case comment
         case number
@@ -56,9 +57,13 @@ public final class MufiHighlighter {
         let text = storage.string
         
         // 3. Apply highlighting patterns
-        // Keywords
-        apply(pattern: #"\b(var|let|fn|func|if|else|while|for|return|break|continue|in|import|import_dynamic|extern|as|is|nil|true|false|class|new|print|self|super|type|interface|impl|match|case|pub|priv|mut)\b"#, 
+        // Keywords (Updated to match mufiz_keywords.json)
+        apply(pattern: #"\b(and|break|case|class|const|continue|each|else|end|false|for|foreach|fun|if|in|item|let|nil|or|print|return|self|super|switch|true|var|while)\b"#, 
               type: .keyword, in: storage, text: text, range: highlightRange)
+        
+        // Standard Library Functions
+        apply(pattern: #"\b(what_is|ln|log2|log10|pi|exp|sin|cos|tan|asin|acos|atan|complex|abs|phase|rand|randn|pow|sqrt|ceil|floor|round|max|min|print|printf|println|input|str|int|double|bool_fn|type_of|is_nil|is_string|is_number|is_bool|assert|exit|panic|format|equals|hash|clone|identity|linked_list|hash_table|fvec|push|pop|push_front|pop_front|len|get|set|contains|clear|range|range_to_array|put|pairs|is_empty|nth|linspace|insert|remove|slice|merge|search|sort|splice|sum|mean|vari|stddev|std_alias|minl|maxl|reverse|eye|ones|zeros|transpose|det|inv|trace|size|norm|matrix_get|matrix_set|flatten|horzcat|vertcat|matrix_create|reshape|rref|rank|json_parse|json_stringify|json_is_valid|json_pretty|json_get|json_set|serde_serialize|serde_deserialize|serde_to_json|serde_from_json|serde_to_toml|serde_from_toml|serde_to_yaml|serde_from_yaml|serde_detect_format|serde_validate|create_file|write_file|read_file|delete_file|create_dir|delete_dir|file_exists|dir_exists|file_size|copy_file|now|now_ns|now_ms|now_us|sleep|sleep_ms|sleep_us|time_diff|http_get|http_post|http_put|http_delete|set_content_type|set_auth|parse_url|url_encode|url_decode|open_url)\b"#,
+              type: .stdlib, in: storage, text: text, range: highlightRange)
         
         // Built-in Types
         apply(pattern: #"\b(Int|Float|String|Bool|Array|Dict|Map|Any|Void|Vector|Matrix|Complex)\b"#, 
@@ -67,10 +72,6 @@ public final class MufiHighlighter {
         // Numbers
         apply(pattern: #"\b([0-9]+(\.[0-9]+)?)\b"#,
               type: .number, in: storage, text: text, range: highlightRange)
-        
-        // Constants (UPPER_CASE)
-        apply(pattern: #"\b([A-Z_][A-Z0-9_]*)\b"#,
-              type: .constant, in: storage, text: text, range: highlightRange)
         
         // Function calls
         apply(pattern: #"([a-zA-Z_][a-zA-Z0-9_]*)\s*(?=\()"#,
@@ -105,6 +106,10 @@ public final class MufiHighlighter {
                 .font: boldFont
             ],
             .type: [
+                .foregroundColor: NSColor(theme.colors.accentSecondary),
+                .font: baseFont
+            ],
+            .stdlib: [
                 .foregroundColor: NSColor(theme.colors.accentSecondary),
                 .font: baseFont
             ],

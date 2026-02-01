@@ -268,6 +268,14 @@ public struct EditorCoreView: View {
                 core.content = new
                 if let doc = core.document {
                     doc.text = new
+                    
+                    // Notify LSP service of change (if it's a Mufi file)
+                    if doc.fileExtension.lowercased() == "mufi" {
+                        MufiLSPService.shared.documentChanged(
+                            filename: doc.fileURL?.lastPathComponent ?? "Untitled.mufi",
+                            source: new
+                        )
+                    }
                 }
             },
             onSave: {

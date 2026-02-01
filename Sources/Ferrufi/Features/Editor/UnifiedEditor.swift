@@ -107,7 +107,7 @@ public struct UnifiedEditor: View {
                 }
             }
         }
-        .onChange(of: fileType) { newMode in
+        .onChange(of: fileType) { oldMode, newMode in
             // When switching into Mufi mode, lock the forced monospaced font and size so
             // the raw editor remains identical to the Mufi script editor. When switching
             // away, clear the forced name so user preferences can take effect.
@@ -158,6 +158,7 @@ private struct EditorContainerView: NSViewRepresentable {
     @EnvironmentObject private var themeManager: ThemeManager
     @EnvironmentObject private var ferrufiApp: FerrufiApp
     @EnvironmentObject private var settings: Settings
+    @ObservedObject private var lspService = MufiLSPService.shared
 
     func makeNSView(context: Context) -> NSScrollView {
         let scrollView = NSScrollView()
@@ -340,6 +341,13 @@ private struct EditorContainerView: NSViewRepresentable {
         // Update coordinator state
         context.coordinator.textView = textView
         context.coordinator.themeManager = themeManager
+        
+        // Apply diagnostics if in Mufi mode
+        if fileType == .mufi {
+            textView.setDiagnostics(lspService.diagnostics)
+        } else {
+            textView.setDiagnostics([])
+        }
     }
 
     func makeCoordinator() -> Coordinator {
@@ -417,6 +425,8 @@ private struct EditorContainerView: NSViewRepresentable {
         var formatterObserversInstalled = false
         var coordinatorCancellables = Set<AnyCancellable>()
         // Legacy persistent output queue removed; outputs are handled inline by editor components.
+        
+        private var completionWindow: NSWindow?
 
         init(
             text: Binding<String>, isEditing: Binding<Bool>, onTextChange: ((String) -> Void)?,
@@ -426,6 +436,123 @@ private struct EditorContainerView: NSViewRepresentable {
             self.isEditingBinding = isEditing
             self.onTextChange = onTextChange
             self.onSave = onSave
+            
+            super.init()
+            setupCompletionObservers()
+        }
+        
+        private func setupCompletionObservers() {
+            let lsp = MufiLSPService.shared
+            
+            lsp.$isCompletionActive
+                .receive(on: RunLoop.main)
+                .sink { [weak self] active in
+                    if active {
+                        self?.showCompletionWindow()
+                    } else {
+                        self?.hideCompletionWindow()
+                    }
+                }
+                .store(in: &coordinatorCancellables)
+            
+            lsp.$completionItems
+                .receive(on: RunLoop.main)
+                .sink { [weak self] _ in
+                    self?.updateCompletionWindow()
+                }
+                .store(in: &coordinatorCancellables)
+                
+            lsp.$selectedCompletionIndex
+                .receive(on: RunLoop.main)
+                .sink { [weak self] _ in
+                    self?.updateCompletionWindow()
+                }
+                .store(in: &coordinatorCancellables)
+        }
+        
+        private func showCompletionWindow() {
+            guard let textView = textView, let window = textView.window else { return }
+            let lsp = MufiLSPService.shared
+            
+            if lsp.completionItems.isEmpty {
+                hideCompletionWindow()
+                return
+            }
+            
+            if completionWindow == nil {
+                let win = NSWindow(contentRect: .zero, styleMask: [.borderless], backing: .buffered, defer: false)
+                win.backgroundColor = .clear
+                win.hasShadow = true
+                win.isOpaque = false
+                win.level = .popUpMenu
+                completionWindow = win
+                window.addChildWindow(win, ordered: .above)
+            }
+            
+            updateCompletionWindow()
+            
+            // Position precisely at cursor using layoutManager
+            let selectedRange = textView.selectedRange()
+            guard let layoutManager = textView.layoutManager,
+                  let _ = textView.textContainer else { return }
+            
+            let glyphIndex = layoutManager.glyphIndexForCharacter(at: selectedRange.location)
+            let lineRect = layoutManager.lineFragmentRect(forGlyphAt: glyphIndex, effectiveRange: nil)
+            let location = layoutManager.location(forGlyphAt: glyphIndex)
+            
+            // Local rect
+            let origin = textView.textContainerOrigin
+            let cursorLocalRect = NSRect(
+                x: origin.x + location.x,
+                y: origin.y + lineRect.origin.y,
+                width: 1,
+                height: lineRect.height
+            )
+            
+            // Screen coords
+            let windowRect = textView.convert(cursorLocalRect, to: nil)
+            let screenRect = window.convertToScreen(windowRect)
+            
+            let winWidth: CGFloat = 320
+            let winHeight: CGFloat = min(CGFloat(lsp.completionItems.count * 28 + 8), 240)
+            
+            // Position exactly below current line
+            let winFrame = NSRect(
+                x: screenRect.origin.x,
+                y: screenRect.origin.y - winHeight,
+                width: winWidth,
+                height: winHeight
+            )
+            
+            completionWindow?.setFrame(winFrame, display: true)
+            completionWindow?.orderFront(nil)
+        }
+        
+        private func updateCompletionWindow() {
+            guard let win = completionWindow else { return }
+            let lsp = MufiLSPService.shared
+            let theme = themeManager ?? ThemeManager.shared
+            
+            let contentView = MufiCompletionView(
+                items: lsp.completionItems,
+                selectedIndex: lsp.selectedCompletionIndex,
+                onItemSelected: { item in
+                    (self.textView as? UnifiedTextView)?.performCompletion(item)
+                }
+            )
+            .environmentObject(theme)
+            
+            let hostingView = NSHostingView(rootView: contentView)
+            hostingView.frame = NSRect(x: 0, y: 0, width: win.frame.width, height: win.frame.height)
+            win.contentView = hostingView
+        }
+        
+        private func hideCompletionWindow() {
+            if let win = completionWindow {
+                win.parent?.removeChildWindow(win)
+                win.orderOut(nil)
+                completionWindow = nil
+            }
         }
 
         func installFormattingObservers() {
@@ -512,14 +639,88 @@ private class UnifiedTextView: NSTextView {
     }
 
     @MainActor private func setupCommon() {
-        // Default settings
+        // Default settings for code editing
         isRichText = false
         allowsUndo = true
-        isContinuousSpellCheckingEnabled = true
+        isContinuousSpellCheckingEnabled = false
+        
+        // Disable aggressive macOS smart features
+        isAutomaticDashSubstitutionEnabled = false
+        isAutomaticQuoteSubstitutionEnabled = false
+        isAutomaticTextReplacementEnabled = false
+        isAutomaticSpellingCorrectionEnabled = false
+        isAutomaticLinkDetectionEnabled = false
+        isAutomaticDataDetectionEnabled = false
+        
+        // Turn off all smart insertions
+        enabledTextCheckingTypes = 0
+        
+        // Enable mouse tracking for hover hints
+        let options: NSTrackingArea.Options = [.activeInKeyWindow, .mouseMoved, .mouseEnteredAndExited]
+        let trackingArea = NSTrackingArea(rect: self.bounds, options: options, owner: self, userInfo: nil)
+        self.addTrackingArea(trackingArea)
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        for area in self.trackingAreas {
+            self.removeTrackingArea(area)
+        }
+        let options: NSTrackingArea.Options = [.activeInKeyWindow, .mouseMoved, .mouseEnteredAndExited]
+        let trackingArea = NSTrackingArea(rect: self.bounds, options: options, owner: self, userInfo: nil)
+        self.addTrackingArea(trackingArea)
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        super.mouseMoved(with: event)
+        
+        let point = self.convert(event.locationInWindow, from: nil)
+        
+        // Ensure point is within text container
+        guard let container = textContainer, let lm = layoutManager else { return }
+        let charIndex = lm.characterIndex(for: point, in: container, fractionOfDistanceBetweenInsertionPoints: nil)
+        
+        guard let ts = textStorage else { return }
+        
+        // 1. Check diagnostics
+        let diagnostics = MufiLSPService.shared.diagnostics
+        for diag in diagnostics {
+            let range = ts.nsRange(from: diag.range)
+            if NSLocationInRange(charIndex, range) {
+                if self.toolTip != diag.message {
+                    self.toolTip = diag.message
+                }
+                return
+            }
+        }
+        
+        // 2. Check native hover (LSP)
+        if mode == .mufi {
+            let pos = ts.mufiPosition(from: charIndex)
+            Task {
+                if let info = await MufiLSPService.shared.getHoverInfo(line: pos.line, column: pos.column) {
+                    await MainActor.run {
+                        let tip = "\(info.name): \(info.typeName ?? "unknown")\n\(info.docString ?? "")"
+                        if self.toolTip != tip {
+                            self.toolTip = tip
+                        }
+                    }
+                } else {
+                    await MainActor.run {
+                        if self.toolTip != nil {
+                            self.toolTip = nil
+                        }
+                    }
+                }
+            }
+        } else {
+            self.toolTip = nil
+        }
     }
 
     /// Configure the view for a specific mode.
     func setupForMode(_ fileType: EditorFileType) {
+        if self.mode == fileType { return }
         self.mode = fileType
         
         switch fileType {
@@ -527,17 +728,40 @@ private class UnifiedTextView: NSTextView {
             // All modes use script/plain editing behavior; preview/highlighting features removed.
             isAutomaticQuoteSubstitutionEnabled = false
             isAutomaticDashSubstitutionEnabled = false
-            isAutomaticSpellingCorrectionEnabled = false
             isAutomaticTextReplacementEnabled = false
+            isAutomaticSpellingCorrectionEnabled = false
         case .markdown:
             isAutomaticQuoteSubstitutionEnabled = true
             isAutomaticDashSubstitutionEnabled = true
-            isAutomaticSpellingCorrectionEnabled = true
             isAutomaticTextReplacementEnabled = false
+            isAutomaticSpellingCorrectionEnabled = true
         }
         
-        // Ensure attributes are cleared (no document highlighting).
+        // Ensure attributes are cleared only on mode change
         clearAllAttributes()
+    }
+
+    /// Update diagnostic squiggles based on LSP results
+    @MainActor func setDiagnostics(_ diagnostics: [MufiDiagnostic]) {
+        guard let lm = layoutManager, let ts = textStorage else { return }
+        
+        // Clear existing diagnostic attributes
+        let fullRange = NSRange(location: 0, length: ts.length)
+        lm.removeTemporaryAttribute(.underlineStyle, forCharacterRange: fullRange)
+        lm.removeTemporaryAttribute(.underlineColor, forCharacterRange: fullRange)
+        
+        for diagnostic in diagnostics {
+            let range = ts.nsRange(from: diagnostic.range)
+            if range.location == NSNotFound || range.location + range.length > ts.length { continue }
+            
+            let color = (diagnostic.severity == .error) ? NSColor.systemRed : NSColor.systemOrange
+            
+            // Apply thick wavy/dotted underline for errors
+            lm.addTemporaryAttribute(.underlineStyle, 
+                                   value: NSUnderlineStyle.single.rawValue | NSUnderlineStyle.patternDot.rawValue, 
+                                   forCharacterRange: range)
+            lm.addTemporaryAttribute(.underlineColor, value: color, forCharacterRange: range)
+        }
     }
 
     // Apply syntax highlighting to the entire document
@@ -576,10 +800,8 @@ private class UnifiedTextView: NSTextView {
                 mufiHighlighter = MufiHighlighter(theme: theme, baseFontName: baseFontName, baseSize: baseSize)
             }
             
-            // Initialize compute highlighter if not present
-            if computeHighlighter == nil {
-                computeHighlighter = MufiComputeHighlighter(theme: theme)
-            }
+            // GPU highlighter disabled to prevent keyword conflicts
+            computeHighlighter = nil
         case .markdown:
             if let highlighter = markdownHighlighter {
                 highlighter.updateConfig(theme: theme, baseFontName: baseFontName, baseSize: baseSize)
@@ -601,9 +823,9 @@ private class UnifiedTextView: NSTextView {
             if shouldHighlightWhole {
                 applyHighlightingWhole()
                 shouldHighlightWhole = false
-            } else {
-                applyHighlightingIncremental()
             }
+        } else {
+            applyHighlightingIncremental()
         }
     }
     
@@ -630,18 +852,221 @@ private class UnifiedTextView: NSTextView {
         }
     }
 
-    // Toolbar formatting helper removed.
-
-    // Toolbar formatting helper removed.
-
-    // Toolbar formatting helper removed.
-
-    // Override keyDown: markdown-specific behaviors removed; default system handling used.
+    // Override keyDown: handle Enter and Completion navigation
     override func keyDown(with event: NSEvent) {
+        let lsp = MufiLSPService.shared
+        
+        if lsp.isCompletionActive {
+            switch event.keyCode {
+            case 125: // Down
+                lsp.moveCompletionSelectionDown()
+                return
+            case 126: // Up
+                lsp.moveCompletionSelectionUp()
+                return
+            case 36, 48: // Enter or Tab
+                if let selected = lsp.selectedCompletion {
+                    performCompletion(selected)
+                }
+                return
+            case 53: // Escape
+                lsp.cancelCompletion()
+                return
+            default:
+                break
+            }
+        }
+        
+        // Handle Enter for auto-indentation
+        if event.keyCode == 36 {
+            handleEnterKey()
+            return
+        }
+        
         super.keyDown(with: event)
+        
+        // Trigger completion on alpha-numeric or dot
+        if mode == .mufi {
+            handleCompletionTrigger(event)
+        }
+    }
+    
+    private func handleEnterKey() {
+        let selectedRange = self.selectedRange()
+        let nsString = self.string as NSString
+        
+        // Find current line
+        let lineRange = nsString.lineRange(for: NSRange(location: selectedRange.location, length: 0))
+        let currentLine = nsString.substring(with: lineRange)
+        
+        // Get indentation
+        var indentation = ""
+        for char in currentLine {
+            if char == " " || char == "\t" {
+                indentation.append(char)
+            } else {
+                break
+            }
+        }
+        
+        // Extra indent after block start (detect { or :)
+        let trimmed = currentLine.trimmingCharacters(in: .whitespacesAndNewlines)
+        var extraIndent = ""
+        if trimmed.hasSuffix("{}") || trimmed.hasSuffix(":") {
+            extraIndent = "    "
+        }
+        
+        let replacement = "\n" + indentation + extraIndent
+        if self.shouldChangeText(in: selectedRange, replacementString: replacement) {
+            self.insertText(replacement, replacementRange: selectedRange)
+            self.didChangeText()
+        }
+    }
+    
+    private func handleCompletionTrigger(_ event: NSEvent) {
+        guard let chars = event.characters, !chars.isEmpty else { return }
+        let char = chars.first!
+        
+        // Trigger on letters, numbers, underscore, or dot
+        if char.isLetter || char.isNumber || char == "_" || char == "." {
+            let offset = self.selectedRange().location
+            let pos = self.textStorage?.mufiPosition(from: offset) ?? MufiPosition(line: 1, column: 1)
+            let prefix = getCurrentWordPrefix()
+            MufiLSPService.shared.triggerCompletions(line: pos.line, column: pos.column, prefix: prefix)
+        } else if char.isWhitespace || event.keyCode == 51 || event.keyCode == 53 { // Space, Delete, Esc
+            MufiLSPService.shared.cancelCompletion()
+        }
+    }
+    
+    private func getCurrentWordPrefix() -> String {
+        guard let ts = textStorage else { return "" }
+        let offset = self.selectedRange().location
+        let nsString = ts.string as NSString
+        
+        var start = offset
+        while start > 0 {
+            let range = NSRange(location: start - 1, length: 1)
+            let char = nsString.substring(with: range)
+            if char.rangeOfCharacter(from: CharacterSet.alphanumerics.inverted) != nil && char != "." {
+                break
+            }
+            start -= 1
+        }
+        
+        return nsString.substring(with: NSRange(location: start, length: offset - start))
+    }
+    
+    internal func performCompletion(_ item: MufiCompletionItem) {
+        let lsp = MufiLSPService.shared
+        
+        // Find the word prefix to replace
+        let currentOffset = self.selectedRange().location
+        let nsString = self.string as NSString
+        
+        // Search backwards for the start of the current word
+        var wordStart = currentOffset
+        while wordStart > 0 {
+            let range = NSRange(location: wordStart - 1, length: 1)
+            let char = nsString.substring(with: range)
+            if char.rangeOfCharacter(from: CharacterSet.alphanumerics.inverted) != nil && char != "." {
+                break
+            }
+            wordStart -= 1
+        }
+        
+        // If we matched a dot, start after the last dot
+        let rangeForDotSearch = NSRange(location: wordStart, length: currentOffset - wordStart)
+        let wordForDotSearch = nsString.substring(with: rangeForDotSearch)
+        if let dotRange = wordForDotSearch.range(of: ".", options: .backwards) {
+            let dotIndex = wordForDotSearch.distance(from: wordForDotSearch.startIndex, to: dotRange.lowerBound)
+            wordStart += dotIndex + 1
+        }
+        
+        let replacementRange = NSRange(location: wordStart, length: currentOffset - wordStart)
+        
+        if self.shouldChangeText(in: replacementRange, replacementString: item.name) {
+            self.breakUndoCoalescing()
+            self.replaceCharacters(in: replacementRange, with: item.name)
+            self.didChangeText()
+        }
+        
+        lsp.cancelCompletion()
     }
 
     // Markdown-specific special-key handlers (Enter/Tab/Backspace) have been removed.
     // The editor relies on default system behavior and any higher-level formatting
     // commands driven from toolbars or commands are handled via explicit API calls.
+}
+
+// MARK: - LSP Helpers
+extension NSTextStorage {
+    func nsRange(from mufiRange: MufiRange) -> NSRange {
+        let start = offset(from: mufiRange.start)
+        let end = offset(from: mufiRange.end)
+        
+        guard start != NSNotFound, end != NSNotFound, end >= start else {
+            return NSRange(location: NSNotFound, length: 0)
+        }
+        
+        return NSRange(location: start, length: end - start)
+    }
+    
+    private func offset(from pos: MufiPosition) -> Int {
+        let string = self.string as NSString
+        var currentLine: UInt32 = 1
+        var currentOffset = 0
+        
+        // Iterate through lines to find the correct line
+        // Note: This is a simple implementation. For very large files, a line-index map would be better.
+        let lines = string.components(separatedBy: "\n")
+        
+        for line in lines {
+            if currentLine == pos.line {
+                // Found the line, now add the column offset
+                // LSP columns are typically 0-based or 1-based?
+                // Assuming libmufiz uses 1-based lines and 1-based columns based on common patterns.
+                let columnOffset = Int(pos.column) - 1
+                if columnOffset >= 0 && columnOffset <= line.utf16.count {
+                    return currentOffset + columnOffset
+                } else if columnOffset > line.utf16.count {
+                    return currentOffset + line.utf16.count // End of line
+                } else {
+                    return currentOffset
+                }
+            }
+            
+            currentOffset += line.utf16.count + 1 // +1 for the \n
+            currentLine += 1
+        }
+        
+        return NSNotFound
+    }
+    
+    func mufiPosition(from offset: Int) -> MufiPosition {
+        let string = self.string as NSString
+        guard offset <= string.length else { return MufiPosition(line: 1, column: 1) }
+        
+        var lineCount: UInt32 = 1
+        var lastLineOffset = 0
+        
+        string.enumerateSubstrings(in: NSRange(location: 0, length: string.length), options: .byLines) { substring, range, enclosingRange, stop in
+            if offset >= range.location && offset <= range.location + range.length {
+                // Found the line
+                let _ = UInt32(offset - range.location) + 1
+                stop.pointee = true
+                lastLineOffset = -1 // Mark as found
+            } else if offset > range.location + range.length {
+                lineCount += 1
+                lastLineOffset = range.location + range.length + 1
+            }
+        }
+        
+        // If it's at the very end or after the last newline
+        if lastLineOffset != -1 {
+            let column = UInt32(offset - lastLineOffset) + 1
+            return MufiPosition(line: lineCount, column: column)
+        }
+        
+        return MufiPosition(line: lineCount, column: 1) // Should have been caught in loop
+    }
 }

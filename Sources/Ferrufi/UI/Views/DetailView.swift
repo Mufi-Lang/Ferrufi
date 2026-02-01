@@ -11,6 +11,7 @@ struct DetailView: View {
     @EnvironmentObject var ferrufiApp: FerrufiApp
     @EnvironmentObject var navigationModel: NavigationModel
     @EnvironmentObject var themeManager: ThemeManager
+    @StateObject private var lspService = MufiLSPService.shared
     
     @StateObject private var editorHost = EditorContainerHost()
 
@@ -305,16 +306,30 @@ struct DetailView: View {
     // MARK: - Status Bar
 
     private func statusBar(for note: Note) -> some View {
-        HStack {
+        let errors = lspService.diagnostics.filter { $0.severity == .error }.count
+        let warnings = lspService.diagnostics.filter { $0.severity == .warning }.count
+        
+        return HStack {
             // File info
             HStack(spacing: 8) {
                 Circle()
-                    .fill(themeManager.currentTheme.colors.success)
+                    .fill(errors > 0 ? themeManager.currentTheme.colors.error : themeManager.currentTheme.colors.success)
                     .frame(width: 6, height: 6)
 
-                Text("Saved")
+                Text(errors > 0 ? "\(errors) errors" : "Saved")
                     .font(.system(size: 10))
                     .foregroundColor(themeManager.currentTheme.colors.foregroundSecondary)
+                
+                if warnings > 0 {
+                    HStack(spacing: 4) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 9))
+                            .foregroundColor(.orange)
+                        Text("\(warnings)")
+                            .font(.system(size: 10))
+                            .foregroundColor(themeManager.currentTheme.colors.foregroundSecondary)
+                    }
+                }
             }
 
             Spacer()
