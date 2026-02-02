@@ -173,7 +173,7 @@ public actor MufiBridge {
     /// Returns true if parsing was successful (no fatal errors).
     public func updateSource(filename: String, source: String) -> Bool {
         guard initialized, let context = ensureAnalysisContext() else { return false }
-        
+
         let (success, _) = Self.captureStdoutAndStderr {
             filename.withCString { cFilename in
                 source.withCString { cSource in
@@ -189,20 +189,32 @@ public actor MufiBridge {
         guard initialized, let context = analysisContext else { return [] }
         let count = mufiz_get_diagnostic_count(context)
         var diagnostics: [MufiDiagnostic] = []
-        
+
+        print("📊 C RUNTIME: Found \(count) diagnostic(s)")
+
         for i in 0..<count {
             if let diag = mufiz_get_diagnostic(context, Int32(i)) {
                 let range = MufiRange(
-                    start: MufiPosition(line: diag.pointee.range.start.line, column: diag.pointee.range.start.column),
-                    end: MufiPosition(line: diag.pointee.range.end.line, column: diag.pointee.range.end.column)
+                    start: MufiPosition(
+                        line: diag.pointee.range.start.line, column: diag.pointee.range.start.column
+                    ),
+                    end: MufiPosition(
+                        line: diag.pointee.range.end.line, column: diag.pointee.range.end.column)
                 )
-                let severity = MufiDiagnosticSeverity(rawValue: Int(diag.pointee.severity.rawValue)) ?? .error
+                let severity =
+                    MufiDiagnosticSeverity(rawValue: Int(diag.pointee.severity.rawValue)) ?? .error
                 let message = String(cString: diag.pointee.message)
-                
-                diagnostics.append(MufiDiagnostic(range: range, severity: severity, message: message))
+
+                print(
+                    "   [\(i)] \(severity) at line \(diag.pointee.range.start.line):\(diag.pointee.range.start.column) - \(diag.pointee.range.end.line):\(diag.pointee.range.end.column)"
+                )
+                print("       Message: '\(message)'")
+
+                diagnostics.append(
+                    MufiDiagnostic(range: range, severity: severity, message: message))
             }
         }
-        
+
         return diagnostics
     }
 
@@ -211,18 +223,22 @@ public actor MufiBridge {
         guard initialized, let context = ensureAnalysisContext() else { return [] }
         let count = mufiz_compute_completions(context, line, column)
         var completions: [MufiCompletionItem] = []
-        
+
         for i in 0..<count {
             if let item = mufiz_get_completion_item(context, Int32(i)) {
                 let kind = MufiCompletionKind(rawValue: item.pointee.kind) ?? .variable
                 let name = String(cString: item.pointee.name)
-                let typeName = item.pointee.type_name != nil ? String(cString: item.pointee.type_name!) : nil
-                let docString = item.pointee.doc_string != nil ? String(cString: item.pointee.doc_string!) : nil
-                
-                completions.append(MufiCompletionItem(name: name, typeName: typeName, docString: docString, kind: kind))
+                let typeName =
+                    item.pointee.type_name != nil ? String(cString: item.pointee.type_name!) : nil
+                let docString =
+                    item.pointee.doc_string != nil ? String(cString: item.pointee.doc_string!) : nil
+
+                completions.append(
+                    MufiCompletionItem(
+                        name: name, typeName: typeName, docString: docString, kind: kind))
             }
         }
-        
+
         return completions
     }
 
@@ -232,10 +248,13 @@ public actor MufiBridge {
         if let item = mufiz_get_hover_info(context, line, column) {
             let kind = MufiCompletionKind(rawValue: item.pointee.kind) ?? .variable
             let name = String(cString: item.pointee.name)
-            let typeName = item.pointee.type_name != nil ? String(cString: item.pointee.type_name!) : nil
-            let docString = item.pointee.doc_string != nil ? String(cString: item.pointee.doc_string!) : nil
-            
-            return MufiCompletionItem(name: name, typeName: typeName, docString: docString, kind: kind)
+            let typeName =
+                item.pointee.type_name != nil ? String(cString: item.pointee.type_name!) : nil
+            let docString =
+                item.pointee.doc_string != nil ? String(cString: item.pointee.doc_string!) : nil
+
+            return MufiCompletionItem(
+                name: name, typeName: typeName, docString: docString, kind: kind)
         }
         return nil
     }

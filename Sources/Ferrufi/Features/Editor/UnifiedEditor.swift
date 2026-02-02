@@ -89,7 +89,9 @@ public struct UnifiedEditor: View {
                     onTextChange: { newText in syncText(newText) },
                     onSave: onSave
                 )
-                .id("\(settings.showLineNumbers)-\(settings.wordWrap)-\(settings.fontFamily)-\(settings.fontSize)-\(settings.lineHeight)")
+                .id(
+                    "\(settings.showLineNumbers)-\(settings.wordWrap)-\(settings.fontFamily)-\(settings.fontSize)-\(settings.lineHeight)"
+                )
             }
         }
         .onAppear {
@@ -181,65 +183,59 @@ private struct EditorContainerView: NSViewRepresentable {
         // Propagate highlighting preference from the SwiftUI wrapper to the NSTextView subclass
         unifiedTextView.highlightingEnabled = highlightingEnabled
 
-                // Basic appearance & behavior
+        // Basic appearance & behavior
 
-                unifiedTextView.isEditable = true
+        unifiedTextView.isEditable = true
 
-                unifiedTextView.isSelectable = true
+        unifiedTextView.isSelectable = true
 
-                unifiedTextView.allowsUndo = true
+        unifiedTextView.allowsUndo = true
 
-                unifiedTextView.isRichText = false
+        unifiedTextView.isRichText = false
 
-                // Use monospaced font so the editor displays like the Mufi script editor
+        // Use monospaced font so the editor displays like the Mufi script editor
 
-                // (consistent appearance across script and note editing modes).
+        // (consistent appearance across script and note editing modes).
 
-                let chosenFont: NSFont = themeManager.monospacedNSFont
+        let chosenFont: NSFont = themeManager.monospacedNSFont
 
-                unifiedTextView.font = chosenFont
+        unifiedTextView.font = chosenFont
 
-                unifiedTextView.textContainerInset = NSSize(width: 16, height: 16)
+        unifiedTextView.textContainerInset = NSSize(width: 16, height: 16)
 
-                unifiedTextView.isVerticallyResizable = true
+        unifiedTextView.isVerticallyResizable = true
 
-                
+        // Apply Word Wrap based on settings
 
-                // Apply Word Wrap based on settings
+        if settings.wordWrap {
 
-                if settings.wordWrap {
+            unifiedTextView.isHorizontallyResizable = false
 
-                    unifiedTextView.isHorizontallyResizable = false
+            unifiedTextView.textContainer?.widthTracksTextView = true
 
-                    unifiedTextView.textContainer?.widthTracksTextView = true
+        } else {
 
-                } else {
+            unifiedTextView.isHorizontallyResizable = true
 
-                    unifiedTextView.isHorizontallyResizable = true
+            unifiedTextView.textContainer?.widthTracksTextView = false
 
-                    unifiedTextView.textContainer?.widthTracksTextView = false
+            unifiedTextView.textContainer?.containerSize = NSSize(
+                width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
 
-                    unifiedTextView.textContainer?.containerSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+            scrollView.hasHorizontalScroller = true
 
-                    scrollView.hasHorizontalScroller = true
+        }
 
-                }
+        // Apply Line Height
 
-        
+        let paragraphStyle = NSMutableParagraphStyle()
 
-                // Apply Line Height
+        paragraphStyle.lineHeightMultiple = CGFloat(settings.lineHeight)
 
-                let paragraphStyle = NSMutableParagraphStyle()
+        unifiedTextView.defaultParagraphStyle = paragraphStyle
 
-                paragraphStyle.lineHeightMultiple = CGFloat(settings.lineHeight)
+        // Initial content
 
-                unifiedTextView.defaultParagraphStyle = paragraphStyle
-
-        
-
-                // Initial content
-
-        
         unifiedTextView.string = text
 
         // Ensure base font is applied to text storage so raw text matches the preview/editor immediately
@@ -297,7 +293,7 @@ private struct EditorContainerView: NSViewRepresentable {
         // keep parity with Mufi files for visual consistency.
         let chosenFont: NSFont = themeManager.monospacedNSFont
         textView.font = chosenFont
-        
+
         // Ensure base font is applied to the whole storage again to reset any external attribute changes
         if let ts = textView.textStorage, let base = textView.font {
             let full = NSRange(location: 0, length: ts.length)
@@ -308,7 +304,7 @@ private struct EditorContainerView: NSViewRepresentable {
         let highlighterFontName: String? = (fileType == .mufi) ? chosenFont.fontName : nil
         textView.configureHighlighter(
             baseFontName: highlighterFontName, baseSize: themeManager.editorFontSize)
-        
+
         // Word wrap handling in update
         if settings.wordWrap {
             if textView.textContainer?.widthTracksTextView == false {
@@ -320,7 +316,8 @@ private struct EditorContainerView: NSViewRepresentable {
             if textView.textContainer?.widthTracksTextView == true {
                 textView.isHorizontallyResizable = true
                 textView.textContainer?.widthTracksTextView = false
-                textView.textContainer?.containerSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+                textView.textContainer?.containerSize = NSSize(
+                    width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
                 nsView.hasHorizontalScroller = true
             }
         }
@@ -341,7 +338,7 @@ private struct EditorContainerView: NSViewRepresentable {
         // Update coordinator state
         context.coordinator.textView = textView
         context.coordinator.themeManager = themeManager
-        
+
         // Apply diagnostics if in Mufi mode
         if fileType == .mufi {
             textView.setDiagnostics(lspService.diagnostics)
@@ -425,7 +422,7 @@ private struct EditorContainerView: NSViewRepresentable {
         var formatterObserversInstalled = false
         var coordinatorCancellables = Set<AnyCancellable>()
         // Legacy persistent output queue removed; outputs are handled inline by editor components.
-        
+
         private var completionWindow: NSWindow?
 
         init(
@@ -436,14 +433,14 @@ private struct EditorContainerView: NSViewRepresentable {
             self.isEditingBinding = isEditing
             self.onTextChange = onTextChange
             self.onSave = onSave
-            
+
             super.init()
             setupCompletionObservers()
         }
-        
+
         private func setupCompletionObservers() {
             let lsp = MufiLSPService.shared
-            
+
             lsp.$isCompletionActive
                 .receive(on: RunLoop.main)
                 .sink { [weak self] active in
@@ -454,14 +451,14 @@ private struct EditorContainerView: NSViewRepresentable {
                     }
                 }
                 .store(in: &coordinatorCancellables)
-            
+
             lsp.$completionItems
                 .receive(on: RunLoop.main)
                 .sink { [weak self] _ in
                     self?.updateCompletionWindow()
                 }
                 .store(in: &coordinatorCancellables)
-                
+
             lsp.$selectedCompletionIndex
                 .receive(on: RunLoop.main)
                 .sink { [weak self] _ in
@@ -469,18 +466,19 @@ private struct EditorContainerView: NSViewRepresentable {
                 }
                 .store(in: &coordinatorCancellables)
         }
-        
+
         private func showCompletionWindow() {
             guard let textView = textView, let window = textView.window else { return }
             let lsp = MufiLSPService.shared
-            
+
             if lsp.completionItems.isEmpty {
                 hideCompletionWindow()
                 return
             }
-            
+
             if completionWindow == nil {
-                let win = NSWindow(contentRect: .zero, styleMask: [.borderless], backing: .buffered, defer: false)
+                let win = NSWindow(
+                    contentRect: .zero, styleMask: [.borderless], backing: .buffered, defer: false)
                 win.backgroundColor = .clear
                 win.hasShadow = true
                 win.isOpaque = false
@@ -488,18 +486,20 @@ private struct EditorContainerView: NSViewRepresentable {
                 completionWindow = win
                 window.addChildWindow(win, ordered: .above)
             }
-            
+
             updateCompletionWindow()
-            
+
             // Position precisely at cursor using layoutManager
             let selectedRange = textView.selectedRange()
             guard let layoutManager = textView.layoutManager,
-                  let _ = textView.textContainer else { return }
-            
+                textView.textContainer != nil
+            else { return }
+
             let glyphIndex = layoutManager.glyphIndexForCharacter(at: selectedRange.location)
-            let lineRect = layoutManager.lineFragmentRect(forGlyphAt: glyphIndex, effectiveRange: nil)
+            let lineRect = layoutManager.lineFragmentRect(
+                forGlyphAt: glyphIndex, effectiveRange: nil)
             let location = layoutManager.location(forGlyphAt: glyphIndex)
-            
+
             // Local rect
             let origin = textView.textContainerOrigin
             let cursorLocalRect = NSRect(
@@ -508,14 +508,14 @@ private struct EditorContainerView: NSViewRepresentable {
                 width: 1,
                 height: lineRect.height
             )
-            
+
             // Screen coords
             let windowRect = textView.convert(cursorLocalRect, to: nil)
             let screenRect = window.convertToScreen(windowRect)
-            
+
             let winWidth: CGFloat = 320
             let winHeight: CGFloat = min(CGFloat(lsp.completionItems.count * 28 + 8), 240)
-            
+
             // Position exactly below current line
             let winFrame = NSRect(
                 x: screenRect.origin.x,
@@ -523,16 +523,16 @@ private struct EditorContainerView: NSViewRepresentable {
                 width: winWidth,
                 height: winHeight
             )
-            
+
             completionWindow?.setFrame(winFrame, display: true)
             completionWindow?.orderFront(nil)
         }
-        
+
         private func updateCompletionWindow() {
             guard let win = completionWindow else { return }
             let lsp = MufiLSPService.shared
             let theme = themeManager ?? ThemeManager.shared
-            
+
             let contentView = MufiCompletionView(
                 items: lsp.completionItems,
                 selectedIndex: lsp.selectedCompletionIndex,
@@ -541,12 +541,12 @@ private struct EditorContainerView: NSViewRepresentable {
                 }
             )
             .environmentObject(theme)
-            
+
             let hostingView = NSHostingView(rootView: contentView)
             hostingView.frame = NSRect(x: 0, y: 0, width: win.frame.width, height: win.frame.height)
             win.contentView = hostingView
         }
-        
+
         private func hideCompletionWindow() {
             if let win = completionWindow {
                 win.parent?.removeChildWindow(win)
@@ -570,6 +570,10 @@ private struct EditorContainerView: NSViewRepresentable {
             // Update the binding directly on the main actor
             textBinding.wrappedValue = newText
             onTextChange?(newText)
+
+            if textView.mode == .mufi {
+                MufiLSPService.shared.documentChanged(filename: "editor.mufi", source: newText)
+            }
         }
 
         func textDidBeginEditing(_ notification: Notification) {
@@ -603,6 +607,127 @@ private struct EditorContainerView: NSViewRepresentable {
         // Output insertion/clearing is now handled inline by editor components directly
         // without posting notifications. If you need to persist outputs programmatically, use the
         // editor `onTextChange` callback to modify the bound text.
+
+        // MARK: - Diagnostic Window
+
+        private var diagnosticWindow: NSWindow?
+
+        func showDiagnosticWindow(
+            for diagnostics: [MufiDiagnostic], atDiagnosticRange range: NSRange
+        ) {
+            guard let textView = textView, let window = textView.window else { return }
+            guard let layoutManager = textView.layoutManager,
+                let textContainer = textView.textContainer
+            else { return }
+            let theme = themeManager ?? ThemeManager.shared
+
+            if diagnosticWindow == nil {
+                let win = NSWindow(
+                    contentRect: .zero, styleMask: [.borderless], backing: .buffered, defer: false)
+                win.backgroundColor = .clear
+                win.hasShadow = true
+                win.isOpaque = false
+                win.level = .floating
+                diagnosticWindow = win
+                window.addChildWindow(win, ordered: .above)
+            }
+
+            guard let win = diagnosticWindow else { return }
+
+            // Position at the diagnostic location (similar to autocomplete menu)
+            print("🎯 Positioning diagnostic window at NSRange(\(range.location), \(range.length))")
+
+            let glyphRange = layoutManager.glyphRange(
+                forCharacterRange: range, actualCharacterRange: nil)
+            let glyphIndex = glyphRange.location
+            print("   Glyph index: \(glyphIndex)")
+
+            let lineRect = layoutManager.lineFragmentRect(
+                forGlyphAt: glyphIndex, effectiveRange: nil)
+            let location = layoutManager.location(forGlyphAt: glyphIndex)
+            print("   Line rect: \(lineRect)")
+            print("   Location in line: \(location)")
+
+            // Local rect
+            let origin = textView.textContainerOrigin
+            let diagnosticLocalRect = NSRect(
+                x: origin.x + location.x,
+                y: origin.y + lineRect.origin.y,
+                width: 1,
+                height: lineRect.height
+            )
+            print("   Local rect: \(diagnosticLocalRect)")
+
+            // Screen coords
+            let windowRect = textView.convert(diagnosticLocalRect, to: nil)
+            let screenRect = window.convertToScreen(windowRect)
+            print("   Screen rect: \(screenRect)")
+
+            let contentView = VStack(alignment: .leading, spacing: 0) {
+                ForEach(diagnostics, id: \.id) { diag in
+                    HStack(spacing: 8) {
+                        // SF Symbol icon with colored background (matching autocomplete style)
+                        Image(
+                            systemName: diag.severity == .error
+                                ? "xmark.circle.fill" : "exclamationmark.triangle.fill"
+                        )
+                        .font(.system(size: 10, weight: .bold))
+                        .frame(width: 16, height: 16)
+                        .background(
+                            (diag.severity == .error ? Color.red : Color.orange).opacity(0.2)
+                        )
+                        .foregroundColor(diag.severity == .error ? Color.red : Color.orange)
+                        .cornerRadius(0)
+
+                        // Message in monospaced font (matching autocomplete)
+                        Text(diag.message)
+                            .font(.system(size: 12, weight: .regular, design: .monospaced))
+                            .foregroundColor(theme.currentTheme.colors.foreground)
+                            .lineLimit(nil)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        Spacer()
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            .background(theme.currentTheme.colors.backgroundSecondary)
+            .padding(0)
+            .cornerRadius(0)
+            .overlay(
+                Rectangle()
+                    .stroke(theme.currentTheme.colors.border, lineWidth: 1)
+            )
+            .shadow(color: Color.black.opacity(0.15), radius: 5, x: 0, y: 3)
+
+            let hostingView = NSHostingView(rootView: contentView.environmentObject(theme))
+            let rowHeight: CGFloat = 28  // Match autocomplete row height
+            let size = CGSize(
+                width: 320, height: min(CGFloat(diagnostics.count) * rowHeight + 8, 240))
+            hostingView.frame = NSRect(origin: .zero, size: size)
+
+            // Position below the diagnostic line (like autocomplete)
+            let winFrame = NSRect(
+                x: screenRect.origin.x,
+                y: screenRect.origin.y - size.height,
+                width: size.width,
+                height: size.height
+            )
+
+            win.contentView = hostingView
+            win.setFrame(winFrame, display: true)
+            win.orderFront(nil)
+        }
+
+        func hideDiagnosticWindow() {
+            if let win = diagnosticWindow {
+                win.parent?.removeChildWindow(win)
+                win.orderOut(nil)
+                diagnosticWindow = nil
+            }
+        }
     }
 }
 
@@ -610,10 +735,10 @@ private struct EditorContainerView: NSViewRepresentable {
 
 private class UnifiedTextView: NSTextView {
     weak var coordinator: EditorContainerView.Coordinator?
-    private var mode: EditorFileType = .mufi
+    var mode: EditorFileType = .mufi
     // When false, skip incremental highlighting (useful for performance-sensitive cases)
     var highlightingEnabled: Bool = true
-    private var highlighter: MufiHighlighter? // Placeholder for future use
+    private var highlighter: MufiHighlighter?  // Placeholder for future use
     private var mufiHighlighter: MufiHighlighter?
     private var markdownHighlighter: MarkdownHighlighter?
     private var computeHighlighter: MufiComputeHighlighter?
@@ -643,7 +768,7 @@ private class UnifiedTextView: NSTextView {
         isRichText = false
         allowsUndo = true
         isContinuousSpellCheckingEnabled = false
-        
+
         // Disable aggressive macOS smart features
         isAutomaticDashSubstitutionEnabled = false
         isAutomaticQuoteSubstitutionEnabled = false
@@ -651,13 +776,16 @@ private class UnifiedTextView: NSTextView {
         isAutomaticSpellingCorrectionEnabled = false
         isAutomaticLinkDetectionEnabled = false
         isAutomaticDataDetectionEnabled = false
-        
+
         // Turn off all smart insertions
         enabledTextCheckingTypes = 0
-        
+
         // Enable mouse tracking for hover hints
-        let options: NSTrackingArea.Options = [.activeInKeyWindow, .mouseMoved, .mouseEnteredAndExited]
-        let trackingArea = NSTrackingArea(rect: self.bounds, options: options, owner: self, userInfo: nil)
+        let options: NSTrackingArea.Options = [
+            .activeInKeyWindow, .mouseMoved, .mouseEnteredAndExited,
+        ]
+        let trackingArea = NSTrackingArea(
+            rect: self.bounds, options: options, owner: self, userInfo: nil)
         self.addTrackingArea(trackingArea)
     }
 
@@ -666,41 +794,73 @@ private class UnifiedTextView: NSTextView {
         for area in self.trackingAreas {
             self.removeTrackingArea(area)
         }
-        let options: NSTrackingArea.Options = [.activeInKeyWindow, .mouseMoved, .mouseEnteredAndExited]
-        let trackingArea = NSTrackingArea(rect: self.bounds, options: options, owner: self, userInfo: nil)
+        let options: NSTrackingArea.Options = [
+            .activeInKeyWindow, .mouseMoved, .mouseEnteredAndExited,
+        ]
+        let trackingArea = NSTrackingArea(
+            rect: self.bounds, options: options, owner: self, userInfo: nil)
         self.addTrackingArea(trackingArea)
     }
 
     override func mouseMoved(with event: NSEvent) {
         super.mouseMoved(with: event)
-        
+
         let point = self.convert(event.locationInWindow, from: nil)
-        
+
         // Ensure point is within text container
         guard let container = textContainer, let lm = layoutManager else { return }
-        let charIndex = lm.characterIndex(for: point, in: container, fractionOfDistanceBetweenInsertionPoints: nil)
-        
+
+        // Adjust for text container inset (important for accurate hit testing)
+        let inset = self.textContainerInset
+        let adjustedPoint = NSPoint(x: point.x - inset.width, y: point.y - inset.height)
+
+        let charIndex = lm.characterIndex(
+            for: adjustedPoint, in: container, fractionOfDistanceBetweenInsertionPoints: nil)
+
         guard let ts = textStorage else { return }
-        
-        // 1. Check diagnostics
-        let diagnostics = MufiLSPService.shared.diagnostics
-        for diag in diagnostics {
+
+        // 1. Check diagnostics - use cached (fixed) diagnostics instead of raw LSP diagnostics
+        print(
+            "🖱️ Mouse moved to point: \(point), adjusted: \(adjustedPoint), charIndex: \(charIndex)")
+        var hoveredDiagnostics: [MufiDiagnostic] = []
+
+        for diag in cachedDiagnostics {
             let range = ts.nsRange(from: diag.range)
-            if NSLocationInRange(charIndex, range) {
-                if self.toolTip != diag.message {
-                    self.toolTip = diag.message
-                }
-                return
+            print(
+                "   Checking diagnostic range: \(range.location)-\(range.location + range.length)")
+            if range.location != NSNotFound && NSLocationInRange(charIndex, range) {
+                print("   ✅ Found hovered diagnostic!")
+                hoveredDiagnostics.append(diag)
             }
         }
-        
+
+        if !hoveredDiagnostics.isEmpty {
+            // Show diagnostic window at the diagnostic's text position (not mouse position)
+            let firstDiagRange = ts.nsRange(from: hoveredDiagnostics[0].range)
+            print(
+                "🖱️ HOVER: Showing diagnostic at range \(firstDiagRange.location)-\(firstDiagRange.location + firstDiagRange.length)"
+            )
+            print(
+                "   Diagnostic: '\(hoveredDiagnostics[0].message)' at line \(hoveredDiagnostics[0].range.start.line)"
+            )
+            coordinator?.showDiagnosticWindow(
+                for: hoveredDiagnostics, atDiagnosticRange: firstDiagRange)
+            self.toolTip = nil
+            return
+        } else {
+            coordinator?.hideDiagnosticWindow()
+        }
+
         // 2. Check native hover (LSP)
         if mode == .mufi {
             let pos = ts.mufiPosition(from: charIndex)
             Task {
-                if let info = await MufiLSPService.shared.getHoverInfo(line: pos.line, column: pos.column) {
+                if let info = await MufiLSPService.shared.getHoverInfo(
+                    line: pos.line, column: pos.column)
+                {
                     await MainActor.run {
-                        let tip = "\(info.name): \(info.typeName ?? "unknown")\n\(info.docString ?? "")"
+                        let tip =
+                            "\(info.name): \(info.typeName ?? "unknown")\n\(info.docString ?? "")"
                         if self.toolTip != tip {
                             self.toolTip = tip
                         }
@@ -722,7 +882,7 @@ private class UnifiedTextView: NSTextView {
     func setupForMode(_ fileType: EditorFileType) {
         if self.mode == fileType { return }
         self.mode = fileType
-        
+
         switch fileType {
         case .mufi:
             // All modes use script/plain editing behavior; preview/highlighting features removed.
@@ -736,43 +896,230 @@ private class UnifiedTextView: NSTextView {
             isAutomaticTextReplacementEnabled = false
             isAutomaticSpellingCorrectionEnabled = true
         }
-        
+
         // Ensure attributes are cleared only on mode change
         clearAllAttributes()
     }
 
+    /// Cache the current diagnostics so we can re-apply them after highlighting
+    private var cachedDiagnostics: [MufiDiagnostic] = []
+
     /// Update diagnostic squiggles based on LSP results
     @MainActor func setDiagnostics(_ diagnostics: [MufiDiagnostic]) {
-        guard let lm = layoutManager, let ts = textStorage else { return }
-        
-        // Clear existing diagnostic attributes
-        let fullRange = NSRange(location: 0, length: ts.length)
-        lm.removeTemporaryAttribute(.underlineStyle, forCharacterRange: fullRange)
-        lm.removeTemporaryAttribute(.underlineColor, forCharacterRange: fullRange)
-        
-        for diagnostic in diagnostics {
-            let range = ts.nsRange(from: diagnostic.range)
-            if range.location == NSNotFound || range.location + range.length > ts.length { continue }
-            
-            let color = (diagnostic.severity == .error) ? NSColor.systemRed : NSColor.systemOrange
-            
-            // Apply thick wavy/dotted underline for errors
-            lm.addTemporaryAttribute(.underlineStyle, 
-                                   value: NSUnderlineStyle.single.rawValue | NSUnderlineStyle.patternDot.rawValue, 
-                                   forCharacterRange: range)
-            lm.addTemporaryAttribute(.underlineColor, value: color, forCharacterRange: range)
+        print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        print("⚡ setDiagnostics CALLED with \(diagnostics.count) diagnostic(s)")
+
+        // Fix diagnostic positions for known C runtime bugs
+        let fixedDiagnostics = diagnostics.map { fixDiagnosticPosition($0) }
+
+        // Cache diagnostics so highlighting can re-apply them
+        cachedDiagnostics = fixedDiagnostics
+
+        applyDiagnosticUnderlines(fixedDiagnostics)
+
+        // Auto-show diagnostic tooltip at the first error location
+        if let firstDiagnostic = fixedDiagnostics.first, let ts = textStorage {
+            let range = ts.nsRange(from: firstDiagnostic.range)
+            print(
+                "🎯 AUTO-SHOW: First diagnostic at line \(firstDiagnostic.range.start.line), NSRange(\(range.location), \(range.length))"
+            )
+
+            // Show context around the error
+            if range.location != NSNotFound && range.location < ts.length {
+                let contextStart = max(0, range.location - 20)
+                let contextEnd = min(ts.length, range.location + range.length + 20)
+                let contextRange = NSRange(
+                    location: contextStart, length: contextEnd - contextStart)
+                let context = (ts.string as NSString).substring(with: contextRange)
+                print("   Context: '\(context.replacingOccurrences(of: "\n", with: "\\n"))'")
+                print("   Error at character position \(range.location) in document")
+            }
+
+            if range.location != NSNotFound {
+                // Only show the first diagnostic in auto-show (not all diagnostics)
+                coordinator?.showDiagnosticWindow(for: [firstDiagnostic], atDiagnosticRange: range)
+            }
+        } else {
+            // No diagnostics - hide any existing tooltip
+            coordinator?.hideDiagnosticWindow()
         }
+    }
+
+    /// Fix diagnostic positions for known C runtime bugs
+    /// The C runtime sometimes reports errors at the wrong line (e.g., missing semicolon errors
+    /// are reported at the next statement instead of where the semicolon is actually missing)
+    @MainActor private func fixDiagnosticPosition(_ diagnostic: MufiDiagnostic) -> MufiDiagnostic {
+        guard let ts = textStorage else { return diagnostic }
+
+        // Check if this is a "missing semicolon" error
+        if diagnostic.message.contains("Expect ';'") || diagnostic.message.contains("Expected ';'")
+        {
+            print("🔧 Fixing position for semicolon error: '\(diagnostic.message)'")
+
+            // Get the reported line
+            let reportedRange = ts.nsRange(from: diagnostic.range)
+            guard reportedRange.location != NSNotFound else { return diagnostic }
+
+            // Search backwards for the actual location (previous non-empty line)
+            let string = ts.string as NSString
+            let lines = string.components(separatedBy: "\n")
+            let reportedLine = Int(diagnostic.range.start.line)
+
+            // Look backwards for a non-empty line
+            for lineIndex in stride(
+                from: reportedLine - 1, through: max(0, reportedLine - 5), by: -1)
+            {
+                if lineIndex >= 0 && lineIndex < lines.count {
+                    let line = lines[lineIndex].trimmingCharacters(in: .whitespaces)
+                    // Check if line is non-empty and doesn't end with semicolon
+                    if !line.isEmpty && !line.hasSuffix(";") && !line.hasSuffix("{")
+                        && !line.hasPrefix("//")
+                    {
+                        print("   Found likely error location at line \(lineIndex): '\(line)'")
+
+                        // Calculate the position at the end of this line
+                        // Extend backwards to cover at least the last word/token for visibility
+                        let lineLength = line.utf16.count
+                        let startCol = max(0, lineLength - 3)  // Underline last 3 chars or the whole line
+                        let newRange = MufiRange(
+                            start: MufiPosition(
+                                line: UInt32(lineIndex), column: UInt32(startCol)),
+                            end: MufiPosition(line: UInt32(lineIndex), column: UInt32(lineLength))
+                        )
+
+                        print(
+                            "   Fixed: line \(diagnostic.range.start.line) → line \(lineIndex), range: \(startCol)-\(lineLength)"
+                        )
+                        return MufiDiagnostic(
+                            range: newRange, severity: diagnostic.severity,
+                            message: diagnostic.message)
+                    }
+                }
+            }
+        }
+
+        return diagnostic
+    }
+
+    /// Actually apply the diagnostic underlines to the text using PERMANENT attributes
+    @MainActor private func applyDiagnosticUnderlines(_ diagnostics: [MufiDiagnostic]) {
+        guard let ts = textStorage else {
+            print("⚠️ applyDiagnosticUnderlines: textStorage is nil")
+            return
+        }
+
+        let lineCount = (ts.string as NSString).components(separatedBy: "\n").count
+        print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        if diagnostics.count > 0 {
+            print("🎨 🎨 🎨 APPLYING \(diagnostics.count) RED SQUIGGLES 🎨 🎨 🎨")
+        } else {
+            print("🎨 applyDiagnosticUnderlines: Clearing all squiggles (0 diagnostics)")
+        }
+        print("   Document: \(lineCount) lines, \(ts.length) chars)")
+
+        // Use PERMANENT attributes on textStorage instead of temporary on layoutManager
+        ts.beginEditing()
+
+        // Clear existing diagnostic attributes from entire document
+        let fullRange = NSRange(location: 0, length: ts.length)
+        ts.removeAttribute(.underlineStyle, range: fullRange)
+        ts.removeAttribute(.underlineColor, range: fullRange)
+
+        for (index, diagnostic) in diagnostics.enumerated() {
+            let range = ts.nsRange(from: diagnostic.range)
+
+            print(
+                "  [\(index)] \(diagnostic.severity): '\(diagnostic.message)' at \(diagnostic.range.start.line):\(diagnostic.range.start.column)-\(diagnostic.range.end.line):\(diagnostic.range.end.column)"
+            )
+            print("    → NSRange(\(range.location), \(range.length))")
+
+            // Skip if location is invalid
+            if range.location == NSNotFound {
+                print("    ⚠️ Invalid range (NSNotFound), skipping diagnostic")
+                continue
+            }
+
+            // Skip if document is empty
+            if ts.length == 0 {
+                print("    ⚠️ Cannot apply diagnostic to empty document")
+                continue
+            }
+
+            // For zero-length ranges or EOF diagnostics, extend to at least one character
+            var displayRange = range
+            if range.length == 0 || range.location >= ts.length {
+                if range.location >= ts.length {
+                    // At or past end of document - underline the last character
+                    displayRange = NSRange(location: ts.length - 1, length: 1)
+                    print(
+                        "    → EOF diagnostic: Extended to last char NSRange(\(displayRange.location), \(displayRange.length))"
+                    )
+                } else if range.location < ts.length {
+                    // Mid-document zero-length - underline the character at this position
+                    displayRange = NSRange(location: range.location, length: 1)
+                    print(
+                        "    → Extended zero-length range to NSRange(\(displayRange.location), \(displayRange.length))"
+                    )
+                }
+            } else if range.location + range.length > ts.length {
+                // Range extends past end - clamp to document end
+                displayRange = NSRange(location: range.location, length: ts.length - range.location)
+                print(
+                    "    → Clamped range extending past EOF to NSRange(\(displayRange.location), \(displayRange.length))"
+                )
+            }
+
+            let color = (diagnostic.severity == .error) ? NSColor.systemRed : NSColor.systemOrange
+
+            // Apply thick wavy/dotted underline using PERMANENT attributes
+            let style = NSUnderlineStyle.thick.union(.patternDot)
+            ts.addAttribute(
+                .underlineStyle, value: NSNumber(value: style.rawValue), range: displayRange)
+            ts.addAttribute(.underlineColor, value: color, range: displayRange)
+
+            print("    ✅ ✅ ✅ APPLIED \(color == .systemRed ? "RED" : "ORANGE") SQUIGGLE ✅ ✅ ✅")
+        }
+
+        ts.endEditing()
+
+        // Force redisplay
+        self.needsDisplay = true
+        if diagnostics.count > 0 {
+            print("🎨 🎨 🎨 SQUIGGLES APPLIED! FORCED REDISPLAY! 🎨 🎨 🎨")
+            print("   YOU SHOULD NOW SEE RED/ORANGE UNDERLINES IN THE EDITOR!")
+        } else {
+            print("✅ applyDiagnosticUnderlines: Complete, cleared all squiggles")
+        }
+        print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
     }
 
     // Apply syntax highlighting to the entire document
     private func applyHighlightingWhole() {
         guard let ts = textStorage, highlightingEnabled else { return }
-        
+
+        print("🎨 HIGHLIGHTING: Running applyHighlightingWhole()")
+
         switch mode {
         case .mufi:
             mufiHighlighter?.highlight(in: ts)
         case .markdown:
             markdownHighlighter?.highlight(in: ts)
+        }
+
+        // Re-apply diagnostics AFTER highlighting to ensure underlines stay visible
+        if !cachedDiagnostics.isEmpty {
+            print(
+                "🔄 RE-APPLYING \(cachedDiagnostics.count) DIAGNOSTIC UNDERLINES AFTER HIGHLIGHTING")
+            applyDiagnosticUnderlines(cachedDiagnostics)
+
+            // Re-show tooltip after highlighting if diagnostics exist
+            if let firstDiagnostic = cachedDiagnostics.first, let ts = textStorage {
+                let range = ts.nsRange(from: firstDiagnostic.range)
+                if range.location != NSNotFound {
+                    coordinator?.showDiagnosticWindow(
+                        for: cachedDiagnostics, atDiagnosticRange: range)
+                }
+            }
         }
     }
 
@@ -791,25 +1138,29 @@ private class UnifiedTextView: NSTextView {
     /// This keeps the visual appearance of highlighted text consistent with the editor font.
     func configureHighlighter(baseFontName: String?, baseSize: Double) {
         let theme = coordinator?.themeManager?.currentTheme ?? .ghostWhite
-        
+
         switch mode {
         case .mufi:
             if let highlighter = mufiHighlighter {
-                highlighter.updateConfig(theme: theme, baseFontName: baseFontName, baseSize: baseSize)
+                highlighter.updateConfig(
+                    theme: theme, baseFontName: baseFontName, baseSize: baseSize)
             } else {
-                mufiHighlighter = MufiHighlighter(theme: theme, baseFontName: baseFontName, baseSize: baseSize)
+                mufiHighlighter = MufiHighlighter(
+                    theme: theme, baseFontName: baseFontName, baseSize: baseSize)
             }
-            
+
             // GPU highlighter disabled to prevent keyword conflicts
             computeHighlighter = nil
         case .markdown:
             if let highlighter = markdownHighlighter {
-                highlighter.updateConfig(theme: theme, baseFontName: baseFontName, baseSize: baseSize)
+                highlighter.updateConfig(
+                    theme: theme, baseFontName: baseFontName, baseSize: baseSize)
             } else {
-                markdownHighlighter = MarkdownHighlighter(theme: theme, baseFontName: baseFontName, baseSize: baseSize)
+                markdownHighlighter = MarkdownHighlighter(
+                    theme: theme, baseFontName: baseFontName, baseSize: baseSize)
             }
         }
-        
+
         if highlightingEnabled {
             applyHighlightingWhole()
         }
@@ -828,21 +1179,23 @@ private class UnifiedTextView: NSTextView {
             applyHighlightingIncremental()
         }
     }
-    
+
     private func applyHighlightingIncremental() {
         guard let ts = textStorage, highlightingEnabled else { return }
-        
+
+        print("🎨 HIGHLIGHTING: Running applyHighlightingIncremental()")
+
         // Get the edited range
         let editedRange = self.rangeForUserTextChange
         if editedRange.location == NSNotFound {
             applyHighlightingWhole()
             return
         }
-        
+
         // Expand range to include full lines for context
         let nsString = ts.string as NSString
         let lineRange = nsString.lineRange(for: editedRange)
-        
+
         // Dispatch to appropriate highlighter with specific range
         switch mode {
         case .mufi:
@@ -850,55 +1203,64 @@ private class UnifiedTextView: NSTextView {
         case .markdown:
             markdownHighlighter?.highlight(in: ts, range: lineRange)
         }
+
+        // Re-apply diagnostics AFTER incremental highlighting
+        if !cachedDiagnostics.isEmpty {
+            print(
+                "🔄 RE-APPLYING \(cachedDiagnostics.count) DIAGNOSTIC UNDERLINES AFTER INCREMENTAL HIGHLIGHTING"
+            )
+            applyDiagnosticUnderlines(cachedDiagnostics)
+        }
     }
 
     // Override keyDown: handle Enter and Completion navigation
     override func keyDown(with event: NSEvent) {
         let lsp = MufiLSPService.shared
-        
+
         if lsp.isCompletionActive {
             switch event.keyCode {
-            case 125: // Down
+            case 125:  // Down
                 lsp.moveCompletionSelectionDown()
                 return
-            case 126: // Up
+            case 126:  // Up
                 lsp.moveCompletionSelectionUp()
                 return
-            case 36, 48: // Enter or Tab
+            case 36, 48:  // Enter or Tab
                 if let selected = lsp.selectedCompletion {
                     performCompletion(selected)
                 }
                 return
-            case 53: // Escape
+            case 53:  // Escape
                 lsp.cancelCompletion()
                 return
             default:
                 break
             }
         }
-        
+
         // Handle Enter for auto-indentation
         if event.keyCode == 36 {
             handleEnterKey()
             return
         }
-        
+
         super.keyDown(with: event)
-        
+
         // Trigger completion on alpha-numeric or dot
         if mode == .mufi {
             handleCompletionTrigger(event)
         }
     }
-    
+
     private func handleEnterKey() {
         let selectedRange = self.selectedRange()
         let nsString = self.string as NSString
-        
+
         // Find current line
-        let lineRange = nsString.lineRange(for: NSRange(location: selectedRange.location, length: 0))
+        let lineRange = nsString.lineRange(
+            for: NSRange(location: selectedRange.location, length: 0))
         let currentLine = nsString.substring(with: lineRange)
-        
+
         // Get indentation
         var indentation = ""
         for char in currentLine {
@@ -908,88 +1270,95 @@ private class UnifiedTextView: NSTextView {
                 break
             }
         }
-        
+
         // Extra indent after block start (detect { or :)
         let trimmed = currentLine.trimmingCharacters(in: .whitespacesAndNewlines)
         var extraIndent = ""
         if trimmed.hasSuffix("{}") || trimmed.hasSuffix(":") {
             extraIndent = "    "
         }
-        
+
         let replacement = "\n" + indentation + extraIndent
         if self.shouldChangeText(in: selectedRange, replacementString: replacement) {
             self.insertText(replacement, replacementRange: selectedRange)
             self.didChangeText()
         }
     }
-    
+
     private func handleCompletionTrigger(_ event: NSEvent) {
         guard let chars = event.characters, !chars.isEmpty else { return }
         let char = chars.first!
-        
+
         // Trigger on letters, numbers, underscore, or dot
         if char.isLetter || char.isNumber || char == "_" || char == "." {
             let offset = self.selectedRange().location
-            let pos = self.textStorage?.mufiPosition(from: offset) ?? MufiPosition(line: 1, column: 1)
+            let pos =
+                self.textStorage?.mufiPosition(from: offset) ?? MufiPosition(line: 1, column: 1)
             let prefix = getCurrentWordPrefix()
-            MufiLSPService.shared.triggerCompletions(line: pos.line, column: pos.column, prefix: prefix)
-        } else if char.isWhitespace || event.keyCode == 51 || event.keyCode == 53 { // Space, Delete, Esc
+            MufiLSPService.shared.triggerCompletions(
+                line: pos.line, column: pos.column, prefix: prefix)
+        } else if char.isWhitespace || event.keyCode == 51 || event.keyCode == 53 {  // Space, Delete, Esc
             MufiLSPService.shared.cancelCompletion()
         }
     }
-    
+
     private func getCurrentWordPrefix() -> String {
         guard let ts = textStorage else { return "" }
         let offset = self.selectedRange().location
         let nsString = ts.string as NSString
-        
+
         var start = offset
         while start > 0 {
             let range = NSRange(location: start - 1, length: 1)
             let char = nsString.substring(with: range)
-            if char.rangeOfCharacter(from: CharacterSet.alphanumerics.inverted) != nil && char != "." {
+            if char.rangeOfCharacter(from: CharacterSet.alphanumerics.inverted) != nil
+                && char != "."
+            {
                 break
             }
             start -= 1
         }
-        
+
         return nsString.substring(with: NSRange(location: start, length: offset - start))
     }
-    
+
     internal func performCompletion(_ item: MufiCompletionItem) {
         let lsp = MufiLSPService.shared
-        
+
         // Find the word prefix to replace
         let currentOffset = self.selectedRange().location
         let nsString = self.string as NSString
-        
+
         // Search backwards for the start of the current word
         var wordStart = currentOffset
         while wordStart > 0 {
             let range = NSRange(location: wordStart - 1, length: 1)
             let char = nsString.substring(with: range)
-            if char.rangeOfCharacter(from: CharacterSet.alphanumerics.inverted) != nil && char != "." {
+            if char.rangeOfCharacter(from: CharacterSet.alphanumerics.inverted) != nil
+                && char != "."
+            {
                 break
             }
             wordStart -= 1
         }
-        
+
         // If we matched a dot, start after the last dot
         let rangeForDotSearch = NSRange(location: wordStart, length: currentOffset - wordStart)
         let wordForDotSearch = nsString.substring(with: rangeForDotSearch)
         if let dotRange = wordForDotSearch.range(of: ".", options: .backwards) {
-            let dotIndex = wordForDotSearch.distance(from: wordForDotSearch.startIndex, to: dotRange.lowerBound)
+            let dotIndex = wordForDotSearch.distance(
+                from: wordForDotSearch.startIndex, to: dotRange.lowerBound)
             wordStart += dotIndex + 1
         }
-        
+
         let replacementRange = NSRange(location: wordStart, length: currentOffset - wordStart)
-        
+
         if self.shouldChangeText(in: replacementRange, replacementString: item.name) {
             self.breakUndoCoalescing()
             self.replaceCharacters(in: replacementRange, with: item.name)
             self.didChangeText()
         }
-        
+
         lsp.cancelCompletion()
     }
 
@@ -1003,70 +1372,93 @@ extension NSTextStorage {
     func nsRange(from mufiRange: MufiRange) -> NSRange {
         let start = offset(from: mufiRange.start)
         let end = offset(from: mufiRange.end)
-        
+
         guard start != NSNotFound, end != NSNotFound, end >= start else {
             return NSRange(location: NSNotFound, length: 0)
         }
-        
+
         return NSRange(location: start, length: end - start)
     }
-    
+
     private func offset(from pos: MufiPosition) -> Int {
         let string = self.string as NSString
-        var currentLine: UInt32 = 1
+        var currentLine: UInt32 = 0
         var currentOffset = 0
-        
+
         // Iterate through lines to find the correct line
         // Note: This is a simple implementation. For very large files, a line-index map would be better.
         let lines = string.components(separatedBy: "\n")
-        
-        for line in lines {
+
+        print("    🔍 Converting position line:\(pos.line) col:\(pos.column) to offset")
+        print("       Document has \(lines.count) lines")
+
+        for (_, line) in lines.enumerated() {
             if currentLine == pos.line {
                 // Found the line, now add the column offset
-                // LSP columns are typically 0-based or 1-based?
-                // Assuming libmufiz uses 1-based lines and 1-based columns based on common patterns.
-                let columnOffset = Int(pos.column) - 1
+                // LSP columns are typically 0-based.
+                // Switching to 0-based indexing to match standard LSP and fix missing indicators.
+                let columnOffset = Int(pos.column)
+                print("       Found line \(currentLine) at offset \(currentOffset): '\(line)'")
+                print("       Requested column: \(columnOffset), line length: \(line.utf16.count)")
+
                 if columnOffset >= 0 && columnOffset <= line.utf16.count {
-                    return currentOffset + columnOffset
+                    let finalOffset = currentOffset + columnOffset
+                    print("       → Final offset: \(finalOffset)")
+                    return finalOffset
                 } else if columnOffset > line.utf16.count {
-                    return currentOffset + line.utf16.count // End of line
+                    let finalOffset = currentOffset + line.utf16.count
+                    print("       → Column past EOL, clamping to: \(finalOffset)")
+                    return finalOffset
                 } else {
+                    print("       → Invalid column, returning line start: \(currentOffset)")
                     return currentOffset
                 }
             }
-            
-            currentOffset += line.utf16.count + 1 // +1 for the \n
+
+            currentOffset += line.utf16.count + 1  // +1 for the \n
             currentLine += 1
         }
-        
+
+        // Position is past end of document (EOF diagnostic)
+        // Clamp to document end instead of returning NSNotFound
+        if pos.line >= currentLine && string.length > 0 {
+            print(
+                "    📍 EOF diagnostic: line \(pos.line) >= document line count \(currentLine), clamping to doc end (\(string.length))"
+            )
+            return string.length
+        }
+
+        print("       ⚠️ Line \(pos.line) not found, returning NSNotFound")
         return NSNotFound
     }
-    
+
     func mufiPosition(from offset: Int) -> MufiPosition {
         let string = self.string as NSString
         guard offset <= string.length else { return MufiPosition(line: 1, column: 1) }
-        
+
         var lineCount: UInt32 = 1
         var lastLineOffset = 0
-        
-        string.enumerateSubstrings(in: NSRange(location: 0, length: string.length), options: .byLines) { substring, range, enclosingRange, stop in
+
+        string.enumerateSubstrings(
+            in: NSRange(location: 0, length: string.length), options: .byLines
+        ) { substring, range, enclosingRange, stop in
             if offset >= range.location && offset <= range.location + range.length {
                 // Found the line
                 let _ = UInt32(offset - range.location) + 1
                 stop.pointee = true
-                lastLineOffset = -1 // Mark as found
+                lastLineOffset = -1  // Mark as found
             } else if offset > range.location + range.length {
                 lineCount += 1
                 lastLineOffset = range.location + range.length + 1
             }
         }
-        
+
         // If it's at the very end or after the last newline
         if lastLineOffset != -1 {
             let column = UInt32(offset - lastLineOffset) + 1
             return MufiPosition(line: lineCount, column: column)
         }
-        
-        return MufiPosition(line: lineCount, column: 1) // Should have been caught in loop
+
+        return MufiPosition(line: lineCount, column: 1)  // Should have been caught in loop
     }
 }
