@@ -537,7 +537,7 @@ private struct EditorContainerView: NSViewRepresentable {
                 items: lsp.completionItems,
                 selectedIndex: lsp.selectedCompletionIndex,
                 onItemSelected: { item in
-                    (self.textView as? UnifiedTextView)?.performCompletion(item)
+                    self.textView?.performCompletion(item)
                 }
             )
             .environmentObject(theme)
@@ -617,7 +617,7 @@ private struct EditorContainerView: NSViewRepresentable {
         ) {
             guard let textView = textView, let window = textView.window else { return }
             guard let layoutManager = textView.layoutManager,
-                let textContainer = textView.textContainer
+                let _ = textView.textContainer
             else { return }
             let theme = themeManager ?? ThemeManager.shared
 
