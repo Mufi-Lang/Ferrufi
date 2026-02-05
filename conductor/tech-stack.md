@@ -17,4 +17,4 @@
 ## Infrastructure & Architecture
 - **Storage:** Unified storage with security-scoped bookmark management for sandboxed file access.
 - **Concurrency:** Modern Swift Concurrency (async/await, Actors).
-- **Communication:** Internal notification system and future LSP integration.
+- **Communication:** Internal notification system and integrated Language Server Protocol (LSP) for Mufi language features.
