@@ -60,6 +60,7 @@ let package = Package(
         .testTarget(
             name: "FerrufiTests",
             dependencies: ["Ferrufi"],
+            path: "Tests/IronTests",
             linkerSettings: [
                 .unsafeFlags(["-L", "Sources/CMufi"]),
                 .unsafeFlags([

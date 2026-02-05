@@ -55,7 +55,9 @@ public struct FerrufiCommands: Commands {
             Button("Change Workspace Folder...") {
                 changeVaultFolderAction()
             }
-            .keyboardShortcut(KeyboardShortcut(KeyEquivalent("v"), modifiers: [.command, .shift]))
+            .keyboardShortcut(
+                shortcuts.keyboardShortcut(for: "changeWorkspace")
+                    ?? KeyboardShortcut(KeyEquivalent("v"), modifiers: [.command, .shift]))
         }
 
         // Edit Menu

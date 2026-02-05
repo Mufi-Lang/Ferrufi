@@ -22,6 +22,7 @@ public final class ShortcutsManager: ObservableObject {
         "newFolder": "New Folder",
         "importNotes": "Import Notes",
         "exportVault": "Export Workspace",
+        "changeWorkspace": "Change Workspace Folder",
         "find": "Find in Notes",
         "findAndReplace": "Find and Replace",
         "toggleSidebar": "Toggle Sidebar",
@@ -38,6 +39,10 @@ public final class ShortcutsManager: ObservableObject {
         "rebuildIndex": "Rebuild Search Index",
         "checkLinks": "Check Links",
         "stats": "Show Statistics",
+        "printNote": "Print Note",
+        "runScript": "Run Mufi Script",
+        "toggleREPL": "Toggle Mufi REPL",
+        "shortcutsReference": "Keyboard Shortcuts Reference",
     ]
 
     private init() {
