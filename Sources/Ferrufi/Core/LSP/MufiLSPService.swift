@@ -203,4 +203,76 @@ public final class MufiLSPService: ObservableObject {
     public func getHoverInfo(line: UInt32, column: UInt32) async -> MufiCompletionItem? {
         return await bridge.getHoverInfo(line: line, column: column)
     }
+
+    /// Get definition range for symbol at specified position.
+    public func getDefinitionRange(line: UInt32, column: UInt32, source: String) async -> MufiRange? {
+        // 1. Try bridge (placeholder, as bridge doesn't support it yet)
+        // let range = await bridge.getDefinition(line: line, column: column)
+        
+        // 2. Fallback: Simple regex search in current file for 'fun name' or 'let name'
+        // First, extract the word at the position
+        let lines = source.components(separatedBy: "\n")
+        guard line < lines.count else { return nil }
+        let lineText = lines[Int(line)]
+        
+        // Find word under cursor
+        let word = extractWord(at: column, in: lineText)
+        guard !word.isEmpty else { return nil }
+        
+        // Search for definition: 'fun word', 'let word', 'var word'
+        let patterns = [
+            "fun\\s+\(word)\\b",
+            "let\\s+\(word)\\b",
+            "var\\s+\(word)\\b",
+            "class\\s+\(word)\\b"
+        ]
+        
+        for pattern in patterns {
+            if let regex = try? NSRegularExpression(pattern: pattern) {
+                for (i, l) in lines.enumerated() {
+                    let range = NSRange(location: 0, length: l.utf16.count)
+                    if let match = regex.firstMatch(in: l, options: [], range: range) {
+                        // Found it!
+                        let startCol = UInt32(match.range.location)
+                        let endCol = UInt32(match.range.location + match.range.length)
+                        return MufiRange(
+                            start: MufiPosition(line: UInt32(i), column: startCol),
+                            end: MufiPosition(line: UInt32(i), column: endCol)
+                        )
+                    }
+                }
+            }
+        }
+        
+        return nil
+    }
+    
+    private func extractWord(at column: UInt32, in text: String) -> String {
+        let nsString = text as NSString
+        let col = Int(column)
+        guard col < nsString.length else { return "" }
+        
+        var start = col
+        while start > 0 {
+            let r = NSRange(location: start - 1, length: 1)
+            let char = nsString.substring(with: r)
+            if char.rangeOfCharacter(from: CharacterSet.alphanumerics.inverted.subtracting(CharacterSet(charactersIn: "_"))) != nil {
+                break
+            }
+            start -= 1
+        }
+        
+        var end = col
+        while end < nsString.length {
+            let r = NSRange(location: end, length: 1)
+            let char = nsString.substring(with: r)
+            if char.rangeOfCharacter(from: CharacterSet.alphanumerics.inverted.subtracting(CharacterSet(charactersIn: "_"))) != nil {
+                break
+            }
+            end += 1
+        }
+        
+        if start >= end { return "" }
+        return nsString.substring(with: NSRange(location: start, length: end - start))
+    }
 }

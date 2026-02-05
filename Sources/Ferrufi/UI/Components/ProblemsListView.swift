@@ -52,6 +52,14 @@ public struct ProblemsListView: View {
                         ProblemRow(diagnostic: diagnostic)
                             .listRowInsets(EdgeInsets())
                             .listRowSeparator(.visible)
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                NotificationCenter.default.post(
+                                    name: .editorNavigateToRange,
+                                    object: diagnostic.range,
+                                    userInfo: nil
+                                )
+                            }
                     }
                 }
                 .listStyle(.plain)

@@ -388,7 +388,8 @@ private struct EditorContainerView: NSViewRepresentable {
                 // (object is the UnifiedTextView instance or nil).
                 NotificationCenter.default.post(
                     name: .unifiedEditorTextViewChanged,
-                    object: textView)
+                    object: textView,
+                    userInfo: nil)
 
                 // Remove any previous selection observer attached to the old text view
                 if let old = oldValue {
@@ -410,12 +411,14 @@ private struct EditorContainerView: NSViewRepresentable {
                     // Immediately publish the current selection so listeners can initialize.
                     NotificationCenter.default.post(
                         name: .unifiedEditorSelectionChanged,
-                        object: tv.selectedRange())
+                        object: tv.selectedRange(),
+                        userInfo: nil)
                 } else {
                     // Notify listeners that there is no active editor selection
                     NotificationCenter.default.post(
                         name: .unifiedEditorSelectionChanged,
-                        object: nil)
+                        object: nil,
+                        userInfo: nil)
                 }
             }
         }
@@ -594,11 +597,11 @@ private struct EditorContainerView: NSViewRepresentable {
         // Posts `.unifiedEditorSelectionChanged` with the current NSRange selection as the object.
         @objc private func handleUnifiedTextViewSelectionChanged(_ notification: Notification) {
             guard let tv = notification.object as? NSTextView else {
-                NotificationCenter.default.post(name: .unifiedEditorSelectionChanged, object: nil)
+                NotificationCenter.default.post(name: .unifiedEditorSelectionChanged, object: nil, userInfo: nil)
                 return
             }
             NotificationCenter.default.post(
-                name: .unifiedEditorSelectionChanged, object: tv.selectedRange())
+                name: .unifiedEditorSelectionChanged, object: tv.selectedRange(), userInfo: nil)
         }
 
         // MARK: - Output handlers
@@ -728,6 +731,82 @@ private struct EditorContainerView: NSViewRepresentable {
                 diagnosticWindow = nil
             }
         }
+
+        // MARK: - Hover Window
+
+        private var hoverWindow: NSWindow?
+
+        func showHoverWindow(for item: MufiCompletionItem, at range: NSRange) {
+            guard let textView = textView, let window = textView.window else { return }
+            guard let layoutManager = textView.layoutManager else { return }
+            let theme = themeManager ?? ThemeManager.shared
+
+            if hoverWindow == nil {
+                let win = NSWindow(
+                    contentRect: .zero, styleMask: [.borderless], backing: .buffered, defer: false)
+                win.backgroundColor = .clear
+                win.hasShadow = true
+                win.isOpaque = false
+                win.level = .floating
+                hoverWindow = win
+                window.addChildWindow(win, ordered: .above)
+            }
+
+            guard let win = hoverWindow else { return }
+
+            let glyphRange = layoutManager.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+            let lineRect = layoutManager.lineFragmentRect(forGlyphAt: glyphRange.location, effectiveRange: nil)
+            let location = layoutManager.location(forGlyphAt: glyphRange.location)
+
+            let origin = textView.textContainerOrigin
+            let localRect = NSRect(x: origin.x + location.x, y: origin.y + lineRect.origin.y, width: 1, height: lineRect.height)
+            let windowRect = textView.convert(localRect, to: nil)
+            let screenRect = window.convertToScreen(windowRect)
+
+            let contentView = VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text(item.name)
+                        .font(.system(size: 13, weight: .bold, design: .monospaced))
+                    if let type = item.typeName {
+                        Text(":")
+                            .foregroundColor(.secondary)
+                        Text(type)
+                            .font(.system(size: 13, weight: .regular, design: .monospaced))
+                            .foregroundColor(theme.currentTheme.colors.accent)
+                    }
+                }
+                
+                if let docs = item.docString {
+                    Divider()
+                    Text(docs)
+                        .font(.system(size: 11))
+                        .foregroundColor(theme.currentTheme.colors.foregroundSecondary)
+                        .lineLimit(nil)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .padding(10)
+            .background(theme.currentTheme.colors.backgroundSecondary)
+            .overlay(Rectangle().stroke(theme.currentTheme.colors.border, lineWidth: 1))
+            .shadow(color: Color.black.opacity(0.15), radius: 5, x: 0, y: 3)
+
+            let hostingView = NSHostingView(rootView: contentView.environmentObject(theme))
+            let size = hostingView.fittingSize
+            hostingView.frame = NSRect(origin: .zero, size: size)
+
+            let winFrame = NSRect(x: screenRect.origin.x, y: screenRect.origin.y + 20, width: size.width, height: size.height)
+            win.contentView = hostingView
+            win.setFrame(winFrame, display: true)
+            win.orderFront(nil)
+        }
+
+        func hideHoverWindow() {
+            if let win = hoverWindow {
+                win.parent?.removeChildWindow(win)
+                win.orderOut(nil)
+                hoverWindow = nil
+            }
+        }
     }
 }
 
@@ -780,6 +859,13 @@ private class UnifiedTextView: NSTextView {
         // Turn off all smart insertions
         enabledTextCheckingTypes = 0
 
+        // Listen for navigation requests
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleNavigateToRange(_:)),
+            name: .editorNavigateToRange,
+            object: nil)
+
         // Enable mouse tracking for hover hints
         let options: NSTrackingArea.Options = [
             .activeInKeyWindow, .mouseMoved, .mouseEnteredAndExited,
@@ -787,6 +873,20 @@ private class UnifiedTextView: NSTextView {
         let trackingArea = NSTrackingArea(
             rect: self.bounds, options: options, owner: self, userInfo: nil)
         self.addTrackingArea(trackingArea)
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
+    @objc private func handleNavigateToRange(_ notification: Notification) {
+        guard let range = notification.object as? MufiRange, let ts = textStorage else { return }
+
+        let nsRange = ts.nsRange(from: range)
+        if nsRange.location != NSNotFound {
+            self.setSelectedRange(nsRange)
+            self.scrollRangeToVisible(nsRange)
+        }
     }
 
     override func updateTrackingAreas() {
@@ -859,22 +959,36 @@ private class UnifiedTextView: NSTextView {
                     line: pos.line, column: pos.column)
                 {
                     await MainActor.run {
-                        let tip =
-                            "\(info.name): \(info.typeName ?? "unknown")\n\(info.docString ?? "")"
-                        if self.toolTip != tip {
-                            self.toolTip = tip
+                        // Find range of word at cursor
+                        let ns = ts.string as NSString
+                        var wordRange = NSRange(location: charIndex, length: 0)
+                        if charIndex < ns.length {
+                            // Simple word range detection
+                            var start = charIndex
+                            while start > 0 {
+                                let r = NSRange(location: start - 1, length: 1)
+                                if ns.substring(with: r).rangeOfCharacter(from: CharacterSet.alphanumerics.inverted.subtracting(CharacterSet(charactersIn: "_"))) != nil { break }
+                                start -= 1
+                            }
+                            var end = charIndex
+                            while end < ns.length {
+                                let r = NSRange(location: end, length: 1)
+                                if ns.substring(with: r).rangeOfCharacter(from: CharacterSet.alphanumerics.inverted.subtracting(CharacterSet(charactersIn: "_"))) != nil { break }
+                                end += 1
+                            }
+                            wordRange = NSRange(location: start, length: end - start)
                         }
+                        
+                        coordinator?.showHoverWindow(for: info, at: wordRange)
                     }
                 } else {
                     await MainActor.run {
-                        if self.toolTip != nil {
-                            self.toolTip = nil
-                        }
+                        coordinator?.hideHoverWindow()
                     }
                 }
             }
         } else {
-            self.toolTip = nil
+            coordinator?.hideHoverWindow()
         }
     }
 
@@ -906,6 +1020,14 @@ private class UnifiedTextView: NSTextView {
 
     /// Update diagnostic squiggles based on LSP results
     @MainActor func setDiagnostics(_ diagnostics: [MufiDiagnostic]) {
+        // Avoid redundant updates if diagnostics haven't changed
+        if diagnostics.count == cachedDiagnostics.count {
+            let matches = zip(diagnostics, cachedDiagnostics).allSatisfy { new, old in
+                new.range == old.range && new.message == old.message && new.severity == old.severity
+            }
+            if matches { return }
+        }
+
         print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         print("⚡ setDiagnostics CALLED with \(diagnostics.count) diagnostic(s)")
 
@@ -1213,10 +1335,42 @@ private class UnifiedTextView: NSTextView {
         }
     }
 
-    // Override keyDown: handle Enter and Completion navigation
+    // Override menu for Go to Definition
+    override func menu(for event: NSEvent) -> NSMenu? {
+        let menu = super.menu(for: event) ?? NSMenu()
+        
+        menu.addItem(.separator())
+        let goToDefItem = NSMenuItem(title: "Go to Definition", action: #selector(goToDefinition(_:)), keyEquivalent: "")
+        goToDefItem.target = self
+        menu.addItem(goToDefItem)
+        
+        return menu
+    }
+
+    @objc private func goToDefinition(_ sender: Any?) {
+        let range = self.selectedRange()
+        let pos = self.textStorage?.mufiPosition(from: range.location) ?? MufiPosition(line: 0, column: 0)
+        
+        Task {
+            if let defRange = await MufiLSPService.shared.getDefinitionRange(
+                line: pos.line, column: pos.column, source: self.string) {
+                await MainActor.run {
+                    NotificationCenter.default.post(name: .editorNavigateToRange, object: defRange, userInfo: nil)
+                }
+            }
+        }
+    }
+
+    // Override keyDown: handle Enter, Completion navigation and F12
     override func keyDown(with event: NSEvent) {
         let lsp = MufiLSPService.shared
 
+        // F12 for Go to Definition (keyCode 111)
+        if event.keyCode == 111 {
+            goToDefinition(nil)
+            return
+        }
+        
         if lsp.isCompletionActive {
             switch event.keyCode {
             case 125:  // Down

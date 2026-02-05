@@ -194,12 +194,20 @@ public actor MufiBridge {
 
         for i in 0..<count {
             if let diag = mufiz_get_diagnostic(context, Int32(i)) {
+                // Adjust for 1-based indexing from C runtime if necessary
+                // (Most compilers report 1-based lines, while LSP expects 0-based)
+                let rawStartLine = diag.pointee.range.start.line
+                let rawEndLine = diag.pointee.range.end.line
+                
+                let startLine = rawStartLine > 0 ? rawStartLine - 1 : 0
+                let endLine = rawEndLine > 0 ? rawEndLine - 1 : 0
+                
                 let range = MufiRange(
                     start: MufiPosition(
-                        line: diag.pointee.range.start.line, column: diag.pointee.range.start.column
+                        line: startLine, column: diag.pointee.range.start.column
                     ),
                     end: MufiPosition(
-                        line: diag.pointee.range.end.line, column: diag.pointee.range.end.column)
+                        line: endLine, column: diag.pointee.range.end.column)
                 )
                 let severity =
                     MufiDiagnosticSeverity(rawValue: Int(diag.pointee.severity.rawValue)) ?? .error

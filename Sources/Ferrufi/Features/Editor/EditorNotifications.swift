@@ -30,4 +30,8 @@ extension Notification.Name {
     /// The `object` is the current selection as an `NSRange` (boxed) or the `NSTextView`
     /// instance that emitted the selection change (depending on usage context).
     static let unifiedEditorSelectionChanged = Notification.Name("unifiedEditorSelectionChanged")
+
+    /// Posted to request the editor to navigate to a specific MufiRange.
+    /// Object: MufiRange
+    static let editorNavigateToRange = Notification.Name("editorNavigateToRange")
 }
