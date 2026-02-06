@@ -6,7 +6,7 @@ This plan follows an evolutionary refactor of the existing Metal rendering subsy
 - [x] Task: Audit and Document Current `MetalRenderer` State
     - [ ] Analyze `MetalRenderer.swift` and `Shaders.metal`.
     - [ ] Create initial `docs/METAL_PIPELINE_ARCHITECTURE.md` describing current flow and planned changes.
-- [ ] Task: Create Modular Render Components
+- [x] Task: Create Modular Render Components
     - [ ] Define `RenderState` to decouple editor data from the renderer.
     - [ ] Implement `LayoutEngine` to handle text-to-glyph-pos calculations.
     - [ ] Implement `ShaderManager` for organized pipeline state management.

@@ -2,6 +2,7 @@ import XCTest
 
 @testable import Ferrufi
 
+@MainActor
 final class ShortcutsTests: XCTestCase {
 
     func testUpdateBindingAndQuery() throws {

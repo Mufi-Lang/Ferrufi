@@ -201,48 +201,29 @@ import SwiftUI
 
     public class EditorBackgroundRenderer: BaseMetalRenderer {
         private var pipelineState: MTLRenderPipelineState?
+        private var shaderManager: ShaderManager?
         private var vertexBuffer: MTLBuffer?
         private var startTime: Date = Date()
         public var accentColor: Color = .blue
 
         public override init(device: MTLDevice, commandQueue: MTLCommandQueue) {
             super.init(device: device, commandQueue: commandQueue)
-            if MetalDeviceManager.shared.isLibraryLoaded {
+            if MetalDeviceManager.shared.isLibraryLoaded, let library = MetalDeviceManager.shared.defaultLibrary {
+                self.shaderManager = ShaderManager(device: device, library: library)
                 setupPipeline()
                 setupBuffers()
             }
         }
 
         private func setupPipeline() {
-            guard let device = device else { return }
-            
-            // Use robustly loaded library from manager
-            guard let library = MetalDeviceManager.shared.defaultLibrary else {
-                print("❌ Metal error: Could not load shader library.")
-                return
-            }
-            
-            guard let vertexFunc = library.makeFunction(name: "vertex_simple") else {
-                print("❌ Metal error: Could not find vertex_simple function.")
-                return
-            }
-            
-            guard let fragmentFunc = library.makeFunction(name: "fragment_background_mesh") else {
-                print("❌ Metal error: Could not find fragment_background_mesh function.")
-                return
-            }
-            
-            let pipelineDescriptor = MTLRenderPipelineDescriptor()
-            pipelineDescriptor.vertexFunction = vertexFunc
-            pipelineDescriptor.fragmentFunction = fragmentFunc
-            pipelineDescriptor.vertexDescriptor = BaseMetalRenderer.vertexDescriptor
-            pipelineDescriptor.colorAttachments[0].pixelFormat = .bgra8Unorm_srgb
-            pipelineDescriptor.colorAttachments[0].isBlendingEnabled = true
-            pipelineDescriptor.colorAttachments[0].sourceRGBBlendFactor = .sourceAlpha
-            pipelineDescriptor.colorAttachments[0].destinationRGBBlendFactor = .oneMinusSourceAlpha
+            guard let shaderManager = shaderManager else { return }
             
             do {
-                pipelineState = try device.makeRenderPipelineState(descriptor: pipelineDescriptor)
+                pipelineState = try shaderManager.getRenderPipeline(
+                    vertexFunctionName: "vertex_simple",
+                    fragmentFunctionName: "fragment_background_mesh",
+                    label: "Editor Background Pipeline"
+                )
             } catch {
                 print("❌ Metal error: Failed to create render pipeline state: \(error)")
             }
@@ -288,46 +269,28 @@ import SwiftUI
 
     public class MinimapRenderer: BaseMetalRenderer {
         private var pipelineState: MTLRenderPipelineState?
+        private var shaderManager: ShaderManager?
         private var vertexBuffer: MTLBuffer?
         public var accentColor: Color = .blue
 
         public override init(device: MTLDevice, commandQueue: MTLCommandQueue) {
             super.init(device: device, commandQueue: commandQueue)
-            if MetalDeviceManager.shared.isLibraryLoaded {
+            if MetalDeviceManager.shared.isLibraryLoaded, let library = MetalDeviceManager.shared.defaultLibrary {
+                self.shaderManager = ShaderManager(device: device, library: library)
                 setupPipeline()
                 setupBuffers()
             }
         }
 
         private func setupPipeline() {
-            guard let device = device else { return }
-            
-            guard let library = MetalDeviceManager.shared.defaultLibrary else {
-                print("❌ Metal error: Could not load library for Minimap.")
-                return
-            }
-            
-            guard let vertexFunc = library.makeFunction(name: "vertex_simple") else {
-                print("❌ Metal error: Could not find vertex_simple for Minimap.")
-                return
-            }
-            
-            guard let fragmentFunc = library.makeFunction(name: "fragment_minimap") else {
-                print("❌ Metal error: Could not find fragment_minimap.")
-                return
-            }
-            
-            let pipelineDescriptor = MTLRenderPipelineDescriptor()
-            pipelineDescriptor.vertexFunction = vertexFunc
-            pipelineDescriptor.fragmentFunction = fragmentFunc
-            pipelineDescriptor.vertexDescriptor = BaseMetalRenderer.vertexDescriptor
-            pipelineDescriptor.colorAttachments[0].pixelFormat = .bgra8Unorm_srgb
-            pipelineDescriptor.colorAttachments[0].isBlendingEnabled = true
-            pipelineDescriptor.colorAttachments[0].sourceRGBBlendFactor = .sourceAlpha
-            pipelineDescriptor.colorAttachments[0].destinationRGBBlendFactor = .oneMinusSourceAlpha
+            guard let shaderManager = shaderManager else { return }
             
             do {
-                pipelineState = try device.makeRenderPipelineState(descriptor: pipelineDescriptor)
+                pipelineState = try shaderManager.getRenderPipeline(
+                    vertexFunctionName: "vertex_simple",
+                    fragmentFunctionName: "fragment_minimap",
+                    label: "Minimap Pipeline"
+                )
             } catch {
                 print("❌ Metal error: Failed to create minimap pipeline state: \(error)")
             }
@@ -370,6 +333,7 @@ import SwiftUI
 
     public class MetalTextRenderer: BaseMetalRenderer {
         private var pipelineState: MTLRenderPipelineState?
+        private var shaderManager: ShaderManager?
         private var atlas: GlyphAtlas?
         public var text: String = ""
         public var color: Color = .white
@@ -377,40 +341,21 @@ import SwiftUI
         public init(device: MTLDevice, commandQueue: MTLCommandQueue, font: NSFont) {
             super.init(device: device, commandQueue: commandQueue)
             self.atlas = GlyphAtlas(device: device, font: font)
-            if MetalDeviceManager.shared.isLibraryLoaded {
+            if MetalDeviceManager.shared.isLibraryLoaded, let library = MetalDeviceManager.shared.defaultLibrary {
+                self.shaderManager = ShaderManager(device: device, library: library)
                 setupPipeline()
             }
         }
 
         private func setupPipeline() {
-            guard let device = device else { return }
-            
-            guard let library = MetalDeviceManager.shared.defaultLibrary else {
-                print("❌ Metal error: Could not load library for Text.")
-                return
-            }
-            
-            guard let vertexFunc = library.makeFunction(name: "vertex_glyph") else {
-                print("❌ Metal error: Could not find vertex_glyph.")
-                return
-            }
-            
-            guard let fragmentFunc = library.makeFunction(name: "fragment_textured") else {
-                print("❌ Metal error: Could not find fragment_textured.")
-                return
-            }
-            
-            let pipelineDescriptor = MTLRenderPipelineDescriptor()
-            pipelineDescriptor.vertexFunction = vertexFunc
-            pipelineDescriptor.fragmentFunction = fragmentFunc
-            pipelineDescriptor.vertexDescriptor = BaseMetalRenderer.vertexDescriptor
-            pipelineDescriptor.colorAttachments[0].pixelFormat = .bgra8Unorm_srgb
-            pipelineDescriptor.colorAttachments[0].isBlendingEnabled = true
-            pipelineDescriptor.colorAttachments[0].sourceRGBBlendFactor = .sourceAlpha
-            pipelineDescriptor.colorAttachments[0].destinationRGBBlendFactor = .oneMinusSourceAlpha
+            guard let shaderManager = shaderManager else { return }
             
             do {
-                pipelineState = try device.makeRenderPipelineState(descriptor: pipelineDescriptor)
+                pipelineState = try shaderManager.getRenderPipeline(
+                    vertexFunctionName: "vertex_glyph",
+                    fragmentFunctionName: "fragment_textured",
+                    label: "Text Pipeline"
+                )
             } catch {
                 print("❌ Metal error: Failed to create text pipeline state: \(error)")
             }
@@ -610,98 +555,6 @@ import SwiftUI
     }
 
     // MARK: - Metal Shader Utilities
-
-    public enum MetalShaderError: Error, LocalizedError {
-        case deviceNotAvailable
-        case libraryCreationFailed
-        case functionNotFound(String)
-        case pipelineCreationFailed(Error)
-
-        public var errorDescription: String? {
-            switch self {
-            case .deviceNotAvailable:
-                return "Metal device not available"
-            case .libraryCreationFailed:
-                return "Failed to create Metal library"
-            case .functionNotFound(let name):
-                return "Metal function '\(name)' not found"
-            case .pipelineCreationFailed(let error):
-                return "Failed to create Metal pipeline: \(error.localizedDescription)"
-            }
-        }
-    }
-
-    public class MetalShaderManager {
-        private let device: MTLDevice
-        private let library: MTLLibrary
-        private var pipelineCache: [String: MTLRenderPipelineState] = [:]
-
-        public init(device: MTLDevice) throws {
-            self.device = device
-
-            guard let defaultLibrary = device.makeDefaultLibrary() else {
-                throw MetalShaderError.libraryCreationFailed
-            }
-            self.library = defaultLibrary
-        }
-
-        public func makeRenderPipelineState(
-            vertexFunction: String,
-            fragmentFunction: String,
-            pixelFormat: MTLPixelFormat = .bgra8Unorm_srgb
-        ) throws -> MTLRenderPipelineState {
-
-            let cacheKey = "\(vertexFunction)_\(fragmentFunction)_\(pixelFormat.rawValue)"
-
-            if let cached = pipelineCache[cacheKey] {
-                return cached
-            }
-
-            guard let vertexFunc = library.makeFunction(name: vertexFunction) else {
-                throw MetalShaderError.functionNotFound(vertexFunction)
-            }
-
-            guard let fragmentFunc = library.makeFunction(name: fragmentFunction) else {
-                throw MetalShaderError.functionNotFound(fragmentFunction)
-            }
-
-            let pipelineDescriptor = MTLRenderPipelineDescriptor()
-            pipelineDescriptor.vertexFunction = vertexFunc
-            pipelineDescriptor.fragmentFunction = fragmentFunc
-            pipelineDescriptor.colorAttachments[0].pixelFormat = pixelFormat
-
-            // Enable blending for transparency
-            pipelineDescriptor.colorAttachments[0].isBlendingEnabled = true
-            pipelineDescriptor.colorAttachments[0].rgbBlendOperation = .add
-            pipelineDescriptor.colorAttachments[0].alphaBlendOperation = .add
-            pipelineDescriptor.colorAttachments[0].sourceRGBBlendFactor = .sourceAlpha
-            pipelineDescriptor.colorAttachments[0].sourceAlphaBlendFactor = .sourceAlpha
-            pipelineDescriptor.colorAttachments[0].destinationRGBBlendFactor = .oneMinusSourceAlpha
-            pipelineDescriptor.colorAttachments[0].destinationAlphaBlendFactor =
-                .oneMinusSourceAlpha
-
-            do {
-                let pipelineState = try device.makeRenderPipelineState(
-                    descriptor: pipelineDescriptor)
-                pipelineCache[cacheKey] = pipelineState
-                return pipelineState
-            } catch {
-                throw MetalShaderError.pipelineCreationFailed(error)
-            }
-        }
-
-        public func makeComputePipelineState(function: String) throws -> MTLComputePipelineState {
-            guard let computeFunc = library.makeFunction(name: function) else {
-                throw MetalShaderError.functionNotFound(function)
-            }
-
-            do {
-                return try device.makeComputePipelineState(function: computeFunc)
-            } catch {
-                throw MetalShaderError.pipelineCreationFailed(error)
-            }
-        }
-    }
 
 #endif
 

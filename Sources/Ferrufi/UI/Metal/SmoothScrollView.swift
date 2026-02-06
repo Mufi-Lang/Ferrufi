@@ -31,6 +31,7 @@
     @MainActor
     public class SmoothScrollRenderer: BaseMetalRenderer {
         private var pipelineState: MTLRenderPipelineState?
+        private var shaderManager: ShaderManager?
         private var vertexBuffer: MTLBuffer?
         private var indexBuffer: MTLBuffer?
 
@@ -47,18 +48,21 @@
 
         public override init(device: MTLDevice, commandQueue: MTLCommandQueue) {
             super.init(device: device, commandQueue: commandQueue)
-            setupPipeline()
-            setupGeometry()
+            if MetalDeviceManager.shared.isLibraryLoaded, let library = MetalDeviceManager.shared.defaultLibrary {
+                self.shaderManager = ShaderManager(device: device, library: library)
+                setupPipeline()
+                setupGeometry()
+            }
         }
 
         private func setupPipeline() {
-            guard let device = device else { return }
+            guard let shaderManager = shaderManager else { return }
 
             do {
-                let shaderManager = try MetalShaderManager(device: device)
-                pipelineState = try shaderManager.makeRenderPipelineState(
-                    vertexFunction: "vertex_simple",
-                    fragmentFunction: "fragment_solid"
+                pipelineState = try shaderManager.getRenderPipeline(
+                    vertexFunctionName: "vertex_simple",
+                    fragmentFunctionName: "fragment_solid",
+                    label: "Smooth Scroll Pipeline"
                 )
             } catch {
                 print("Failed to setup scroll renderer pipeline: \(error)")
@@ -375,132 +379,4 @@
         }
     }
 
-    // MARK: - Legacy Metal Text Renderer
-
-    @MainActor
-    @available(*, deprecated, message: "Use the new global MetalTextRenderer in MetalRenderer.swift instead.")
-    public class LegacyMetalTextRenderer: BaseMetalRenderer {
-        private var textTexture: MTLTexture?
-        private var pipelineState: MTLRenderPipelineState?
-
-        private var text: String = ""
-        private var font: NSFont = .systemFont(ofSize: 14)
-
-        public override init(device: MTLDevice, commandQueue: MTLCommandQueue) {
-            super.init(device: device, commandQueue: commandQueue)
-            setupPipeline()
-        }
-
-        private func setupPipeline() {
-            guard let device = device else { return }
-
-            do {
-                let shaderManager = try MetalShaderManager(device: device)
-                pipelineState = try shaderManager.makeRenderPipelineState(
-                    vertexFunction: "vertex_simple",
-                    fragmentFunction: "fragment_textured"
-                )
-            } catch {
-                print("Failed to setup text renderer pipeline: \(error)")
-            }
-        }
-
-        public func setText(_ text: String, font: NSFont) {
-            self.text = text
-            self.font = font
-            generateTextTexture()
-        }
-
-        private func generateTextTexture() {
-            guard let device = device else { return }
-
-            // Create attributed string
-            let attributes: [NSAttributedString.Key: Any] = [
-                .font: font,
-                .foregroundColor: NSColor.textColor,
-            ]
-            let attributedString = NSAttributedString(string: text, attributes: attributes)
-
-            // Calculate text size
-            let textSize = attributedString.boundingRect(
-                with: CGSize(
-                    width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude),
-                options: [.usesLineFragmentOrigin, .usesFontLeading],
-                context: nil
-            ).size
-
-            // Create bitmap context
-            let width = Int(ceil(textSize.width))
-            let height = Int(ceil(textSize.height))
-
-            guard width > 0 && height > 0 else { return }
-
-            let colorSpace = CGColorSpaceCreateDeviceRGB()
-            let bitmapInfo = CGImageAlphaInfo.premultipliedLast.rawValue
-
-            guard
-                let context = CGContext(
-                    data: nil,
-                    width: width,
-                    height: height,
-                    bitsPerComponent: 8,
-                    bytesPerRow: width * 4,
-                    space: colorSpace,
-                    bitmapInfo: bitmapInfo
-                )
-            else { return }
-
-            // Clear context
-            context.clear(CGRect(x: 0, y: 0, width: width, height: height))
-
-            // Draw text
-            let nsContext = NSGraphicsContext(cgContext: context, flipped: false)
-            NSGraphicsContext.saveGraphicsState()
-            NSGraphicsContext.current = nsContext
-
-            attributedString.draw(at: CGPoint(x: 0, y: 0))
-
-            NSGraphicsContext.restoreGraphicsState()
-
-            // Create Metal texture
-            guard let data = context.data else { return }
-
-            let textureDescriptor = MTLTextureDescriptor.texture2DDescriptor(
-                pixelFormat: .rgba8Unorm,
-                width: width,
-                height: height,
-                mipmapped: false
-            )
-            textureDescriptor.usage = [.shaderRead]
-
-            guard let texture = device.makeTexture(descriptor: textureDescriptor) else { return }
-
-            texture.replace(
-                region: MTLRegionMake2D(0, 0, width, height),
-                mipmapLevel: 0,
-                withBytes: data,
-                bytesPerRow: width * 4
-            )
-
-            self.textTexture = texture
-        }
-
-        public override func render(in view: MTKView, with commandBuffer: MTLCommandBuffer) {
-            guard let pipelineState = pipelineState,
-                let textTexture = textTexture,
-                let renderPassDescriptor = view.currentRenderPassDescriptor,
-                let renderEncoder = commandBuffer.makeRenderCommandEncoder(
-                    descriptor: renderPassDescriptor)
-            else {
-                return
-            }
-
-            renderEncoder.setRenderPipelineState(pipelineState)
-            renderEncoder.setFragmentTexture(textTexture, index: 0)
-
-            // Render text quad
-            renderEncoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
-            renderEncoder.endEncoding()
-        }
-    }
 #endif
