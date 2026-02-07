@@ -87,25 +87,19 @@ const config: Config = {
       style: 'dark',
       links: [
         {
-          title: 'Docs',
-          items: [
-            {
-              label: 'Installation',
-              to: '/docs/intro',
-            },
-          ],
+          label: 'Documentation',
+          to: '/docs/intro',
         },
         {
-          title: 'Community',
-          items: [
-            {
-              label: 'GitHub',
-              href: 'https://github.com/Mufi-Lang/Ferrufi',
-            },
-          ],
+          label: 'Installation',
+          to: '/docs/installation',
+        },
+        {
+          label: 'GitHub',
+          href: 'https://github.com/Mufi-Lang/Ferrufi',
         },
       ],
-      copyright: `Copyright © ${new Date().getFullYear()} Mufi-Lang. Built with Docusaurus.`,
+      copyright: `Copyright © ${new Date().getFullYear()} Mufi-Lang.`,
     },
     prism: {
       theme: prismThemes.github,

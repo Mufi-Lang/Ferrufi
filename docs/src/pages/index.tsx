@@ -54,16 +54,15 @@ function HomepageHeader() {
                 <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: '#27c93f' }}></div>
               </div>
               <pre style={{ margin: 0, background: 'none', border: 'none', color: '#d4d4d4' }}>
-                <code>{`fn main() {
-  var engine = Metal.init()
-  engine.render("Hello, Mufi!")
-  
-  // High-performance REPL
-  while (true) {
-    let input = readLine()
-    interpret(input)
+                <code>{`fn fibonacci(n) {
+  if n <= 1 {
+    return n
   }
-}`}</code>
+  return fibonacci(n - 1) + fibonacci(n - 2)
+}
+
+var result = fibonacci(10)
+print("Fib(10) = " + str(result))`}</code>
               </pre>
             </div>
           </div>
