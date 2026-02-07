@@ -25,7 +25,7 @@ This plan follows an evolutionary refactor of the existing Metal rendering subsy
 - [x] Task: GPU-Accelerated Animations
     - [ ] Implement smooth cursor motion using GPU interpolators.
     - [ ] Implement animated selection highlights.
-- [ ] Task: Performance Optimization and Validation
+- [x] Task: Performance Optimization and Validation
     - [ ] Profile rendering pipeline for 60+ FPS consistency.
     - [ ] Ensure memory safety during buffer updates.
 - [ ] Task: Conductor - User Manual Verification 'Phase 3: Visual Feedback and Animations' (Protocol in workflow.md)

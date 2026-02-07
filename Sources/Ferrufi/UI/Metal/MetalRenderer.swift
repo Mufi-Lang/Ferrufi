@@ -149,6 +149,11 @@ import SwiftUI
             descriptor.attributes[2].offset = MemoryLayout<SIMD3<Float>>.stride + MemoryLayout<SIMD4<Float>>.stride
             descriptor.attributes[2].bufferIndex = 0
             
+            // TokenType
+            descriptor.attributes[3].format = .float
+            descriptor.attributes[3].offset = MemoryLayout<SIMD3<Float>>.stride + MemoryLayout<SIMD4<Float>>.stride + MemoryLayout<SIMD2<Float>>.stride
+            descriptor.attributes[3].bufferIndex = 0
+            
             descriptor.layouts[0].stride = MemoryLayout<Vertex>.stride
             descriptor.layouts[0].stepRate = 1
             descriptor.layouts[0].stepFunction = .perVertex
@@ -231,10 +236,10 @@ import SwiftUI
 
         private func setupBuffers() {
             let vertices: [Vertex] = [
-                Vertex(position: SIMD3<Float>(-1, -1, 0), color: SIMD4<Float>(1, 1, 1, 1), texCoords: SIMD2<Float>(0, 1)),
-                Vertex(position: SIMD3<Float>(1, -1, 0), color: SIMD4<Float>(1, 1, 1, 1), texCoords: SIMD2<Float>(1, 1)),
-                Vertex(position: SIMD3<Float>(-1, 1, 0), color: SIMD4<Float>(1, 1, 1, 1), texCoords: SIMD2<Float>(0, 0)),
-                Vertex(position: SIMD3<Float>(1, 1, 0), color: SIMD4<Float>(1, 1, 1, 1), texCoords: SIMD2<Float>(1, 0))
+                Vertex(position: SIMD3<Float>(-1, -1, 0), color: SIMD4<Float>(1, 1, 1, 1), texCoords: SIMD2<Float>(0, 1), tokenType: 0),
+                Vertex(position: SIMD3<Float>(1, -1, 0), color: SIMD4<Float>(1, 1, 1, 1), texCoords: SIMD2<Float>(1, 1), tokenType: 0),
+                Vertex(position: SIMD3<Float>(-1, 1, 0), color: SIMD4<Float>(1, 1, 1, 1), texCoords: SIMD2<Float>(0, 0), tokenType: 0),
+                Vertex(position: SIMD3<Float>(1, 1, 0), color: SIMD4<Float>(1, 1, 1, 1), texCoords: SIMD2<Float>(1, 0), tokenType: 0)
             ]
             vertexBuffer = makeBuffer(from: vertices)
         }
@@ -298,10 +303,10 @@ import SwiftUI
 
         private func setupBuffers() {
             let vertices: [Vertex] = [
-                Vertex(position: SIMD3<Float>(-1, -1, 0), color: SIMD4<Float>(1, 1, 1, 1), texCoords: SIMD2<Float>(0, 1)),
-                Vertex(position: SIMD3<Float>(1, -1, 0), color: SIMD4<Float>(1, 1, 1, 1), texCoords: SIMD2<Float>(1, 1)),
-                Vertex(position: SIMD3<Float>(-1, 1, 0), color: SIMD4<Float>(1, 1, 1, 1), texCoords: SIMD2<Float>(0, 0)),
-                Vertex(position: SIMD3<Float>(1, 1, 0), color: SIMD4<Float>(1, 1, 1, 1), texCoords: SIMD2<Float>(1, 0))
+                Vertex(position: SIMD3<Float>(-1, -1, 0), color: SIMD4<Float>(1, 1, 1, 1), texCoords: SIMD2<Float>(0, 1), tokenType: 0),
+                Vertex(position: SIMD3<Float>(1, -1, 0), color: SIMD4<Float>(1, 1, 1, 1), texCoords: SIMD2<Float>(1, 1), tokenType: 0),
+                Vertex(position: SIMD3<Float>(-1, 1, 0), color: SIMD4<Float>(1, 1, 1, 1), texCoords: SIMD2<Float>(0, 0), tokenType: 0),
+                Vertex(position: SIMD3<Float>(1, 1, 0), color: SIMD4<Float>(1, 1, 1, 1), texCoords: SIMD2<Float>(1, 0), tokenType: 0)
             ]
             vertexBuffer = makeBuffer(from: vertices)
         }
@@ -565,13 +570,16 @@ public struct Vertex {
     public let position: SIMD3<Float>
     public let color: SIMD4<Float>
     public let texCoords: SIMD2<Float>
+    public let tokenType: Float
 
     public init(
-        position: SIMD3<Float>, color: SIMD4<Float>, texCoords: SIMD2<Float> = SIMD2<Float>(0, 0)
+        position: SIMD3<Float>, color: SIMD4<Float>, texCoords: SIMD2<Float> = SIMD2<Float>(0, 0),
+        tokenType: Float = 0.0
     ) {
         self.position = position
         self.color = color
         self.texCoords = texCoords
+        self.tokenType = tokenType
     }
 }
 

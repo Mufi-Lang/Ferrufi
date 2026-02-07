@@ -74,16 +74,16 @@
             let vertices: [Vertex] = [
                 Vertex(
                     position: SIMD3<Float>(-1, -1, 0), color: SIMD4<Float>(1, 1, 1, 1),
-                    texCoords: SIMD2<Float>(0, 1)),
+                    texCoords: SIMD2<Float>(0, 1), tokenType: 0),
                 Vertex(
                     position: SIMD3<Float>(1, -1, 0), color: SIMD4<Float>(1, 1, 1, 1),
-                    texCoords: SIMD2<Float>(1, 1)),
+                    texCoords: SIMD2<Float>(1, 1), tokenType: 0),
                 Vertex(
                     position: SIMD3<Float>(1, 1, 0), color: SIMD4<Float>(1, 1, 1, 1),
-                    texCoords: SIMD2<Float>(1, 0)),
+                    texCoords: SIMD2<Float>(1, 0), tokenType: 0),
                 Vertex(
                     position: SIMD3<Float>(-1, 1, 0), color: SIMD4<Float>(1, 1, 1, 1),
-                    texCoords: SIMD2<Float>(0, 0)),
+                    texCoords: SIMD2<Float>(0, 0), tokenType: 0),
             ]
 
             let indices: [UInt16] = [0, 1, 2, 2, 3, 0]

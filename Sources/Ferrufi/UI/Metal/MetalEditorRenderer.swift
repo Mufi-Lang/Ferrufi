@@ -108,24 +108,51 @@ public class MetalEditorRenderer: BaseMetalRenderer {
             let layoutEngine = LayoutEngine()
             let glyphPositions = layoutEngine.layout(state: state, font: atlas.font)
             
+            var allVertices: [Vertex] = []
+            
             for gp in glyphPositions {
                 guard let desc = atlas.descriptor(for: gp.glyph) else { continue }
                 
-                var offset = SIMD2<Float>(Float(gp.position.x), Float(gp.position.y))
-                var tokenType = Float(gp.tokenType)
+                let x = Float(gp.position.x)
+                let y = Float(gp.position.y)
+                let w = Float(desc.size.width)
+                let h = Float(desc.size.height)
                 
-                encoder.setVertexBytes(&offset, length: MemoryLayout<SIMD2<Float>>.size, index: 2)
-                encoder.setVertexBytes(&tokenType, length: MemoryLayout<Float>.size, index: 3)
+                let tx1 = Float(desc.textureRect.minX)
+                let ty1 = Float(desc.textureRect.minY)
+                let tx2 = Float(desc.textureRect.maxX)
+                let ty2 = Float(desc.textureRect.maxY)
                 
-                // Draw quad (Simplified, should use vertex buffer)
-                let vertices: [Vertex] = [
-                    Vertex(position: SIMD3<Float>(0, 0, 0), color: SIMD4<Float>(1, 1, 1, 1), texCoords: SIMD2<Float>(Float(desc.textureRect.minX), Float(desc.textureRect.minY))),
-                    Vertex(position: SIMD3<Float>(Float(desc.size.width), 0, 0), color: SIMD4<Float>(1, 1, 1, 1), texCoords: SIMD2<Float>(Float(desc.textureRect.maxX), Float(desc.textureRect.minY))),
-                    Vertex(position: SIMD3<Float>(0, Float(desc.size.height), 0), color: SIMD4<Float>(1, 1, 1, 1), texCoords: SIMD2<Float>(Float(desc.textureRect.minX), Float(desc.textureRect.maxY))),
-                    Vertex(position: SIMD3<Float>(Float(desc.size.width), Float(desc.size.height), 0), color: SIMD4<Float>(1, 1, 1, 1), texCoords: SIMD2<Float>(Float(desc.textureRect.maxX), Float(desc.textureRect.maxY)))
-                ]
-                encoder.setVertexBytes(vertices, length: MemoryLayout<Vertex>.stride * vertices.count, index: 0)
-                encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
+                let tokenType = Float(gp.tokenType)
+                let color = SIMD4<Float>(1, 1, 1, 1)
+                
+                // Quad as two triangles (triangle strip)
+                // We use vertex_glyph which adds an offset, but we can bake it into the position
+                // and set offset to (0,0)
+                allVertices.append(contentsOf: [
+                    Vertex(position: SIMD3<Float>(x, y, 0), color: color, texCoords: SIMD2<Float>(tx1, ty1), tokenType: tokenType),
+                    Vertex(position: SIMD3<Float>(x + w, y, 0), color: color, texCoords: SIMD2<Float>(tx2, ty1), tokenType: tokenType),
+                    Vertex(position: SIMD3<Float>(x, y + h, 0), color: color, texCoords: SIMD2<Float>(tx1, ty2), tokenType: tokenType),
+                    Vertex(position: SIMD3<Float>(x + w, y + h, 0), color: color, texCoords: SIMD2<Float>(tx2, ty2), tokenType: tokenType)
+                ])
+            }
+            
+            if !allVertices.isEmpty {
+                var zeroOffset = SIMD2<Float>(0, 0)
+                encoder.setVertexBytes(&zeroOffset, length: MemoryLayout<SIMD2<Float>>.size, index: 2)
+                
+                // For a strip of quads, we can't easily use one draw call without degenerate triangles 
+                // or using an index buffer. For this optimization, we'll use .triangle and 6 vertices per quad.
+                
+                var indexedVertices: [Vertex] = []
+                for i in stride(from: 0, to: allVertices.count, by: 4) {
+                    let v = Array(allVertices[i..<i+4])
+                    // 0, 1, 2, 2, 1, 3
+                    indexedVertices.append(contentsOf: [v[0], v[1], v[2], v[2], v[1], v[3]])
+                }
+                
+                encoder.setVertexBytes(indexedVertices, length: MemoryLayout<Vertex>.stride * indexedVertices.count, index: 0)
+                encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: indexedVertices.count)
             }
         } catch {
             print("❌ Metal error rendering text: \(error)")
@@ -158,10 +185,10 @@ public class MetalEditorRenderer: BaseMetalRenderer {
             let selectionColor = SIMD4<Float>(0.0, 0.5, 1.0, 0.5) // Selection color
             
             let vertices: [Vertex] = [
-                Vertex(position: SIMD3<Float>(Float(selectionRect.minX), Float(selectionRect.minY), 0), color: selectionColor),
-                Vertex(position: SIMD3<Float>(Float(selectionRect.maxX), Float(selectionRect.minY), 0), color: selectionColor),
-                Vertex(position: SIMD3<Float>(Float(selectionRect.minX), Float(selectionRect.maxY), 0), color: selectionColor),
-                Vertex(position: SIMD3<Float>(Float(selectionRect.maxX), Float(selectionRect.maxY), 0), color: selectionColor)
+                Vertex(position: SIMD3<Float>(Float(selectionRect.minX), Float(selectionRect.minY), 0), color: selectionColor, tokenType: 0),
+                Vertex(position: SIMD3<Float>(Float(selectionRect.maxX), Float(selectionRect.minY), 0), color: selectionColor, tokenType: 0),
+                Vertex(position: SIMD3<Float>(Float(selectionRect.minX), Float(selectionRect.maxY), 0), color: selectionColor, tokenType: 0),
+                Vertex(position: SIMD3<Float>(Float(selectionRect.maxX), Float(selectionRect.maxY), 0), color: selectionColor, tokenType: 0)
             ]
             encoder.setVertexBytes(vertices, length: MemoryLayout<Vertex>.stride * vertices.count, index: 0)
             encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
@@ -195,10 +222,10 @@ public class MetalEditorRenderer: BaseMetalRenderer {
             encoder.setVertexBytes(&size, length: MemoryLayout<SIMD2<Float>>.size, index: 5)
             
             let vertices: [Vertex] = [
-                Vertex(position: SIMD3<Float>(-1, -1, 0), color: SIMD4<Float>(1, 1, 1, 1)),
-                Vertex(position: SIMD3<Float>(1, -1, 0), color: SIMD4<Float>(1, 1, 1, 1)),
-                Vertex(position: SIMD3<Float>(-1, 1, 0), color: SIMD4<Float>(1, 1, 1, 1)),
-                Vertex(position: SIMD3<Float>(1, 1, 0), color: SIMD4<Float>(1, 1, 1, 1))
+                Vertex(position: SIMD3<Float>(-1, -1, 0), color: SIMD4<Float>(1, 1, 1, 1), tokenType: 0),
+                Vertex(position: SIMD3<Float>(1, -1, 0), color: SIMD4<Float>(1, 1, 1, 1), tokenType: 0),
+                Vertex(position: SIMD3<Float>(-1, 1, 0), color: SIMD4<Float>(1, 1, 1, 1), tokenType: 0),
+                Vertex(position: SIMD3<Float>(1, 1, 0), color: SIMD4<Float>(1, 1, 1, 1), tokenType: 0)
             ]
             encoder.setVertexBytes(vertices, length: MemoryLayout<Vertex>.stride * vertices.count, index: 0)
             encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
