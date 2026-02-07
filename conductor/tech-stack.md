@@ -7,7 +7,8 @@
 
 ## Frontend / UI
 - **Frameworks:** SwiftUI (modern UI), AppKit (low-level window and editor management).
-- **Rendering:** Metal (GPU-accelerated text and UI rendering via `MetalRenderer`).
+- **Rendering:** Metal (GPU-accelerated text and UI rendering via a modular pipeline: `RenderState`, `LayoutEngine`, `ShaderManager`, and `MetalEditorRenderer`).
+- **Text Engine:** CoreText-driven glyph positioning with full support for ligatures and complex layout.
 
 ## Tools & Dependencies
 - **Build System:** Swift Package Manager (SPM).
