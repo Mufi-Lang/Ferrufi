@@ -143,6 +143,50 @@ fragment float4 fragment_token_effect(VertexOut in [[stage_in]],
     return baseColor;
 }
 
+// Cursor shader with smooth pulsing
+fragment float4 fragment_cursor(VertexOut in [[stage_in]],
+                               constant float& time [[buffer(0)]]) {
+    float pulse = (sin(time * 4.0) + 1.0) * 0.5;
+    float alpha = mix(0.7, 1.0, pulse);
+    return float4(in.color.rgb, in.color.a * alpha);
+}
+
+// Selection highlight shader
+fragment float4 fragment_selection(VertexOut in [[stage_in]],
+                                  constant float& time [[buffer(0)]]) {
+    // Subtle shimmering effect for selection
+    float shimmer = sin(in.texCoords.x * 10.0 + time * 2.0) * 0.1;
+    return float4(in.color.rgb, (in.color.a + shimmer) * 0.3);
+}
+
+// GPU-accelerated cursor interpolation
+vertex VertexOut vertex_cursor(VertexIn in [[stage_in]],
+                              constant float4x4& projectionMatrix [[buffer(1)]],
+                              constant float2& startPos [[buffer(2)]],
+                              constant float2& targetPos [[buffer(3)]],
+                              constant float& progress [[buffer(4)]],
+                              constant float2& size [[buffer(5)]]) {
+    VertexOut out;
+    
+    // Smooth interpolation (easy-in-out)
+    float t = progress * progress * (3.0 - 2.0 * progress);
+    float2 pos = mix(startPos, targetPos, t);
+    
+    // Map quad vertices to cursor size and position
+    float2 quadPos = in.position.xy * 0.5 + 0.5; // 0..1
+    quadPos.x *= size.x;
+    quadPos.y *= size.y;
+    
+    float4 finalPos = float4(quadPos + pos, 0.0, 1.0);
+    out.position = projectionMatrix * finalPos;
+    
+    out.color = in.color;
+    out.texCoords = in.texCoords;
+    out.tokenType = 0.0;
+    
+    return out;
+}
+
 // MARK: - Animation Shaders
 
 // Pulsing effect

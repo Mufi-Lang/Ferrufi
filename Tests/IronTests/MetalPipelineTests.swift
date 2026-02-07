@@ -35,4 +35,16 @@ final class MetalPipelineTests: XCTestCase {
         // We just verify it returns something valid for now.
         XCTAssertTrue(glyphs.count > 0)
     }
+
+    func testCursorRectCalculation() {
+        let text = "Hello"
+        let state = RenderState(text: text, cursorPosition: 2)
+        let layoutEngine = LayoutEngine()
+        let font = NSFont.systemFont(ofSize: 14)
+        
+        let rect = layoutEngine.rect(for: 2, state: state, font: font)
+        
+        XCTAssertTrue(rect.origin.x > 0)
+        XCTAssertEqual(rect.size.height, font.pointSize)
+    }
 }

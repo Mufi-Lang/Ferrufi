@@ -22,7 +22,7 @@ This plan follows an evolutionary refactor of the existing Metal rendering subsy
 - [ ] Task: Conductor - User Manual Verification 'Phase 2: Advanced Layout and Rendering' (Protocol in workflow.md)
 
 ## Phase 3: Visual Feedback and Animations
-- [ ] Task: GPU-Accelerated Animations
+- [x] Task: GPU-Accelerated Animations
     - [ ] Implement smooth cursor motion using GPU interpolators.
     - [ ] Implement animated selection highlights.
 - [ ] Task: Performance Optimization and Validation
