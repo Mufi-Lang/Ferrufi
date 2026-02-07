@@ -12,7 +12,7 @@ final class MufiTests: XCTestCase {
             enableLeakDetection: false, enableTracking: false, enableSafety: true)
 
         // Run a simple print statement and assert we received the printed output.
-        let (status, output) = try await MufiBridge.shared.interpret("print(\"Hello, Test!\")")
+        let (status, output) = try await MufiBridge.shared.interpret("print(\"Hello, Test!\");")
         XCTAssertEqual(status, 0, "Expected interpret status 0 on successful run, got \(status)")
         XCTAssertTrue(
             output.contains("Hello, Test!"),
