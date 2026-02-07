@@ -2,15 +2,15 @@
 
 This plan follows an evolutionary refactor of the existing Metal rendering subsystem to improve modularity, performance, and documentation.
 
-## Phase 1: Foundation and Modularity (Architecture)
+## Phase 1: Foundation and Modularity (Architecture) [checkpoint: 958e067]
 - [x] Task: Audit and Document Current `MetalRenderer` State
-    - [ ] Analyze `MetalRenderer.swift` and `Shaders.metal`.
-    - [ ] Create initial `docs/METAL_PIPELINE_ARCHITECTURE.md` describing current flow and planned changes.
+    - [x] Analyze `MetalRenderer.swift` and `Shaders.metal`.
+    - [x] Create initial `docs/METAL_PIPELINE_ARCHITECTURE.md` describing current flow and planned changes.
 - [x] Task: Create Modular Render Components
-    - [ ] Define `RenderState` to decouple editor data from the renderer.
-    - [ ] Implement `LayoutEngine` to handle text-to-glyph-pos calculations.
-    - [ ] Implement `ShaderManager` for organized pipeline state management.
-- [ ] Task: Conductor - User Manual Verification 'Phase 1: Foundation and Modularity' (Protocol in workflow.md)
+    - [x] Define `RenderState` to decouple editor data from the renderer.
+    - [x] Implement `LayoutEngine` to handle text-to-glyph-pos calculations.
+    - [x] Implement `ShaderManager` for organized pipeline state management.
+- [x] Task: Conductor - User Manual Verification 'Phase 1: Foundation and Modularity' (Protocol in workflow.md)
 
 ## Phase 2: Advanced Layout and Rendering
 - [ ] Task: Implement Improved Text Layout
