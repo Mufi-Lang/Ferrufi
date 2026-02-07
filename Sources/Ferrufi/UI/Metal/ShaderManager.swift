@@ -10,18 +10,28 @@ public enum ShaderError: Error {
     case pipelineCreationFailed(Error)
 }
 
-/// Manages and caches Metal pipeline states.
+/// Manages and caches Metal pipeline states to avoid runtime compilation overhead.
 public class ShaderManager {
     private let device: MTLDevice
     private let library: MTLLibrary
     private var renderPipelineCache: [String: MTLRenderPipelineState] = [:]
     private var computePipelineCache: [String: MTLComputePipelineState] = [:]
     
+    /// Initializes the manager with a device and library.
+    /// - Parameters:
+    ///   - device: The Metal device used for pipeline creation.
+    ///   - library: The shader library containing the functions.
     public init(device: MTLDevice, library: MTLLibrary) {
         self.device = device
         self.library = library
     }
     
+    /// Retrieves or creates a render pipeline state.
+    /// - Parameters:
+    ///   - vertexFunctionName: The name of the vertex function.
+    ///   - fragmentFunctionName: The name of the fragment function.
+    ///   - label: An optional debug label for the pipeline.
+    /// - Returns: A compiled `MTLRenderPipelineState`.
     public func getRenderPipeline(
         vertexFunctionName: String,
         fragmentFunctionName: String,

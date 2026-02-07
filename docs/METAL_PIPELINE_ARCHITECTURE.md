@@ -2,44 +2,56 @@
 
 This document describes the architecture of Ferrufi's Metal-based rendering subsystem.
 
-## Current State (Legacy)
+## Overview
 
-The current pipeline is based on `BaseMetalRenderer`, which provides a foundation for specialized renderers:
-- `EditorBackgroundRenderer`: Animated background using mesh gradients.
-- `MinimapRenderer`: High-level code structure visualization.
-- `MetalTextRenderer`: Simplified text rendering (per-character draw loop).
+Ferrufi uses a modular, GPU-accelerated rendering pipeline designed for high-performance text editing and visual effects. The architecture decouples the editor's live state from the rendering process using immutable snapshots and specialized engines.
 
-### Hardware Management
-`MetalDeviceManager` handles `MTLDevice` and `MTLCommandQueue` initialization and provides robust `MTLLibrary` loading logic.
-
-### Shaders
-`Shaders.metal` contains a mix of vertex, fragment, and compute shaders for UI components, animations, and experimental lexing/layout.
-
-### Deficiencies
-1. **Coupling:** The renderer is tightly coupled with the editor state.
-2. **Inefficiency:** `MetalTextRenderer` performs individual draw calls for each character.
-3. **Rigidity:** Adding new visual effects requires modifying the core renderer logic.
-
-## Planned Architecture (Modular)
-
-The enhanced pipeline will decouple responsibilities into modular components.
+## Core Components
 
 ### 1. Render State (`RenderState`)
-A data structure that encapsulates all information required for a single frame, isolated from the editor's live state.
+- **Purpose:** Encapsulates all data required to render a single frame.
+- **Contents:** Text content, cursor position, selection range, diagnostics, and token-specific metadata (`tokenTypes`).
+- **Benefit:** Thread safety. The renderer works on a stable snapshot while the editor state continues to evolve.
 
 ### 2. Layout Engine (`LayoutEngine`)
-Responsible for calculating glyph positions, line breaks, and ligature substitutions. It produces a stream of glyph data for the renderer.
+- **Purpose:** Translates text and styling into physical glyph positions.
+- **Technology:** Leverages **CoreText** (`CTLine`, `CTRun`) for high-fidelity typography.
+- **Features:** 
+    - Full support for ligatures and complex scripts.
+    - Variable-width font handling.
+    - Precise character-to-rect mapping for cursor and selection placement.
 
 ### 3. Shader Manager (`ShaderManager`)
-Organizes and caches `MTLRenderPipelineState` and `MTLComputePipelineState` objects, providing a clean interface for selecting shaders.
+- **Purpose:** Centralized management and caching of Metal Pipeline States (PSOs).
+- **Functionality:** 
+    - Compiles and caches `MTLRenderPipelineState` and `MTLComputePipelineState` objects.
+    - Provides a clean interface for specialized renderers to request shaders by name.
 
-### 4. Modular Renderer
-The core renderer will be refactored to consume `RenderState` and use the `LayoutEngine` and `ShaderManager` to encode commands efficiently (using instanced rendering or large vertex buffers for text).
+### 4. Metal Editor Renderer (`MetalEditorRenderer`)
+- **Purpose:** The primary orchestrator for the editor's visual layers.
+- **Responsibilities:**
+    - **Batched Text Rendering:** Efficiently draws all glyphs in a single draw call using a unified vertex buffer.
+    - **Selection Layer:** Renders shimmering highlight overlays for selected text ranges.
+    - **GPU-Accelerated Cursor:** Implements fluid, sliding cursor motion using GPU-side interpolation (vertex shader) for 120fps smoothness.
+    - **Token Effects:** Applies shader-based visual enhancements (e.g., glow, underlines) based on token types.
 
 ## Component Flow
 
-1. **Input:** Editor state (text, selection, diagnostics).
-2. **Snapshot:** Create a `RenderState` snapshot.
-3. **Layout:** `LayoutEngine` processes the snapshot to determine glyph positions.
-4. **Encoding:** Renderer uses `ShaderManager` and layout data to encode Metal commands.
-5. **Display:** `MTKView` presents the rendered frame.
+1. **Snapshot:** The editor generates a `RenderState` snapshot.
+2. **Layout:** `LayoutEngine` processes the snapshot to determine `CGGlyph` indices and `CGPoint` positions.
+3. **Encoding:** `MetalEditorRenderer` consumes the layout data:
+    - Batches glyph vertices into a temporary buffer.
+    - Encodes commands using PSOs from `ShaderManager`.
+    - Passes dynamic data (time, animation progress) to shaders via constants and attributes.
+4. **Display:** `MTKView` presents the final rendered frame.
+
+## Performance Optimizations
+
+- **Batching:** Reduces CPU-to-GPU overhead by combining individual character draw calls into a single vertex array.
+- **GPU Interpolation:** Moves cursor animation math from the Main Thread to the GPU, ensuring visual fluidness even during heavy system load.
+- **PSO Caching:** Eliminates runtime compilation stutters by reusing pipeline states.
+
+## Future Roadmap
+
+- **Compute Lexing:** Moving syntax highlighting from CPU regular expressions to Metal compute kernels.
+- **SDF Text:** Implementing Signed Distance Field rendering for infinite zoom clarity and advanced text effects.
