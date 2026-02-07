@@ -37,13 +37,13 @@ public class LayoutEngine {
         
                     var positions = [CGPoint](repeating: .zero, count: glyphCount)
         
-                    var advances = [CGSize](repeating: .zero, count: glyphCount)
+                                var advances = [CGSize](repeating: .zero, count: glyphCount)
         
-                    let stringIndices = [CFIndex](repeating: 0, count: glyphCount)
+                                
+        
+                                CTRunGetGlyphs(run, CFRangeMake(0, glyphCount), &glyphs)
         
                     
-        
-                    CTRunGetGlyphs(run, CFRangeMake(0, glyphCount), &glyphs)
         
                     CTRunGetPositions(run, CFRangeMake(0, glyphCount), &positions)
         

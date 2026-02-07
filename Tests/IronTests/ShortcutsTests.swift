@@ -71,7 +71,6 @@ final class ShortcutsTests: XCTestCase {
     func testAllActionLabelsHaveDefaultBindings() {
         let sm = ShortcutsManager.shared
         let labels = sm.actionLabels.keys
-        let defaults = ShortcutsConfiguration.defaultBindings.keys
 
         for label in labels {
             // Some actions might not have defaults, but let's check if they are at least known to the config

@@ -6,7 +6,7 @@ import PackageDescription
 let package = Package(
     name: "Ferrufi",
     platforms: [
-        .macOS(.v26)
+        .macOS("26.2")
     ],
     products: [
         .library(

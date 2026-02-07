@@ -380,8 +380,8 @@ import SwiftUI
                 let glyphPositions = layoutEngine.layout(state: state, font: atlas.font)
                 
                 for gp in glyphPositions {
-                    guard let desc = atlas.descriptor(for: gp.glyph) else { continue }
-                    // ... rendering logic using desc, gp.position, and gp.tokenType ...
+                    guard let _ = atlas.descriptor(for: gp.glyph) else { continue }
+                    // ... rendering logic using gp.position and gp.tokenType ...
                 }
             }
             
