@@ -65,15 +65,15 @@ We welcome contributions — issues, PRs, and feedback.
   - Fork the repo, make small focused changes, add tests where applicable, and open a PR.
   - Run the local build (`./scripts/build_app.sh --zip`) and any relevant checks before submitting.
 
-See project docs in `docs/` for additional developer notes (e.g., linking tests and binary layout).
+See project docs in `plans/` for additional developer notes (e.g., linking tests and binary layout).
 
 ---
 
 ## Documentation
 Helpful docs:
 - `DISTRIBUTION_QUICKSTART.md` — packaging and distribution notes
-- `docs/DISTRIBUTION.md` — full distribution guide
-- `docs/FILE_ACCESS_FIX.md` — file permission / entitlement guidance
+- `plans/DISTRIBUTION.md` — full distribution guide
+- `plans/FILE_ACCESS_FIX.md` — file permission / entitlement guidance
 - `MEMORY_SAFETY.md` — runtime safety and crash-avoidance notes
 
 ---

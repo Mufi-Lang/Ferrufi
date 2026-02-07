@@ -346,7 +346,7 @@ scripts/
 CURRENT_STATUS.md                    # Complete status (this doc's big brother)
 QUICK_REFERENCE.md                   # This file
 DISTRIBUTION_QUICKSTART.md           # Distribution guide
-docs/FILE_ACCESS_FIX.md              # Technical details
+plans/FILE_ACCESS_FIX.md              # Technical details
 SECURITY_SCOPED_RESOURCES_FIX.md     # Security scope guide
 ENTITLEMENTS_FIX_SUMMARY.md          # Entitlements reference
 ```
@@ -459,7 +459,7 @@ swift package clean
 **Need Help?**
 
 1. Check `CURRENT_STATUS.md` for detailed information
-2. Review `docs/FILE_ACCESS_FIX.md` for technical details
+2. Review `plans/FILE_ACCESS_FIX.md` for technical details
 3. Open an issue: https://github.com/Mufi-Lang/Ferrufi/issues
 4. Check workflow runs: https://github.com/Mufi-Lang/Ferrufi/actions
 

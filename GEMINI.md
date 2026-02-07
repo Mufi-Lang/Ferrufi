@@ -18,7 +18,7 @@ Ferrufi is a native macOS editor and lightweight IDE for the **Mufi** programmin
     - `Integrations/Mufi/`: Bridging between Swift and the Mufi C runtime.
 - `Sources/CMufi/`: C headers and the `libmufiz.dylib` binary.
 - `scripts/`: Shell scripts for building, installing, and testing.
-- `docs/`: Detailed technical documentation.
+- `plans/`: Detailed technical documentation.
 - `Tests/`: Swift testing suites.
 
 ## 🛠 Critical Workflows
@@ -55,7 +55,7 @@ Versions are managed in `Sources/Ferrufi/Version.swift`. Use `./scripts/set_vers
 - **Safety First:** When modifying file operations, ensure security-scoped access is maintained.
 - **Dylib Awareness:** Be cautious when changing anything related to `CMufi` or how `libmufiz.dylib` is loaded.
 - **Build Verification:** After making changes that affect the build process or dependencies, suggest running `./scripts/build_app.sh`.
-- **Reference Docs:** Consult `QUICK_REFERENCE.md` and `docs/` for deep dives into specific subsystems (e.g., `docs/METAL_IMPLEMENTATION.md`).
+- **Reference Docs:** Consult `QUICK_REFERENCE.md` and `plans/` for deep dives into specific subsystems (e.g., `plans/METAL_IMPLEMENTATION.md`).
 
 ## 🧪 Testing Checklist
 When adding features, ensure:

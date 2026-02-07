@@ -17,7 +17,7 @@ git add .github/workflows/macos-release.yml
 git add .github/workflows/experimental-release.yml
 
 # Add documentation
-git add docs/FILE_ACCESS_FIX.md
+git add plans/FILE_ACCESS_FIX.md
 git add ENTITLEMENTS_FIX_SUMMARY.md
 git add README.md
 
@@ -103,7 +103,7 @@ open /Applications/Ferrufi.app
 ## Quick Commit Command
 
 ```bash
-git add Ferrufi.entitlements scripts/ .github/workflows/ docs/ *.md && \
+git add Ferrufi.entitlements scripts/ .github/workflows/ plans/ *.md && \
 git commit -m "Fix: Add entitlements for file access" && \
 git push origin main
 ```

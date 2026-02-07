@@ -1,8 +1,0 @@
-{
-  "track_id": "ide_core_features_20260204",
-  "type": "feature",
-  "status": "new",
-  "created_at": "2026-02-04T12:00:00Z",
-  "updated_at": "2026-02-04T12:00:00Z",
-  "description": "Implement custom key binding logic for IDE shortcuts and integrate basic Language Server Protocol (LSP) capabilities for Mufi."
-}

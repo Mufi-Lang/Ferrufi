@@ -29,7 +29,7 @@ Added **entitlements** via ad-hoc code signing:
 - `scripts/build_dmg_local.sh` - Now applies entitlements
 
 ### Documentation
-- `docs/FILE_ACCESS_FIX.md` - Complete explanation
+- `plans/FILE_ACCESS_FIX.md` - Complete explanation
 - `README.md` - Added note about entitlements
 
 ## Key Entitlements Applied
@@ -109,7 +109,7 @@ These entitlements give broad permissions (standard for IDEs):
 
 ## Related Docs
 
-- [FILE_ACCESS_FIX.md](docs/FILE_ACCESS_FIX.md) - Full technical details
+- [FILE_ACCESS_FIX.md](plans/FILE_ACCESS_FIX.md) - Full technical details
 - [DISTRIBUTION_QUICKSTART.md](DISTRIBUTION_QUICKSTART.md) - Distribution guide
 
 ---

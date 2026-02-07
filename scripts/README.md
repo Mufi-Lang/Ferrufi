@@ -437,14 +437,14 @@ After updating the version:
 2. The DMG will be named: `Ferrufi-X.Y.Z-macos.dmg`
 3. Tag the release: `git tag vX.Y.Z`
 
-See [Versioning Guide](../docs/VERSIONING.md) for complete documentation.
+See [Versioning Guide](../plans/VERSIONING.md) for complete documentation.
 
 ## Related Documentation
 
-- [Versioning Guide](../docs/VERSIONING.md) - Complete version management guide
-- [Linking Guide](../docs/LIBMUFIZ_LINKING.md) - Comprehensive linking documentation
-- [Quick Start](../docs/QUICK_START.md) - Getting started guide
-- [Changelog](../docs/CHANGELOG_LINKING_FIX.md) - Recent linking fixes
+- [Versioning Guide](../plans/VERSIONING.md) - Complete version management guide
+- [Linking Guide](../plans/LIBMUFIZ_LINKING.md) - Comprehensive linking documentation
+- [Quick Start](../plans/QUICK_START.md) - Getting started guide
+- [Changelog](../plans/CHANGELOG_LINKING_FIX.md) - Recent linking fixes
 
 ---
 

@@ -319,7 +319,7 @@ All operations should work without permission errors.
 
 1. **`CURRENT_STATUS.md`** (this file) - Comprehensive status summary
 2. **`DISTRIBUTION_QUICKSTART.md`** - Quick start guide for distribution
-3. **`docs/FILE_ACCESS_FIX.md`** - Detailed explanation of file access fix
+3. **`plans/FILE_ACCESS_FIX.md`** - Detailed explanation of file access fix
 4. **`SECURITY_SCOPED_RESOURCES_FIX.md`** - Technical details on security scopes
 5. **`ENTITLEMENTS_FIX_SUMMARY.md`** - Entitlements reference
 6. **`.github/workflows/README.md`** - Workflow documentation
