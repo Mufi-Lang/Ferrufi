@@ -244,7 +244,7 @@ extension MufiScript {
                 print(greeting)
 
                 // Function example
-                fn add(a, b) {
+                fun add(a, b) {
                     return a + b
                 }
 

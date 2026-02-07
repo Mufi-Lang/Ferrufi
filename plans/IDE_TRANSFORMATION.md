@@ -92,7 +92,7 @@ Your scripts are stored in `~/.ferrufi/notes/`.
 var greeting = "Hello, Mufi!"
 print(greeting)
 
-fn add(a, b) {
+fun add(a, b) {
     return a + b
 }
 
@@ -120,14 +120,14 @@ var message = "Hello from [Script Name]!"
 print(message)
 
 // Functions
-fn greet(name) {
+fun greet(name) {
     return "Hello, " + name + "!"
 }
 
 print(greet("Mufi"))
 
 // Example: Simple calculation
-fn add(a, b) {
+fun add(a, b) {
     return a + b
 }
 

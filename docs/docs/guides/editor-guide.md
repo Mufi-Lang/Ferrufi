@@ -266,10 +266,10 @@ Planned improvements:
 
 ## Related Documentation
 
-- [REPL Guide](MUFI_REPL_GUIDE.md) - Interactive REPL usage
-- [Quick Start](QUICK_START_REPL.md) - Getting started with Mufi
-- [Troubleshooting](TROUBLESHOOTING_MUFI.md) - Common issues and solutions
-- [Memory Safety](MEMORY_SAFETY.md) - Runtime safety features
+- [REPL Guide](./mufi-repl.md) - Interactive REPL usage
+- [Quick Start](./quick-start-repl.md) - Getting started with Mufi
+- [Troubleshooting](./troubleshooting.md) - Common issues and solutions
+- [Memory Safety](../architecture/memory-safety.md) - Runtime safety features
 
 ---
 

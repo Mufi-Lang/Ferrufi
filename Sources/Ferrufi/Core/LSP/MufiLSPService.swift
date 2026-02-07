@@ -89,8 +89,9 @@ public final class MufiLSPService: ObservableObject {
 
     private func setupBindings() {
         // Debounce updates to avoid excessive re-parsing
+        // Increased debounce to 1 second to avoid premature error reports while typing
         updateSubject
-            .debounce(for: .milliseconds(300), scheduler: RunLoop.main)
+            .debounce(for: .seconds(1), scheduler: RunLoop.main)
             .sink { [weak self] filename, source in
                 self?.performAnalysis(filename: filename, source: source)
             }
@@ -98,8 +99,13 @@ public final class MufiLSPService: ObservableObject {
     }
 
     /// Notify the service that a document has changed.
-    public func documentChanged(filename: String, source: String) {
-        updateSubject.send((filename, source))
+    public func documentChanged(filename: String, source: String, force: Bool = false) {
+        if force {
+            // Immediate analysis (e.g. on Enter or Save)
+            performAnalysis(filename: filename, source: source)
+        } else {
+            updateSubject.send((filename, source))
+        }
     }
 
     private func performAnalysis(filename: String, source: String) {

@@ -133,7 +133,7 @@ var x = 42
 var name = "Mufi"
 
 // Functions
-fn add(a, b) {
+fun add(a, b) {
     return a + b
 }
 

@@ -575,7 +575,9 @@ private struct EditorContainerView: NSViewRepresentable {
             onTextChange?(newText)
 
             if textView.mode == .mufi {
-                MufiLSPService.shared.documentChanged(filename: "editor.mufi", source: newText)
+                // If the last character was a newline, force analysis
+                let force = newText.hasSuffix("\n")
+                MufiLSPService.shared.documentChanged(filename: "editor.mufi", source: newText, force: force)
             }
         }
 
@@ -945,6 +947,7 @@ private class UnifiedTextView: NSTextView {
             )
             coordinator?.showDiagnosticWindow(
                 for: hoveredDiagnostics, atDiagnosticRange: firstDiagRange)
+            // Ensure system tooltips don't show
             self.toolTip = nil
             return
         } else {
@@ -1039,29 +1042,7 @@ private class UnifiedTextView: NSTextView {
 
         applyDiagnosticUnderlines(fixedDiagnostics)
 
-        // Auto-show diagnostic tooltip at the first error location
-        if let firstDiagnostic = fixedDiagnostics.first, let ts = textStorage {
-            let range = ts.nsRange(from: firstDiagnostic.range)
-            print(
-                "🎯 AUTO-SHOW: First diagnostic at line \(firstDiagnostic.range.start.line), NSRange(\(range.location), \(range.length))"
-            )
-
-            // Show context around the error
-            if range.location != NSNotFound && range.location < ts.length {
-                let contextStart = max(0, range.location - 20)
-                let contextEnd = min(ts.length, range.location + range.length + 20)
-                let contextRange = NSRange(
-                    location: contextStart, length: contextEnd - contextStart)
-                let context = (ts.string as NSString).substring(with: contextRange)
-                print("   Context: '\(context.replacingOccurrences(of: "\n", with: "\\n"))'")
-                print("   Error at character position \(range.location) in document")
-            }
-
-            if range.location != NSNotFound {
-                // Only show the first diagnostic in auto-show (not all diagnostics)
-                coordinator?.showDiagnosticWindow(for: [firstDiagnostic], atDiagnosticRange: range)
-            }
-        } else {
+        if fixedDiagnostics.isEmpty {
             // No diagnostics - hide any existing tooltip
             coordinator?.hideDiagnosticWindow()
         }
@@ -1233,15 +1214,6 @@ private class UnifiedTextView: NSTextView {
             print(
                 "🔄 RE-APPLYING \(cachedDiagnostics.count) DIAGNOSTIC UNDERLINES AFTER HIGHLIGHTING")
             applyDiagnosticUnderlines(cachedDiagnostics)
-
-            // Re-show tooltip after highlighting if diagnostics exist
-            if let firstDiagnostic = cachedDiagnostics.first, let ts = textStorage {
-                let range = ts.nsRange(from: firstDiagnostic.range)
-                if range.location != NSNotFound {
-                    coordinator?.showDiagnosticWindow(
-                        for: cachedDiagnostics, atDiagnosticRange: range)
-                }
-            }
         }
     }
 

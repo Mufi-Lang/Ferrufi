@@ -582,7 +582,7 @@ public struct ContentView: View {
             var greeting = "Hello, Mufi!"
             print(greeting)
 
-            fn add(a, b) {
+            fun add(a, b) {
                 return a + b
             }
 

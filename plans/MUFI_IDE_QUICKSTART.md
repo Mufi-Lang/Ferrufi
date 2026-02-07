@@ -34,14 +34,14 @@ var message = "Hello from hello!"
 print(message)
 
 // Functions
-fn greet(name) {
+fun greet(name) {
     return "Hello, " + name + "!"
 }
 
 print(greet("Mufi"))
 
 // Example: Simple calculation
-fn add(a, b) {
+fun add(a, b) {
     return a + b
 }
 
@@ -104,7 +104,7 @@ REPL = Read-Eval-Print Loop. Test code interactively:
 > var x = 42
 > print(x)
 42
-> fn double(n) { return n * 2 }
+> fun double(n) { return n * 2 }
 > print(double(x))
 84
 ```
@@ -151,7 +151,7 @@ var pi = 3.14
 
 ### Functions
 ```mufi
-fn greet(name) {
+fun greet(name) {
     return "Hello, " + name + "!"
 }
 
@@ -260,10 +260,10 @@ print(greeting)
 
 ### Calculator
 ```mufi
-fn add(a, b) { return a + b }
-fn subtract(a, b) { return a - b }
-fn multiply(a, b) { return a * b }
-fn divide(a, b) { return a / b }
+fun add(a, b) { return a + b }
+fun subtract(a, b) { return a - b }
+fun multiply(a, b) { return a * b }
+fun divide(a, b) { return a / b }
 
 print("10 + 5 = " + str(add(10, 5)))
 print("10 - 5 = " + str(subtract(10, 5)))
@@ -273,7 +273,7 @@ print("10 / 5 = " + str(divide(10, 5)))
 
 ### Fibonacci
 ```mufi
-fn fibonacci(n) {
+fun fibonacci(n) {
     if n <= 1 {
         return n
     }

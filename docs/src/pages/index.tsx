@@ -54,7 +54,7 @@ function HomepageHeader() {
                 <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: '#27c93f' }}></div>
               </div>
               <pre style={{ margin: 0, background: 'none', border: 'none', color: '#d4d4d4' }}>
-                <code>{`fn fibonacci(n) {
+                <code>{`fun fibonacci(n) {
   if n <= 1 {
     return n
   }

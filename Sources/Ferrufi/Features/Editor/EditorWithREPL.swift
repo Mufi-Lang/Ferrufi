@@ -456,11 +456,11 @@ struct EditorWithREPL_Samples: PreviewProvider {
 
                 ## Functions
 
-                fn add(a, b) {
+                fun add(a, b) {
                     return a + b
                 }
 
-                fn greet(name) {
+                fun greet(name) {
                     return "Hello, " + name + "!"
                 }
 
