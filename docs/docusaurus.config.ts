@@ -24,6 +24,7 @@ const config: Config = {
   // If you aren't using GitHub pages, you don't need these.
   organizationName: 'Mufi-Lang', // Usually your GitHub org/user name.
   projectName: 'Ferrufi', // Usually your repo name.
+  trailingSlash: false,
 
   onBrokenLinks: 'throw',
   onBrokenMarkdownLinks: 'warn',
@@ -66,7 +67,7 @@ const config: Config = {
       title: 'Ferrufi',
       logo: {
         alt: 'Ferrufi Logo',
-        src: 'img/logo.svg',
+        src: 'img/logo.png',
       },
       items: [
         {
