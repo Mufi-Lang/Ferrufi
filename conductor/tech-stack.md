@@ -12,6 +12,8 @@
 
 ## Tools & Dependencies
 - **Build System:** Swift Package Manager (SPM).
+- **Package Manager (Web):** Bun.
+- **Documentation Engine:** Docusaurus (Static Site Generator).
 - **File Management:** `Files` (John Sundell), `PathKit` (Kyle Fuller).
 - **Version Control:** Git.
 
