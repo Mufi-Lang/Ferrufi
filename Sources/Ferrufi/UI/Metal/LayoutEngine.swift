@@ -1,33 +1,48 @@
 import Foundation
 import CoreGraphics
+import CoreText
+import AppKit
 
-/// Responsible for calculating the layout and positioning of glyphs.
+/// Responsible for calculating the layout and positioning of glyphs using CoreText.
 public class LayoutEngine {
     
     public struct GlyphPosition {
-        public let char: Character
+        public let glyph: CGGlyph
         public let position: CGPoint
         public let advance: CGFloat
     }
     
     public init() {}
     
-    /// Calculates glyph positions for the given render state.
-    /// In a full implementation, this would use font metrics and handle complex layout.
-    public func layout(state: RenderState) -> [GlyphPosition] {
-        var positions: [GlyphPosition] = []
-        var currentX: CGFloat = 0
-        let defaultAdvance: CGFloat = 10.0 // Placeholder advance
+    /// Calculates glyph positions for the given render state using CoreText for ligatures and layout.
+    public func layout(state: RenderState, font: NSFont) -> [GlyphPosition] {
+        let attributes: [NSAttributedString.Key: Any] = [.font: font]
+        let attrString = NSAttributedString(string: state.text, attributes: attributes)
+        let line = CTLineCreateWithAttributedString(attrString)
         
-        for char in state.text {
-            positions.append(GlyphPosition(
-                char: char,
-                position: CGPoint(x: currentX, y: 0),
-                advance: defaultAdvance
-            ))
-            currentX += defaultAdvance
+        var glyphPositions: [GlyphPosition] = []
+        
+        let runs = CTLineGetGlyphRuns(line) as? [CTRun] ?? []
+        for run in runs {
+            let glyphCount = CTRunGetGlyphCount(run)
+            
+            var glyphs = [CGGlyph](repeating: 0, count: glyphCount)
+            var positions = [CGPoint](repeating: .zero, count: glyphCount)
+            var advances = [CGSize](repeating: .zero, count: glyphCount)
+            
+            CTRunGetGlyphs(run, CFRangeMake(0, glyphCount), &glyphs)
+            CTRunGetPositions(run, CFRangeMake(0, glyphCount), &positions)
+            CTRunGetAdvances(run, CFRangeMake(0, glyphCount), &advances)
+            
+            for i in 0..<glyphCount {
+                glyphPositions.append(GlyphPosition(
+                    glyph: glyphs[i],
+                    position: positions[i],
+                    advance: advances[i].width
+                ))
+            }
         }
         
-        return positions
+        return glyphPositions
     }
 }

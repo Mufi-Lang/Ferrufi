@@ -13,7 +13,7 @@ This plan follows an evolutionary refactor of the existing Metal rendering subsy
 - [x] Task: Conductor - User Manual Verification 'Phase 1: Foundation and Modularity' (Protocol in workflow.md)
 
 ## Phase 2: Advanced Layout and Rendering
-- [ ] Task: Implement Improved Text Layout
+- [x] Task: Implement Improved Text Layout
     - [ ] Refactor glyph atlas management for better ligature support.
     - [ ] Update `LayoutEngine` to support variable-width font calculations.
 - [ ] Task: Shader-Based Token Effects

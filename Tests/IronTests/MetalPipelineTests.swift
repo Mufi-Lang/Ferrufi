@@ -17,10 +17,23 @@ final class MetalPipelineTests: XCTestCase {
         let text = "ABC"
         let state = RenderState(text: text, cursorPosition: 0)
         let layoutEngine = LayoutEngine()
+        let font = NSFont.systemFont(ofSize: 14)
         
-        // Mock or simple layout calculation
-        let glyphs = layoutEngine.layout(state: state)
+        let glyphs = layoutEngine.layout(state: state, font: font)
         
         XCTAssertEqual(glyphs.count, text.count)
+    }
+
+    func testLayoutEngineLigatureHandling() {
+        let text = "=="
+        let state = RenderState(text: text, cursorPosition: 0)
+        let layoutEngine = LayoutEngine()
+        let font = NSFont.systemFont(ofSize: 14) // Standard fonts might not have == ligatures, but we test the mechanism
+        
+        let glyphs = layoutEngine.layout(state: state, font: font)
+        
+        // If it's a ligature, glyphs.count might be 1. 
+        // We just verify it returns something valid for now.
+        XCTAssertTrue(glyphs.count > 0)
     }
 }

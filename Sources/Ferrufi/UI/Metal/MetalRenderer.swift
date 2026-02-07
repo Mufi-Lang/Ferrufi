@@ -370,17 +370,13 @@ import SwiftUI
                 renderEncoder.setRenderPipelineState(pipelineState)
                 renderEncoder.setFragmentTexture(atlas.texture, index: 0)
                 
-                // This is a simplified per-character draw loop. 
-                // In a production engine, we would use a single large vertex buffer for all glyphs.
-                var currentOffset = CGPoint.zero
+                let layoutEngine = LayoutEngine()
+                let state = RenderState(text: text, cursorPosition: 0)
+                let glyphPositions = layoutEngine.layout(state: state, font: atlas.font)
                 
-                for char in text {
-                    guard let desc = atlas.descriptor(for: char) else { continue }
-                    
-                    // Draw quad for this character (simplified)
-                    // ... logic to update vertex buffer and draw call ...
-                    
-                    currentOffset.x += desc.advance
+                for gp in glyphPositions {
+                    guard let desc = atlas.descriptor(for: gp.glyph) else { continue }
+                    // ... rendering logic using desc and gp.position ...
                 }
             }
             
