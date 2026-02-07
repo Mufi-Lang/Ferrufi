@@ -20,6 +20,7 @@ struct VertexOut {
     float4 position [[position]];
     float4 color;
     float2 texCoords;
+    float tokenType [[flat]]; // 0: Default, 1: Glow, 2: Underline
 };
 
 struct Uniforms {
@@ -42,6 +43,7 @@ vertex VertexOut vertex_main(VertexIn in [[stage_in]],
 
     out.color = in.color;
     out.texCoords = in.texCoords;
+    out.tokenType = 0.0;
 
     return out;
 }
@@ -51,6 +53,7 @@ vertex VertexOut vertex_simple(VertexIn in [[stage_in]]) {
     out.position = float4(in.position.xy, 0.0, 1.0);
     out.color = in.color;
     out.texCoords = in.texCoords;
+    out.tokenType = 0.0;
     return out;
 }
 
@@ -116,6 +119,30 @@ fragment float4 fragment_sdf_text(VertexOut in [[stage_in]],
     return float4(in.color.rgb, in.color.a * alpha);
 }
 
+// Advanced token effect fragment shader
+fragment float4 fragment_token_effect(VertexOut in [[stage_in]],
+                                     texture2d<float> atlas [[texture(0)]],
+                                     sampler atlasSampler [[sampler(0)]],
+                                     constant float& time [[buffer(0)]]) {
+    float4 texColor = atlas.sample(atlasSampler, in.texCoords);
+    float alpha = texColor.r; // Assuming R8Unorm atlas
+    
+    float4 baseColor = in.color;
+    baseColor.a *= alpha;
+    
+    if (in.tokenType == 1.0) { // Glow effect
+        float glow = (sin(time * 3.0) + 1.0) * 0.5;
+        baseColor.rgb += baseColor.rgb * glow * 0.5;
+    } else if (in.tokenType == 2.0) { // Underline effect
+        float underlineY = 0.9;
+        if (in.texCoords.y > underlineY) {
+            baseColor = in.color;
+        }
+    }
+    
+    return baseColor;
+}
+
 // MARK: - Animation Shaders
 
 // Pulsing effect
@@ -165,7 +192,8 @@ fragment float4 fragment_fast_blur(VertexOut in [[stage_in]],
 // High-performance glyph rendering
 vertex VertexOut vertex_glyph(VertexIn in [[stage_in]],
                              constant float4x4& projectionMatrix [[buffer(1)]],
-                             constant float2& offset [[buffer(2)]]) {
+                             constant float2& offset [[buffer(2)]],
+                             constant float& tokenType [[buffer(3)]]) {
     VertexOut out;
     
     // Position the glyph quad and apply offset
@@ -174,6 +202,7 @@ vertex VertexOut vertex_glyph(VertexIn in [[stage_in]],
     
     out.color = in.color;
     out.texCoords = in.texCoords;
+    out.tokenType = tokenType;
     
     return out;
 }
@@ -192,6 +221,7 @@ vertex VertexOut vertex_line(VertexIn in [[stage_in]],
     out.position = float4(in.position.xy + offset, 0.0, 1.0);
     out.color = in.color;
     out.texCoords = in.texCoords;
+    out.tokenType = 0.0;
 
     return out;
 }

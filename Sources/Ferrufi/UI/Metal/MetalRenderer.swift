@@ -335,6 +335,7 @@ import SwiftUI
         private var pipelineState: MTLRenderPipelineState?
         private var shaderManager: ShaderManager?
         private var atlas: GlyphAtlas?
+        private var startTime: Date = Date()
         public var text: String = ""
         public var color: Color = .white
 
@@ -353,7 +354,7 @@ import SwiftUI
             do {
                 pipelineState = try shaderManager.getRenderPipeline(
                     vertexFunctionName: "vertex_glyph",
-                    fragmentFunctionName: "fragment_textured",
+                    fragmentFunctionName: "fragment_token_effect",
                     label: "Text Pipeline"
                 )
             } catch {
@@ -370,13 +371,17 @@ import SwiftUI
                 renderEncoder.setRenderPipelineState(pipelineState)
                 renderEncoder.setFragmentTexture(atlas.texture, index: 0)
                 
+                // Add time for animations
+                var time = Float(Date().timeIntervalSince(startTime))
+                renderEncoder.setFragmentBytes(&time, length: MemoryLayout<Float>.size, index: 0)
+                
                 let layoutEngine = LayoutEngine()
                 let state = RenderState(text: text, cursorPosition: 0)
                 let glyphPositions = layoutEngine.layout(state: state, font: atlas.font)
                 
                 for gp in glyphPositions {
                     guard let desc = atlas.descriptor(for: gp.glyph) else { continue }
-                    // ... rendering logic using desc and gp.position ...
+                    // ... rendering logic using desc, gp.position, and gp.tokenType ...
                 }
             }
             

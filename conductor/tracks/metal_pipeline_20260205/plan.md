@@ -16,7 +16,7 @@ This plan follows an evolutionary refactor of the existing Metal rendering subsy
 - [x] Task: Implement Improved Text Layout
     - [ ] Refactor glyph atlas management for better ligature support.
     - [ ] Update `LayoutEngine` to support variable-width font calculations.
-- [ ] Task: Shader-Based Token Effects
+- [x] Task: Shader-Based Token Effects
     - [ ] Add new fragment shaders for advanced syntax highlighting (e.g., glow, underlines).
     - [ ] Integrate token-specific rendering data into the Metal buffer stream.
 - [ ] Task: Conductor - User Manual Verification 'Phase 2: Advanced Layout and Rendering' (Protocol in workflow.md)

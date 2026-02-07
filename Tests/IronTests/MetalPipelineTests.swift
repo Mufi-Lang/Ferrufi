@@ -4,15 +4,14 @@ import SwiftUI
 
 final class MetalPipelineTests: XCTestCase {
     
-    func testRenderStateInitialization() {
-        let text = "Hello, Mufi!"
-        let cursorPosition = 5
-        let state = RenderState(text: text, cursorPosition: cursorPosition)
+    func testRenderStateWithTokenTypes() {
+        let text = "Mufi"
+        let tokenTypes = [1, 1, 1, 1] // All glow
+        let state = RenderState(text: text, cursorPosition: 0, tokenTypes: tokenTypes)
         
-        XCTAssertEqual(state.text, text)
-        XCTAssertEqual(state.cursorPosition, cursorPosition)
+        XCTAssertEqual(state.tokenTypes, tokenTypes)
     }
-    
+
     func testLayoutEngineGlyphCalculation() {
         let text = "ABC"
         let state = RenderState(text: text, cursorPosition: 0)

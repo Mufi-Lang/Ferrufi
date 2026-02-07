@@ -8,17 +8,20 @@ public struct RenderState {
     public let cursorPosition: Int
     public let selectionRange: Range<Int>?
     public let diagnostics: [Diagnostic]?
+    public let tokenTypes: [Int]? // Token type for each character
     
     public init(
         text: String,
         cursorPosition: Int,
         selectionRange: Range<Int>? = nil,
-        diagnostics: [Diagnostic]? = nil
+        diagnostics: [Diagnostic]? = nil,
+        tokenTypes: [Int]? = nil
     ) {
         self.text = text
         self.cursorPosition = cursorPosition
         self.selectionRange = selectionRange
         self.diagnostics = diagnostics
+        self.tokenTypes = tokenTypes
     }
 }
 
