@@ -2,12 +2,12 @@
 
 This plan covers the restructuring of project documentation and the creation of a high-performance documentation website using Docusaurus.
 
-## Phase 1: Repository Restructuring
+## Phase 1: Repository Restructuring [checkpoint: ba5be61]
 - [x] Task: Relocate Internal Documentation
-    - [ ] Create the top-level `docs/` directory.
-    - [ ] Move all existing `.md` files from `docs/` to `docs/`.
-    - [ ] Perform a global search and replace to update internal links within these files if necessary.
-- [ ] Task: Conductor - User Manual Verification 'Phase 1: Repository Restructuring' (Protocol in workflow.md)
+    - [x] Create the top-level `plans/` directory.
+    - [x] Move all existing `.md` files from `docs/` to `plans/`.
+    - [x] Perform a global search and replace to update internal links within these files if necessary.
+- [x] Task: Conductor - User Manual Verification 'Phase 1: Repository Restructuring' (Protocol in workflow.md)
 
 ## Phase 2: Website Scaffolding (Docusaurus)
 - [ ] Task: Initialize SSG Project
