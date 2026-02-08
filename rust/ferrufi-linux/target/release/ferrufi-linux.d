@@ -1,0 +1,1 @@
+/src/rust/ferrufi-linux/target/release/ferrufi-linux: /src/rust/ferrufi-linux/src/lib.rs /src/rust/ferrufi-linux/src/main.rs /src/rust/ferrufi-linux/src/models.rs /src/rust/ferrufi-linux/src/workspace.rs

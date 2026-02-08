@@ -1,6 +1,15 @@
 {
-  "originHash" : "85c8b7d67c7a1e975f44da18e50da01023869a1ed0e7e7c4933c111a6f347e9e",
+  "originHash" : "f20f3c035b4ac71318e9fc3f9b13f6c1fa795cbc0b501e4a8a43041300b793c8",
   "pins" : [
+    {
+      "identity" : "adwaita-swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/AparokshaUI/adwaita-swift.git",
+      "state" : {
+        "revision" : "c82957e2398a766458ff22129db26b46de75248b",
+        "version" : "0.2.6"
+      }
+    },
     {
       "identity" : "files",
       "kind" : "remoteSourceControl",
@@ -8,6 +17,15 @@
       "state" : {
         "revision" : "e85f2b4a8dfa0f242889f45236f3867d16e40480",
         "version" : "4.3.0"
+      }
+    },
+    {
+      "identity" : "levenshteintransformations",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/david-swift/LevenshteinTransformations",
+      "state" : {
+        "revision" : "002c3ae5c48f30d61c96045fd3ceb9928aa778d2",
+        "version" : "0.1.3"
       }
     },
     {

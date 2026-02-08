@@ -1,0 +1,23 @@
+[package]
+name = "ferrufi-linux"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+gtk4 = { version = "0.9", package = "gtk4", features = ["v4_10"] }
+adw = { version = "0.7", package = "libadwaita" }
+libc = "0.2"
+tokio = { version = "1.0", features = ["full"] }
+libloading = "0.8" # For dynamic loading of libmufiz.so
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+uuid = { version = "1.0", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+walkdir = "2.5"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "ferrufi-linux"
+path = "src/main.rs"

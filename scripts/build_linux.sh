@@ -5,18 +5,26 @@
 set -e
 
 # Change to project root if script is run from scripts/
-cd "$(break 2>/dev/null || dirname "$0")"/..
+cd "$(dirname "$0")"/..
 
-echo "🐳 Building Ferrufi for Linux using Docker..."
+echo "🐳 Building Ferrufi for Linux using Official Apple Swift Container..."
 
-if ! command -v docker-compose &> /dev/null
+if command -v docker-compose &> /dev/null
 then
-    echo "❌ error: docker-compose not found. Please install it to run Linux builds."
+    COMPOSE_CMD="docker-compose"
+elif docker compose version &> /dev/null
+then
+    COMPOSE_CMD="docker compose"
+else
+    echo "❌ error: Docker Compose not found. Please install it to run Linux builds."
     exit 1
 fi
 
-# Build the docker image and run the build command
-# We use 'run --rm' to clean up the container after build
-docker-compose run --rm builder
+# Build the docker image
+$COMPOSE_CMD build builder
+
+# We clean first to avoid version mismatch errors from shared volumes
+$COMPOSE_CMD run --rm builder swift package clean
+$COMPOSE_CMD run --rm builder swift build
 
 echo "✅ Linux build complete! Binaries are in .build/ (Linux format)."

@@ -21,7 +21,11 @@
 //   // status is the interpreter return code (UInt8), output contains printed text
 
 import CMufi
+#if os(macOS)
 import Darwin
+#elseif os(Linux)
+import Glibc
+#endif
 import Foundation
 
 public enum MufiError: Error, LocalizedError {
