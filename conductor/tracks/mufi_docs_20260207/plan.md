@@ -12,14 +12,14 @@
 - [x] Task: Conductor - User Manual Verification 'Phase 1: Infrastructure & Data Setup' (Protocol in workflow.md) cab5912
 
 ## Phase 2: UI Implementation
-- [ ] Task: Create Documentation Browser View
-    - [ ] Implement a `DocBrowserView` using SwiftUI.
-    - [ ] Setup the side-by-side layout (Search/List on left, Content on right).
-    - [ ] Integrate a search bar with real-time updates.
-- [ ] Task: Implement Markdown Renderer Integration
-    - [ ] Use or adapt existing Markdown rendering logic for the content pane.
-    - [ ] Support navigation between documentation pages via links.
-    - [ ] Write UI/Unit Tests for `DocBrowserView` and rendering.
+- [x] Task: Create Documentation Browser View 33b2a33
+    - [x] Implement a `DocBrowserView` using SwiftUI.
+    - [x] Setup the side-by-side layout (Search/List on left, Content on right).
+    - [x] Integrate a search bar with real-time updates.
+- [x] Task: Implement Markdown Renderer Integration 33b2a33
+    - [x] Use or adapt existing Markdown rendering logic for the content pane.
+    - [x] Support navigation between documentation pages via links.
+    - [x] Write UI/Unit Tests for `DocBrowserView` and rendering.
 - [ ] Task: Conductor - User Manual Verification 'Phase 2: UI Implementation' (Protocol in workflow.md)
 
 ## Phase 3: Integration & Polish
