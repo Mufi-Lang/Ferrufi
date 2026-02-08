@@ -73,13 +73,13 @@ function HomepageHeader() {
               <pre style={{ margin: 0, background: 'none', border: 'none', color: '#d4d4d4' }}>
                 <code>{`fun fibonacci(n) {
   if n <= 1 {
-    return n
+    return n;
   }
-  return fibonacci(n - 1) + fibonacci(n - 2)
+  return fibonacci(n - 1) + fibonacci(n - 2);
 }
 
-var result = fibonacci(10)
-print("Fib(10) = " + str(result))`}</code>
+var result = fibonacci(10);
+print("Fib(10) = " + str(result));`}</code>
               </pre>
             </div>
           </div>

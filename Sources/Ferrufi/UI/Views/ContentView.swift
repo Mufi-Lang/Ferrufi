@@ -579,14 +579,14 @@ public struct ContentView: View {
 
             ```mufi
             // Your first Mufi script
-            var greeting = "Hello, Mufi!"
-            print(greeting)
+            var greeting = "Hello, Mufi!";
+            print(greeting);
 
             fun add(a, b) {
-                return a + b
+                return a + b;
             }
 
-            print("Result: " + str(add(5, 3)))
+            print("Result: " + str(add(5, 3)));
             ```
 
             Press **⌘R** to run this script and see the output in the terminal below!
