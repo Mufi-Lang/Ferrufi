@@ -23,11 +23,11 @@
 - [ ] Task: Conductor - User Manual Verification 'Phase 2: UI Implementation' (Protocol in workflow.md)
 
 ## Phase 3: Integration & Polish
-- [ ] Task: Integrate Documentation Shortcut
-    - [ ] Add `Cmd+Shift+H` shortcut to open the Documentation Browser.
-    - [ ] Ensure the browser can be triggered from the main editor.
-- [ ] Task: Final Polish & Theme Support
-    - [ ] Ensure full support for Light/Dark modes via `ThemeManager`.
-    - [ ] Refine animations and transitions for the search results.
-    - [ ] Verify non-interactive build/test commands.
+- [x] Task: Integrate Documentation Shortcut 6056b8a
+    - [x] Add `Cmd+Shift+H` shortcut to open the Documentation Browser.
+    - [x] Ensure the browser can be triggered from the main editor.
+- [x] Task: Final Polish & Theme Support 6056b8a
+    - [x] Ensure full support for Light/Dark modes via `ThemeManager`.
+    - [x] Refine animations and transitions for the search results.
+    - [x] Verify non-interactive build/test commands.
 - [ ] Task: Conductor - User Manual Verification 'Phase 3: Integration & Polish' (Protocol in workflow.md)
