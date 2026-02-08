@@ -9,7 +9,7 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     libgtk-4-dev \
     libadwaita-1-dev \
-    libsourceview5-dev \
+    libgtksourceview-5-dev \
     libvulkan-dev \
     glslang-tools \
     curl \

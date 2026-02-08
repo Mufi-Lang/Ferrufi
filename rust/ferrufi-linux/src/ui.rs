@@ -1,19 +1,39 @@
 use adw::prelude::*;
 use adw::{Application, ApplicationWindow, HeaderBar, NavigationSplitView, NavigationPage};
-use gtk4::{Label, ListBox, Box, Orientation, ScrolledWindow, PolicyType, SelectionMode, TextView};
+use gtk4::{Label, ListBox, Box, Orientation, ScrolledWindow, PolicyType, SelectionMode, TextView, Button};
 use std::sync::{Arc, Mutex};
 use crate::workspace::WorkspaceManager;
+use crate::MufiBridge;
 use uuid::Uuid;
 
 pub struct AppState {
     pub workspace: WorkspaceManager,
+    pub bridge: Option<MufiBridge>,
     pub selected_folder_id: Option<Uuid>,
     pub selected_note_id: Option<Uuid>,
 }
 
 pub fn run_ui(initial_path: String) {
+    // Initialize bridge if possible
+    let bridge = unsafe {
+        let lib_path = if std::path::Path::new("./libmufiz.so").exists() {
+            "./libmufiz.so"
+        } else if std::path::Path::new("/usr/local/lib/libmufiz.so").exists() {
+            "/usr/local/lib/libmufiz.so"
+        } else {
+            "/src/Sources/CMufi/libmufiz.so"
+        };
+        
+        MufiBridge::new(lib_path).ok()
+    };
+
+    if let Some(ref b) = bridge {
+        let _ = b.init(true, true, true);
+    }
+
     let state = Arc::new(Mutex::new(AppState {
         workspace: WorkspaceManager::new(initial_path),
+        bridge,
         selected_folder_id: None,
         selected_note_id: None,
     }));
@@ -39,7 +59,7 @@ fn build_ui(app: &Application, state: Arc<Mutex<AppState>>) {
     // --- Components ---
 
     // A. Editor (Right Pane)
-    let editor_view = TextView::builder()
+    let editor_view = sourceview5::View::builder()
         .monospace(true)
         .top_margin(12)
         .left_margin(12)
@@ -48,13 +68,37 @@ fn build_ui(app: &Application, state: Arc<Mutex<AppState>>) {
         .build();
     
     let editor_scroll = ScrolledWindow::builder()
+        .vexpand(true)
         .child(&editor_view)
         .build();
 
-    let editor_container = Box::new(Orientation::Vertical, 0);
-    editor_container.append(&HeaderBar::new());
-    editor_container.append(&editor_scroll);
-    let editor_page = NavigationPage::new(&editor_container, "Editor");
+    // REPL Output
+    let repl_output = TextView::builder()
+        .editable(false)
+        .monospace(true)
+        .css_classes(["repl-output"])
+        .build();
+    
+    let repl_scroll = ScrolledWindow::builder()
+        .height_request(200)
+        .child(&repl_output)
+        .build();
+
+    let editor_vbox = Box::new(Orientation::Vertical, 0);
+    
+    let header = HeaderBar::new();
+    let run_button = Button::builder()
+        .label("Run")
+        .css_classes(["suggested-action"])
+        .build();
+    header.pack_start(&run_button);
+    
+    editor_vbox.append(&header);
+    editor_vbox.append(&editor_scroll);
+    editor_vbox.append(&gtk4::Separator::new(Orientation::Horizontal));
+    editor_vbox.append(&repl_scroll);
+
+    let editor_page = NavigationPage::new(&editor_vbox, "Editor");
 
     // B. Note List (Middle Pane)
     let note_list = ListBox::builder()
@@ -103,6 +147,30 @@ fn build_ui(app: &Application, state: Arc<Mutex<AppState>>) {
 
     // --- Data Binding & Signals ---
 
+    // Run Button Logic
+    let state_run = state.clone();
+    let editor_buffer = editor_view.buffer();
+    let repl_buffer = repl_output.buffer();
+    run_button.connect_clicked(move |_| {
+        let state_lock = state_run.lock().unwrap();
+        if let Some(ref bridge) = state_lock.bridge {
+            let start = editor_buffer.start_iter();
+            let end = editor_buffer.end_iter();
+            let code = editor_buffer.text(&start, &end, false);
+            
+            match bridge.interpret_with_output(&code) {
+                Ok((_status, output)) => {
+                    repl_buffer.set_text(&output);
+                }
+                Err(e) => {
+                    repl_buffer.set_text(&format!("Error: {}", e));
+                }
+            }
+        } else {
+            repl_buffer.set_text("MufiZ Runtime not loaded");
+        }
+    });
+
     // Populate Folders
     {
         let state_lock = state.lock().unwrap();
@@ -122,12 +190,9 @@ fn build_ui(app: &Application, state: Arc<Mutex<AppState>>) {
         if let Some(row) = row {
             let folder_id_str = row.child().unwrap().widget_name();
             if let Ok(folder_id) = Uuid::parse_str(&folder_id_str) {
-                println!("Folder selected: {}", folder_id);
-                // Update state and refresh note list
                 let mut state_lock = state_clone.lock().unwrap();
                 state_lock.selected_folder_id = Some(folder_id);
                 
-                // Clear and repopulate note list
                 while let Some(child) = note_list_clone.first_child() {
                     note_list_clone.remove(&child);
                 }
