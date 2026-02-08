@@ -5,10 +5,10 @@
     - [x] Create `Resources/Documentation` directory.
     - [x] Populate `Resources/Documentation/Syntax` with initial Markdown files (e.g., `keywords.md`, `control_flow.md`).
     - [x] Populate `Resources/Documentation/StdLib` with initial Markdown files for core functions.
-- [ ] Task: Implement Documentation Provider Service
-    - [ ] Create `DocumentationService` to index and search local Markdown files.
-    - [ ] Implement search logic with category filtering.
-    - [ ] Write Unit Tests for `DocumentationService`.
+- [x] Task: Implement Documentation Provider Service c4ce46a
+    - [x] Create `DocumentationService` to index and search local Markdown files.
+    - [x] Implement search logic with category filtering.
+    - [x] Write Unit Tests for `DocumentationService`.
 - [ ] Task: Conductor - User Manual Verification 'Phase 1: Infrastructure & Data Setup' (Protocol in workflow.md)
 
 ## Phase 2: UI Implementation
