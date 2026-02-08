@@ -3,13 +3,16 @@
 Create an identity matrix.
 
 ## Syntax
-`eye(n);`
-`eye(m, n);`
+`I = eye(n)`
+`I = eye(m, n)`
 
 ## Description
-Returns an identity matrix of size `n`x`n` (or `m`x`n`).
+`eye(n)` returns an `n`-by-`n` identity matrix with ones on the main diagonal and zeros elsewhere.
+`eye(m, n)` returns an `m`-by-`n` identity matrix.
 
 ## Examples
+Create a 3-by-3 identity matrix:
 ```mufi
 var I = eye(3);
+print(I);
 ```

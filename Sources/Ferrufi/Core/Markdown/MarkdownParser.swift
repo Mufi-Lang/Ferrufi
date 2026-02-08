@@ -122,215 +122,190 @@ public final class MarkdownParser {
                     --accent: \(accentColor);
                     --code-bg: \(codeBgColor);
                     --border: \(borderColor);
-                    --sidebar-bg: \(hexString(from: theme.backgroundSecondary));
+                    --syntax-bg: \(hexString(from: theme.backgroundSecondary.opacity(0.5)));
+                    --header-bg: \(hexString(from: theme.backgroundSecondary));
                 }
+                
                 body {
                     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-                    line-height: 1.6;
+                    line-height: 1.4;
                     color: var(--text);
                     background-color: var(--bg);
-                    padding: 3rem;
-                    max-width: 900px;
-                    margin: 0 auto;
+                    padding: 24px;
+                    max-width: 100%;
+                    margin: 0;
                     -webkit-font-smoothing: antialiased;
                 }
+
                 h1 {
-                    font-size: 2.5rem;
-                    margin-top: 0;
-                    margin-bottom: 1.5rem;
-                    border-bottom: 1px solid var(--border);
-                    padding-bottom: 0.5rem;
-                    font-weight: 700;
-                    color: var(--accent);
-                }
-                h2 {
                     font-size: 1.8rem;
-                    margin-top: 2.5rem;
+                    font-weight: 600;
+                    margin-top: 0;
+                    margin-bottom: 12px;
+                    color: var(--text);
+                }
+
+                h2 {
+                    font-size: 1.2rem;
+                    font-weight: 700;
+                    margin-top: 24px;
+                    margin-bottom: 8px;
                     border-bottom: 1px solid var(--border);
-                    padding-bottom: 0.3rem;
-                    font-weight: 600;
+                    padding-bottom: 4px;
+                    color: var(--text);
                 }
+
                 h3 {
-                    font-size: 1.4rem;
-                    margin-top: 2rem;
-                    font-weight: 600;
+                    font-size: 1.0rem;
+                    font-weight: 700;
+                    margin-top: 16px;
+                    margin-bottom: 6px;
                 }
+
+                p {
+                    margin-bottom: 10px;
+                }
+
                 a {
                     color: var(--accent);
                     text-decoration: none;
                 }
+
                 a:hover {
                     text-decoration: underline;
                 }
+
                 code {
                     font-family: "SF Mono", "Fira Code", Menlo, Monaco, Courier, monospace;
                     background-color: var(--code-bg);
-                    padding: 0.2rem 0.4rem;
-                    border-radius: 4px;
+                    padding: 1px 4px;
+                    border-radius: 3px;
                     font-size: 0.9em;
-                    border: 1px solid var(--border);
                 }
-                pre {
-                    background-color: var(--code-bg);
-                    padding: 1.2rem;
-                    border-radius: 10px;
+
+                /* Syntax blocks - MATLAB style */
+                pre:has(code) {
+                    background-color: var(--syntax-bg);
+                    padding: 12px 16px;
+                    border-radius: 4px;
+                    border-left: 3px solid var(--accent);
+                    margin: 12px 0;
                     overflow-x: auto;
-                    border: 1px solid var(--border);
-                    margin: 1.5rem 0;
-                    box-shadow: inset 0 1px 3px rgba(0,0,0,0.05);
                 }
+
                 pre code {
-                    padding: 0;
                     background-color: transparent;
+                    padding: 0;
                     border: none;
+                    font-size: 0.95em;
+                    color: var(--text);
                 }
-                
-                /* MATLAB-style Function Reference Sections */
-                .ref-section {
-                    margin-bottom: 2rem;
+
+                /* Standard Markdown lists */
+                ul, ol {
+                    margin-bottom: 10px;
+                    padding-left: 20px;
                 }
-                .ref-label {
-                    font-weight: bold;
-                    text-transform: uppercase;
-                    font-size: 0.8rem;
-                    color: var(--foreground-tertiary);
-                    display: block;
-                    margin-bottom: 0.5rem;
+
+                li {
+                    margin-bottom: 4px;
                 }
-                
-                /* Mufi Block Styles - Enhanced IDE Aesthetic */
-                .mufi-container {
-                    background-color: var(--code-bg);
+
+                /* Tables - Tight MATLAB style */
+                table {
+                    width: 100%;
+                    border-collapse: collapse;
+                    margin: 16px 0;
+                    font-size: 0.95em;
+                }
+
+                th {
+                    background-color: var(--header-bg);
+                    text-align: left;
+                    padding: 8px 12px;
                     border: 1px solid var(--border);
-                    border-radius: 10px;
-                    margin: 1.5rem 0;
-                    overflow: hidden;
-                    box-shadow: 0 4px 20px rgba(0,0,0,0.1);
-                    display: block;
-                    padding: 0 !important;
+                    font-weight: 600;
                 }
+
+                td {
+                    padding: 8px 12px;
+                    border: 1px solid var(--border);
+                    vertical-align: top;
+                }
+
+                /* Mufi Execution Blocks */
+                .mufi-container {
+                    background-color: var(--bg);
+                    border: 1px solid var(--border);
+                    border-radius: 6px;
+                    margin: 16px 0;
+                    overflow: hidden;
+                }
+
                 .mufi-header {
                     display: flex;
                     justify-content: space-between;
                     align-items: center;
-                    padding: 0 12px;
-                    background: var(--sidebar-bg);
+                    padding: 4px 12px;
+                    background: var(--header-bg);
                     border-bottom: 1px solid var(--border);
-                    height: 32px;
-                    margin: 0 !important;
                 }
-                .mufi-header-left {
-                    display: flex;
-                    align-items: center;
-                    gap: 8px;
-                }
-                .mufi-dot {
-                    width: 8px;
-                    height: 8px;
-                    background-color: var(--accent);
-                    border-radius: 50%;
-                    box-shadow: 0 0 8px var(--accent);
-                }
+
                 .mufi-label {
-                    font-size: 11px;
-                    font-weight: 800;
+                    font-size: 10px;
+                    font-weight: 700;
+                    color: var(--accent);
                     text-transform: uppercase;
-                    letter-spacing: 1px;
-                    color: var(--text);
-                    opacity: 0.8;
                 }
+
                 .action-btn {
-                    background: var(--bg);
-                    color: var(--text);
-                    border: 1px solid var(--border);
-                    border-radius: 5px;
-                    padding: 4px 10px;
-                    font-size: 11px;
+                    background: var(--accent);
+                    color: white;
+                    border: none;
+                    border-radius: 3px;
+                    padding: 2px 10px;
+                    font-size: 10px;
                     font-weight: 600;
                     cursor: pointer;
-                    transition: all 0.2s;
-                    display: flex;
-                    align-items: center;
-                    gap: 4px;
                 }
-                .action-btn:hover {
-                    background-color: var(--accent);
-                    color: white;
-                    border-color: var(--accent);
-                }
-                .run-btn {
-                    color: var(--accent);
-                }
+
                 .mufi-content pre {
                     margin: 0;
                     border: none;
-                    border-radius: 0;
                     background-color: transparent;
-                    padding: 20px;
-                    box-shadow: none;
+                    padding: 12px;
                 }
-                .mufi-content code {
-                    font-size: 14px;
-                    line-height: 1.6;
-                }
-                
-                /* Output Container */
+
                 .mufi-output-container {
                     background-color: #1e1e1e;
                     color: #d4d4d4;
+                    font-family: "SF Mono", monospace;
                     border-top: 1px solid #333;
-                    font-family: "SF Mono", Menlo, Monaco, Courier, monospace;
-                    overflow: hidden;
-                    animation: slideDown 0.3s cubic-bezier(0.4, 0, 0.2, 1);
                 }
+
                 .output-text {
-                    padding: 16px;
-                    font-size: 13px;
-                    line-height: 1.5;
-                    white-space: pre-wrap;
-                    max-height: 300px;
-                    overflow-y: auto;
+                    padding: 12px;
+                    font-size: 11px;
                 }
-                
-                @keyframes slideDown {
-                    from { max-height: 0; opacity: 0; }
-                    to { max-height: 400px; opacity: 1; }
-                }
-                
+
                 blockquote {
-                    border-left: 5px solid var(--accent);
-                    margin: 1.5rem 0;
-                    padding: 1rem 1.5rem;
-                    background-color: var(--sidebar-bg);
-                    border-radius: 0 8px 8px 0;
+                    border-left: 4px solid var(--border);
+                    margin: 16px 0;
+                    padding: 8px 16px;
+                    background-color: var(--header-bg);
+                    color: var(--text);
                     font-style: italic;
                 }
-                hr {
-                    border: 0;
-                    border-top: 1px solid var(--border);
-                    margin: 3rem 0;
-                }
-                
-                /* Selection & Scrollbar */
-                ::selection {
-                    background-color: var(--accent);
-                    color: white;
-                }
+
                 ::-webkit-scrollbar {
-                    width: 10px;
+                    width: 8px;
                 }
                 ::-webkit-scrollbar-track {
                     background: transparent;
                 }
                 ::-webkit-scrollbar-thumb {
-                    background: rgba(0, 0, 0, 0.2);
-                    border-radius: 5px;
-                    border: 2px solid var(--bg);
-                }
-                @media (prefers-color-scheme: dark) {
-                    ::-webkit-scrollbar-thumb {
-                        background: rgba(255, 255, 255, 0.2);
-                    }
+                    background: rgba(128, 128, 128, 0.3);
+                    border-radius: 4px;
                 }
             </style>
             <script>
