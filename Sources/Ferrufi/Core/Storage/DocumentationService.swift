@@ -34,7 +34,7 @@ public struct DocumentationEntry: Identifiable, Codable {
 }
 
 @MainActor
-public final class DocumentationService {
+public final class DocumentationService: ObservableObject {
     public static let shared = DocumentationService()
     
     private var entries: [DocumentationEntry] = []
