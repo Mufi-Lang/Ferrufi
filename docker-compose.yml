@@ -1,0 +1,7 @@
+services:
+  builder:
+    build: .
+    volumes:
+      - .:/src
+    working_dir: /src
+    command: swift build
