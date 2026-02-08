@@ -122,19 +122,37 @@ public final class MarkdownParser {
                     --accent: \(accentColor);
                     --code-bg: \(codeBgColor);
                     --border: \(borderColor);
+                    --sidebar-bg: \(hexString(from: theme.backgroundSecondary));
                 }
                 body {
                     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
                     line-height: 1.6;
                     color: var(--text);
                     background-color: var(--bg);
-                    padding: 2rem;
-                    max-width: 800px;
+                    padding: 3rem;
+                    max-width: 900px;
                     margin: 0 auto;
+                    -webkit-font-smoothing: antialiased;
                 }
-                h1, h2, h3, h4, h5, h6 {
-                    margin-top: 1.5rem;
-                    margin-bottom: 1rem;
+                h1 {
+                    font-size: 2.5rem;
+                    margin-top: 0;
+                    margin-bottom: 1.5rem;
+                    border-bottom: 1px solid var(--border);
+                    padding-bottom: 0.5rem;
+                    font-weight: 700;
+                    color: var(--accent);
+                }
+                h2 {
+                    font-size: 1.8rem;
+                    margin-top: 2.5rem;
+                    border-bottom: 1px solid var(--border);
+                    padding-bottom: 0.3rem;
+                    font-weight: 600;
+                }
+                h3 {
+                    font-size: 1.4rem;
+                    margin-top: 2rem;
                     font-weight: 600;
                 }
                 a {
@@ -145,33 +163,49 @@ public final class MarkdownParser {
                     text-decoration: underline;
                 }
                 code {
-                    font-family: "SF Mono", Menlo, Monaco, Courier, monospace;
+                    font-family: "SF Mono", "Fira Code", Menlo, Monaco, Courier, monospace;
                     background-color: var(--code-bg);
                     padding: 0.2rem 0.4rem;
                     border-radius: 4px;
                     font-size: 0.9em;
+                    border: 1px solid var(--border);
                 }
                 pre {
                     background-color: var(--code-bg);
-                    padding: 1rem;
-                    border-radius: 8px;
+                    padding: 1.2rem;
+                    border-radius: 10px;
                     overflow-x: auto;
                     border: 1px solid var(--border);
-                    margin: 1rem 0;
+                    margin: 1.5rem 0;
+                    box-shadow: inset 0 1px 3px rgba(0,0,0,0.05);
                 }
                 pre code {
                     padding: 0;
                     background-color: transparent;
+                    border: none;
                 }
                 
-                /* Mufi Block Styles - Modern IDE Aesthetic */
+                /* MATLAB-style Function Reference Sections */
+                .ref-section {
+                    margin-bottom: 2rem;
+                }
+                .ref-label {
+                    font-weight: bold;
+                    text-transform: uppercase;
+                    font-size: 0.8rem;
+                    color: var(--foreground-tertiary);
+                    display: block;
+                    margin-bottom: 0.5rem;
+                }
+                
+                /* Mufi Block Styles - Enhanced IDE Aesthetic */
                 .mufi-container {
                     background-color: var(--code-bg);
                     border: 1px solid var(--border);
-                    border-radius: 8px;
-                    margin: 1.2rem 0;
+                    border-radius: 10px;
+                    margin: 1.5rem 0;
                     overflow: hidden;
-                    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+                    box-shadow: 0 4px 20px rgba(0,0,0,0.1);
                     display: block;
                     padding: 0 !important;
                 }
@@ -179,87 +213,65 @@ public final class MarkdownParser {
                     display: flex;
                     justify-content: space-between;
                     align-items: center;
-                    padding: 0 10px;
-                    background: var(--border);
-                    background: linear-gradient(to bottom, var(--border), var(--code-bg));
+                    padding: 0 12px;
+                    background: var(--sidebar-bg);
                     border-bottom: 1px solid var(--border);
-                    height: 24px;
+                    height: 32px;
                     margin: 0 !important;
                 }
                 .mufi-header-left {
                     display: flex;
                     align-items: center;
-                    gap: 6px;
+                    gap: 8px;
                 }
                 .mufi-dot {
-                    width: 6px;
-                    height: 6px;
+                    width: 8px;
+                    height: 8px;
                     background-color: var(--accent);
                     border-radius: 50%;
+                    box-shadow: 0 0 8px var(--accent);
                 }
                 .mufi-label {
-                    font-size: 10px;
-                    font-weight: 700;
+                    font-size: 11px;
+                    font-weight: 800;
                     text-transform: uppercase;
-                    letter-spacing: 0.5px;
+                    letter-spacing: 1px;
                     color: var(--text);
-                    opacity: 0.7;
-                }
-                .mufi-actions {
-                    display: flex;
-                    gap: 4px;
+                    opacity: 0.8;
                 }
                 .action-btn {
-                    background: transparent;
+                    background: var(--bg);
                     color: var(--text);
-                    border: none;
-                    border-radius: 3px;
-                    padding: 2px 6px;
-                    font-size: 10px;
+                    border: 1px solid var(--border);
+                    border-radius: 5px;
+                    padding: 4px 10px;
+                    font-size: 11px;
+                    font-weight: 600;
                     cursor: pointer;
-                    transition: all 0.1s;
+                    transition: all 0.2s;
                     display: flex;
                     align-items: center;
-                    opacity: 0.6;
+                    gap: 4px;
                 }
                 .action-btn:hover {
-                    background-color: rgba(0,0,0,0.1);
-                    opacity: 1;
-                }
-                @media (prefers-color-scheme: dark) {
-                    .action-btn:hover {
-                        background-color: rgba(255,255,255,0.1);
-                    }
+                    background-color: var(--accent);
+                    color: white;
+                    border-color: var(--accent);
                 }
                 .run-btn {
                     color: var(--accent);
-                }
-                .run-btn {
-                    color: var(--accent);
-                    font-weight: 600;
-                }
-                .run-btn .btn-icon {
-                    font-size: 9px;
-                }
-                .clear-btn {
-                    opacity: 0.6;
-                    padding: 3px 6px;
-                }
-                .clear-btn .btn-icon {
-                    font-size: 8px;
                 }
                 .mufi-content pre {
                     margin: 0;
                     border: none;
                     border-radius: 0;
                     background-color: transparent;
-                    padding: 16px;
+                    padding: 20px;
+                    box-shadow: none;
                 }
                 .mufi-content code {
-                    background-color: transparent;
-                    padding: 0;
-                    font-size: 13px;
-                    line-height: 1.5;
+                    font-size: 14px;
+                    line-height: 1.6;
                 }
                 
                 /* Output Container */
@@ -269,42 +281,56 @@ public final class MarkdownParser {
                     border-top: 1px solid #333;
                     font-family: "SF Mono", Menlo, Monaco, Courier, monospace;
                     overflow: hidden;
-                    animation: slideDown 0.3s ease-out;
-                }
-                .output-header {
-                    font-size: 9px;
-                    text-transform: uppercase;
-                    letter-spacing: 1px;
-                    padding: 4px 12px;
-                    background-color: #252526;
-                    color: #858585;
-                    border-bottom: 1px solid #333;
+                    animation: slideDown 0.3s cubic-bezier(0.4, 0, 0.2, 1);
                 }
                 .output-text {
-                    padding: 12px;
-                    font-size: 12px;
-                    line-height: 1.4;
+                    padding: 16px;
+                    font-size: 13px;
+                    line-height: 1.5;
                     white-space: pre-wrap;
-                    max-height: 250px;
+                    max-height: 300px;
                     overflow-y: auto;
                 }
                 
                 @keyframes slideDown {
                     from { max-height: 0; opacity: 0; }
-                    to { max-height: 300px; opacity: 1; }
+                    to { max-height: 400px; opacity: 1; }
                 }
                 
                 blockquote {
-                    border-left: 4px solid var(--accent);
-                    margin: 0;
-                    padding-left: 1rem;
-                    color: var(--text);
-                    opacity: 0.8;
+                    border-left: 5px solid var(--accent);
+                    margin: 1.5rem 0;
+                    padding: 1rem 1.5rem;
+                    background-color: var(--sidebar-bg);
+                    border-radius: 0 8px 8px 0;
+                    font-style: italic;
                 }
                 hr {
                     border: 0;
                     border-top: 1px solid var(--border);
-                    margin: 2rem 0;
+                    margin: 3rem 0;
+                }
+                
+                /* Selection & Scrollbar */
+                ::selection {
+                    background-color: var(--accent);
+                    color: white;
+                }
+                ::-webkit-scrollbar {
+                    width: 10px;
+                }
+                ::-webkit-scrollbar-track {
+                    background: transparent;
+                }
+                ::-webkit-scrollbar-thumb {
+                    background: rgba(0, 0, 0, 0.2);
+                    border-radius: 5px;
+                    border: 2px solid var(--bg);
+                }
+                @media (prefers-color-scheme: dark) {
+                    ::-webkit-scrollbar-thumb {
+                        background: rgba(255, 255, 255, 0.2);
+                    }
                 }
             </style>
             <script>
