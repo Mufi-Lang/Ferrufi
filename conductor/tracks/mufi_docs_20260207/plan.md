@@ -22,7 +22,7 @@
     - [x] Write UI/Unit Tests for `DocBrowserView` and rendering.
 - [ ] Task: Conductor - User Manual Verification 'Phase 2: UI Implementation' (Protocol in workflow.md)
 
-## Phase 3: Integration & Polish
+## Phase 3: Integration & Polish [checkpoint: 29d2f3f]
 - [x] Task: Integrate Documentation Shortcut 6056b8a
     - [x] Add `Cmd+Shift+H` shortcut to open the Documentation Browser.
     - [x] Ensure the browser can be triggered from the main editor.
@@ -30,4 +30,4 @@
     - [x] Ensure full support for Light/Dark modes via `ThemeManager`.
     - [x] Refine animations and transitions for the search results.
     - [x] Verify non-interactive build/test commands.
-- [ ] Task: Conductor - User Manual Verification 'Phase 3: Integration & Polish' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Phase 3: Integration & Polish' (Protocol in workflow.md) 5a13a56
