@@ -37,7 +37,8 @@ let package = Package(
 
             ],
             resources: [
-                .process("UI/Metal/Shaders.metal")
+                .process("UI/Metal/Shaders.metal"),
+                .process("Resources/Documentation")
             ],
             linkerSettings: [
                 .unsafeFlags(["-L", "Sources/CMufi"]),
