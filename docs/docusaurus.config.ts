@@ -1,13 +1,13 @@
-import {themes as prismThemes} from 'prism-react-renderer';
-import type {Config} from '@docusaurus/types';
-import type * as Preset from '@docusaurus/preset-classic';
+import { themes as prismThemes } from "prism-react-renderer";
+import type { Config } from "@docusaurus/types";
+import type * as Preset from "@docusaurus/preset-classic";
 
 // This runs in Node.js - Don't use client-side code here (browser APIs, JSX...)
 
 const config: Config = {
-  title: 'Ferrufi',
-  tagline: 'High-performance macOS IDE for the Mufi programming language',
-  favicon: 'img/logo.png',
+  title: "Ferrufi",
+  tagline: "Metal Accelerated IDE for the Mufi programming language",
+  favicon: "img/logo.png",
 
   // Future flags, see https://docusaurus.io/docs/api/docusaurus-config#future
   future: {
@@ -15,42 +15,41 @@ const config: Config = {
   },
 
   // Set the production url of your site here
-  url: 'https://mufi-lang.github.io',
+  url: "https://ferrufi.mufi-lang.org",
   // Set the /<baseUrl>/ pathname under which your site is served
   // For GitHub pages deployment, it is often '/<projectName>/'
-  baseUrl: '/Ferrufi/',
+  baseUrl: "/",
 
   // GitHub pages deployment config.
   // If you aren't using GitHub pages, you don't need these.
-  organizationName: 'Mufi-Lang', // Usually your GitHub org/user name.
-  projectName: 'Ferrufi', // Usually your repo name.
+  organizationName: "Mufi-Lang", // Usually your GitHub org/user name.
+  projectName: "Ferrufi", // Usually your repo name.
   trailingSlash: false,
 
-  onBrokenLinks: 'throw',
-  onBrokenMarkdownLinks: 'warn',
+  onBrokenLinks: "throw",
+  onBrokenMarkdownLinks: "warn",
 
   // Even if you don't use internationalization, you can use this field to set
   // useful metadata like html lang. For example, if your site is Chinese, you
   // may want to replace "en" with "zh-Hans".
   i18n: {
-    defaultLocale: 'en',
-    locales: ['en'],
+    defaultLocale: "en",
+    locales: ["en"],
   },
 
   presets: [
     [
-      'classic',
+      "classic",
       {
         docs: {
-          sidebarPath: './sidebars.ts',
+          sidebarPath: "./sidebars.ts",
           // Please change this to your repo.
           // Remove this to remove the "edit this page" links.
-          editUrl:
-            'https://github.com/Mufi-Lang/Ferrufi/tree/main/docs/',
+          editUrl: "https://github.com/Mufi-Lang/Ferrufi/tree/main/docs/",
         },
         blog: false, // Disable blog for now as per spec
         theme: {
-          customCss: './src/css/custom.css',
+          customCss: "./src/css/custom.css",
         },
       } satisfies Preset.Options,
     ],
@@ -58,45 +57,45 @@ const config: Config = {
 
   themeConfig: {
     // Replace with your project's social card
-    image: 'img/docusaurus-social-card.jpg',
+    image: "img/docusaurus-social-card.jpg",
     colorMode: {
-      defaultMode: 'dark',
+      defaultMode: "dark",
       respectPrefersColorScheme: true,
     },
     navbar: {
-      title: 'Ferrufi',
+      title: "Ferrufi",
       logo: {
-        alt: 'Ferrufi Logo',
-        src: 'img/logo.png',
+        alt: "Ferrufi Logo",
+        src: "img/logo.png",
       },
       items: [
         {
-          type: 'docSidebar',
-          sidebarId: 'tutorialSidebar',
-          position: 'left',
-          label: 'Documentation',
+          type: "docSidebar",
+          sidebarId: "tutorialSidebar",
+          position: "left",
+          label: "Documentation",
         },
         {
-          href: 'https://github.com/Mufi-Lang/Ferrufi',
-          label: 'GitHub',
-          position: 'right',
+          href: "https://github.com/Mufi-Lang/Ferrufi",
+          label: "GitHub",
+          position: "right",
         },
       ],
     },
     footer: {
-      style: 'dark',
+      style: "dark",
       links: [
         {
-          label: 'Documentation',
-          to: '/docs/intro',
+          label: "Documentation",
+          to: "/docs/intro",
         },
         {
-          label: 'Installation',
-          to: '/docs/installation',
+          label: "Installation",
+          to: "/docs/installation",
         },
         {
-          label: 'GitHub',
-          href: 'https://github.com/Mufi-Lang/Ferrufi',
+          label: "GitHub",
+          href: "https://github.com/Mufi-Lang/Ferrufi",
         },
       ],
       copyright: `Copyright © ${new Date().getFullYear()} Mufi-Lang.`,
@@ -104,7 +103,7 @@ const config: Config = {
     prism: {
       theme: prismThemes.github,
       darkTheme: prismThemes.dracula,
-      additionalLanguages: ['swift', 'bash'],
+      additionalLanguages: ["swift", "bash"],
     },
   } satisfies Preset.ThemeConfig,
 };
