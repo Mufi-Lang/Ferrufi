@@ -46,32 +46,58 @@ public final class DocumentationService: ObservableObject {
     private func loadDocumentation() {
         var loadedEntries: [DocumentationEntry] = []
         
-        for category in DocumentationCategory.allCases {
-            let resourcePath = "Resources/Documentation/\(category.rawValue)"
-            guard let url = Bundle.module.url(forResource: resourcePath, withExtension: nil) else {
-                continue
-            }
-            
-            let fileManager = FileManager.default
-            guard let files = try? fileManager.contentsOfDirectory(at: url, includingPropertiesForKeys: nil) else {
-                continue
-            }
-            
-            for fileURL in files where fileURL.pathExtension == "md" {
-                if let content = try? String(contentsOf: fileURL, encoding: .utf8) {
-                    let title = extractTitle(from: content) ?? fileURL.deletingPathExtension().lastPathComponent
-                    let entry = DocumentationEntry(
-                        title: title,
-                        category: category,
-                        content: content,
-                        fileName: fileURL.lastPathComponent
-                    )
-                    loadedEntries.append(entry)
-                }
-            }
+        print("📚 DocumentationService: Starting to load documentation...")
+        
+        let bundle = Bundle.module
+        print("📦 DocumentationService: Bundle URL: \(bundle.bundleURL.path)")
+        
+        if let resourceURL = bundle.resourceURL {
+            print("📂 DocumentationService: Resource URL: \(resourceURL.path)")
+            scanDirectory(at: resourceURL, loadedEntries: &loadedEntries)
         }
         
         self.entries = loadedEntries
+        print("🏁 DocumentationService: Finished loading \(entries.count) entries.")
+    }
+    
+    private func scanDirectory(at url: URL, loadedEntries: inout [DocumentationEntry]) {
+        let fileManager = FileManager.default
+        guard let contents = try? fileManager.contentsOfDirectory(at: url, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles]) else {
+            return
+        }
+        
+        for itemURL in contents {
+            var isDirectory: ObjCBool = false
+            if fileManager.fileExists(atPath: itemURL.path, isDirectory: &isDirectory) {
+                if isDirectory.boolValue {
+                    scanDirectory(at: itemURL, loadedEntries: &loadedEntries)
+                } else if itemURL.pathExtension == "md" {
+                    // Determine category based on parent folder
+                    let categoryFolder = itemURL.deletingLastPathComponent().lastPathComponent
+                    let category: DocumentationCategory
+                    if categoryFolder.lowercased() == "syntax" {
+                        category = .syntax
+                    } else if categoryFolder.lowercased() == "stdlib" {
+                        category = .stdLib
+                    } else {
+                        // Skip if not in a known category folder
+                        continue
+                    }
+                    
+                    if let content = try? String(contentsOf: itemURL, encoding: .utf8) {
+                        let title = extractTitle(from: content) ?? itemURL.deletingPathExtension().lastPathComponent
+                        let entry = DocumentationEntry(
+                            title: title,
+                            category: category,
+                            content: content,
+                            fileName: itemURL.lastPathComponent
+                        )
+                        loadedEntries.append(entry)
+                        print("✅ DocumentationService: Loaded \(title) from \(itemURL.path)")
+                    }
+                }
+            }
+        }
     }
     
     private func extractTitle(from markdown: String) -> String? {

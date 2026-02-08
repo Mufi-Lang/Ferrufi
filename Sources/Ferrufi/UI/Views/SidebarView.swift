@@ -243,6 +243,13 @@ struct SidebarView: View {
                 }
 
                 CompactActionCard(
+                    icon: "book.fill",
+                    color: Color(red: 0.8, green: 0.4, blue: 1.0)
+                ) {
+                    DocumentationWindow.shared.show()
+                }
+
+                CompactActionCard(
                     icon: "folder.badge.gearshape",
                     color: Color(red: 1.0, green: 0.6, blue: 0.2)
                 ) {

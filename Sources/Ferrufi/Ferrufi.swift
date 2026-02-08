@@ -29,6 +29,8 @@ public class FerrufiApp: ObservableObject {
     @Published public private(set) var errorHandler: ErrorHandler
     /// Theme manager for coordinating UI themes across the app
     public let themeManager: ThemeManager
+    /// Service for Mufi documentation
+    public let documentationService: DocumentationService
 
     // MARK: - State
     @Published public private(set) var isInitialized = false
@@ -46,6 +48,7 @@ public class FerrufiApp: ObservableObject {
         self.folderManager = FolderManager()
         self.errorHandler = DefaultErrorHandler()
         self.themeManager = ThemeManager.shared
+        self.documentationService = DocumentationService.shared
 
         setupSubscriptions()
 
