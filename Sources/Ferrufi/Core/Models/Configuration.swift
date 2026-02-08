@@ -449,6 +449,7 @@ public struct ShortcutsConfiguration: Codable, Sendable {
             "stats": KeyBinding(key: "i", modifiers: ["cmd", "shift"]),
             "toggleREPL": KeyBinding(key: "r", modifiers: ["ctrl", "cmd"]),
             "runScript": KeyBinding(key: "r", modifiers: ["cmd"]),
+            "showDocumentation": KeyBinding(key: "h", modifiers: ["cmd", "shift"]),
             "printNote": KeyBinding(key: "p", modifiers: ["cmd", "shift"]),
             "shortcutsReference": KeyBinding(key: "/", modifiers: ["cmd"]),
         ]

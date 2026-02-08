@@ -42,6 +42,7 @@ public final class ShortcutsManager: ObservableObject {
         "printNote": "Print Note",
         "runScript": "Run Mufi Script",
         "toggleREPL": "Toggle Mufi REPL",
+        "showDocumentation": "Show Mufi Documentation",
         "shortcutsReference": "Keyboard Shortcuts Reference",
     ]
 

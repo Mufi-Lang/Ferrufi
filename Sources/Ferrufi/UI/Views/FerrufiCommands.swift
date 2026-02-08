@@ -201,6 +201,13 @@ public struct FerrufiCommands: Commands {
                 shortcuts.keyboardShortcut(for: "runScript")
                     ?? KeyboardShortcut(KeyEquivalent("r"), modifiers: [.command]))
 
+            Button("Mufi Documentation") {
+                showDocumentation()
+            }
+            .keyboardShortcut(
+                shortcuts.keyboardShortcut(for: "showDocumentation")
+                    ?? KeyboardShortcut(KeyEquivalent("h"), modifiers: [.command, .shift]))
+
             Button("Trust Current Workspace") {
                 trustCurrentWorkspaceAction()
             }
@@ -591,6 +598,10 @@ public struct FerrufiCommands: Commands {
     private func runMufiScript() {
         // Post notification to run Mufi script in the editor
         NotificationCenter.default.post(name: .runMufiScript, object: nil)
+    }
+
+    private func showDocumentation() {
+        DocumentationWindow.shared.show()
     }
 
     private func showAlert(title: String, message: String) {
