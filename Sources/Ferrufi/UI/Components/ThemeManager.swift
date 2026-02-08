@@ -629,24 +629,6 @@ public enum IronTheme: String, CaseIterable, Sendable {
     }
 }
 
-// MARK: - Theme Colors Structure
-
-public struct ThemeColors {
-    public let background: Color
-    public let backgroundSecondary: Color
-    public let backgroundTertiary: Color
-    public let foreground: Color
-    public let foregroundSecondary: Color
-    public let foregroundTertiary: Color
-    public let accent: Color
-    public let accentSecondary: Color
-    public let success: Color
-    public let warning: Color
-    public let error: Color
-    public let border: Color
-    public let shadow: Color
-}
-
 // MARK: - Supporting Enums
 
 public enum FontSize: String, CaseIterable {

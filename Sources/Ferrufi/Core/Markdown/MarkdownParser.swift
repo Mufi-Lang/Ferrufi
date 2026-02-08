@@ -6,8 +6,10 @@
 //
 
 import Foundation
+#if os(macOS)
 import SwiftUI
 import AppKit
+#endif
 
 @MainActor
 public final class MarkdownParser {
@@ -70,7 +72,7 @@ public final class MarkdownParser {
             let id = "mufi-block-\(UUID().uuidString.prefix(8))"
             
             // Generate single-line HTML to avoid interference with the global newline-to-br replacement
-            let html = "<div class=\"mufi-container\"><div class=\"mufi-header\"><div class=\"mufi-header-left\"><span class=\"mufi-dot\"></span><span class=\"mufi-label\">mufi</span></div><div class=\"mufi-actions\"><button class=\"action-btn run-btn\" title=\"Run Code\" onclick=\"runMufi('\(id)', '\(encodedCode)')\">▶</button><button class=\"action-btn clear-btn\" title=\"Clear Output\" onclick=\"clearMufi('\(id)')\">✕</button></div></div><div class=\"mufi-content\"><pre><code>\(code)</code></pre></div><div id=\"output-\(id)\" class=\"mufi-output-container\" style=\"display:none;\"><div id=\"output-text-\(id)\" class=\"output-text\"></div></div></div>"
+            let html = "<div class=\"mufi-container\"><div class=\"mufi-header\"><div class=\"mufi-header-left\"><span class=\"mufi-dot\"></span><span class=\"mufi-label\">mufi</span></div><div class=\"mufi-actions\"><button class=\"action-btn run-btn\" title=\"Run Code\" onclick=\"runMufi('\(id)', '\(encodedCode)')\">▶ Run</button><button class=\"action-btn clear-btn\" title=\"Clear Output\" onclick=\"clearMufi('\(id)')\">✕ Clear</button></div></div><div class=\"mufi-content\"><pre><code>\(code)</code></pre></div><div id=\"output-\(id)\" class=\"mufi-output-container\" style=\"display:none;\"><div id=\"output-text-\(id)\" class=\"output-text\"></div></div></div>"
             
             let range = NSRange(location: match.range.location + offset, length: match.range.length)
             result = (result as NSString).replacingCharacters(in: range, with: html)
@@ -86,6 +88,7 @@ public final class MarkdownParser {
         return regex.stringByReplacingMatches(in: input, options: [], range: range, withTemplate: template)
     }
     
+    #if os(macOS)
     private func hexString(from color: Color) -> String {
         let nsColor = NSColor(color)
         guard let rgbColor = nsColor.usingColorSpace(.deviceRGB) else { return "#000000" }
@@ -258,6 +261,11 @@ public final class MarkdownParser {
                     text-transform: uppercase;
                 }
 
+                .mufi-actions {
+                    display: flex;
+                    gap: 8px;
+                }
+
                 .action-btn {
                     background: var(--accent);
                     color: white;
@@ -348,4 +356,10 @@ public final class MarkdownParser {
         
         return htmlHead + body + htmlFoot
     }
+    #else
+    private func wrapInHTML(_ body: String, theme: ThemeColors) -> String {
+        // Basic implementation for Linux until we have a proper renderer
+        return body
+    }
+    #endif
 }

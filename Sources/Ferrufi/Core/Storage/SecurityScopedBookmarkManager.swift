@@ -5,13 +5,19 @@
 //  Created by Ferrufi Team
 //
 
+#if os(macOS)
 import AppKit
+#endif
 import Foundation
 
 /// Manages security-scoped bookmarks for persistent file access across app launches
 /// This is crucial for apps installed in /Applications to access user-selected folders
 @MainActor
+#if os(macOS)
 public class SecurityScopedBookmarkManager: ObservableObject {
+#else
+public class SecurityScopedBookmarkManager {
+#endif
 
     /// Shared singleton instance for app-wide access
     public static let shared = SecurityScopedBookmarkManager()
@@ -37,9 +43,11 @@ public class SecurityScopedBookmarkManager: ObservableObject {
         NotificationCenter.default.removeObserver(self)
     }
 
+    #if os(macOS)
     @objc private func handleAppWillTerminate(_ notification: Notification) {
         stopAccessingAll()
     }
+    #endif
 
     // MARK: - Bookmark Management
 
@@ -48,6 +56,7 @@ public class SecurityScopedBookmarkManager: ObservableObject {
     /// - Returns: True if bookmark was successfully created and stored
     @discardableResult
     public func createBookmark(for url: URL) -> Bool {
+        #if os(macOS)
         do {
             // Create a security-scoped bookmark that allows full security scope.
             // Omitting `.securityScopeAllowOnlyReadAccess` ensures the bookmark
@@ -72,12 +81,16 @@ public class SecurityScopedBookmarkManager: ObservableObject {
             DiagnosticsLogger.shared.logError("Failed to create bookmark for \(url.path): \(error)")
             return false
         }
+        #else
+        return true // No-op on Linux
+        #endif
     }
 
     /// Resolves a bookmark and starts accessing the security-scoped resource
     /// - Parameter path: The file path that was bookmarked
     /// - Returns: The resolved URL with active security scope, or nil if failed
     public func resolveBookmark(forPath path: String) -> URL? {
+        #if os(macOS)
         let bookmarks = loadBookmarks()
         let normalizedKey = canonicalKey(forPath: path)
 
@@ -204,6 +217,9 @@ public class SecurityScopedBookmarkManager: ObservableObject {
 
             return nil
         }
+        #else
+        return URL(fileURLWithPath: path)
+        #endif
     }
 
     // validateBookmark removed in minimalist API; use resolveBookmark(forPath:) which returns a URL? when access is active.
@@ -255,21 +271,25 @@ public class SecurityScopedBookmarkManager: ObservableObject {
     /// Stops accessing a security-scoped resource
     /// - Parameter url: The URL to stop accessing
     public func stopAccessing(_ url: URL) {
+        #if os(macOS)
         if activeResources[url] == true {
             url.stopAccessingSecurityScopedResource()
             activeResources.removeValue(forKey: url)
             print("🛑 Stopped accessing security-scoped resource: \(url.path)")
         }
+        #endif
     }
 
     /// Stops accessing all active security-scoped resources
     /// Call this when app is terminating or cleaning up
     public func stopAccessingAll() {
+        #if os(macOS)
         for (url, _) in activeResources {
             url.stopAccessingSecurityScopedResource()
         }
         activeResources.removeAll()
         print("🛑 Stopped accessing all security-scoped resources")
+        #endif
     }
 
     // MARK: - Persistence
@@ -306,6 +326,7 @@ public class SecurityScopedBookmarkManager: ObservableObject {
     ///   - defaultDirectory: Optional directory to open the panel in (defaults to nil)
     ///   - showHidden: If true, the open panel will display hidden files/folders
     ///   - completion: Called with the selected URL (with active security scope) or nil on failure
+    #if os(macOS)
     public func requestFolderAccess(
         presentingWindow: NSWindow? = nil,
         message: String = "Select a folder to grant Ferrufi access",
@@ -313,77 +334,84 @@ public class SecurityScopedBookmarkManager: ObservableObject {
         showHidden: Bool = false,
         completion: @escaping (URL?) -> Void
     ) {
-        #if os(macOS)
-            let panel = NSOpenPanel()
-            panel.canChooseDirectories = true
-            panel.canChooseFiles = false
-            panel.allowsMultipleSelection = false
-            panel.canCreateDirectories = true
-            panel.prompt = "Grant Access"
-            panel.message = message
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.canCreateDirectories = true
+        panel.prompt = "Grant Access"
+        panel.message = message
 
-            // Use the provided default directory if available
-            if let dir = defaultDirectory {
-                panel.directoryURL = dir
-            }
+        // Use the provided default directory if available
+        if let dir = defaultDirectory {
+            panel.directoryURL = dir
+        }
 
-            // Optionally show hidden files (e.g. allow selecting `.ferrufi`)
-            if showHidden {
-                panel.setValue(true, forKey: "showsHiddenFiles")
-            }
+        // Optionally show hidden files (e.g. allow selecting `.ferrufi`)
+        if showHidden {
+            panel.setValue(true, forKey: "showsHiddenFiles")
+        }
 
-            // Handler that will be used for sheet or standalone presentation
-            // Simplified: start the security scope immediately, then store the bookmark.
-            // This follows the \"fail fast\" snippet pattern — if starting access fails,
-            // we don't persist anything and return failure to the caller.
-            let handler: (NSApplication.ModalResponse) -> Void = { [weak self] response in
-                guard let self = self else { return }
+        // Handler that will be used for sheet or standalone presentation
+        // Simplified: start the security scope immediately, then store the bookmark.
+        // This follows the \"fail fast\" snippet pattern — if starting access fails,
+        // we don't persist anything and return failure to the caller.
+        let handler: (NSApplication.ModalResponse) -> Void = { [weak self] response in
+            guard let self = self else { return }
 
-                if response == .OK, let url = panel.url {
-                    DiagnosticsLogger.shared.logPermissionEvent(
-                        "panel_accept", path: url.path, details: "user approved in NSOpenPanel")
-                    // Start security-scoped access immediately (fail fast)
-                    if url.startAccessingSecurityScopedResource() {
-                        // Persist bookmark using existing helper (keeps canonical keys)
-                        let created = self.createBookmark(for: url)
-                        if created {
-                            // Track the active resource so stopAccessing() can clean it up later
-                            self.activeResources[url] = true
-                            print("✅ Granted and stored security-scoped bookmark for: \(url.path)")
-                            DiagnosticsLogger.shared.logBookmarkEvent(
-                                "request_grant", key: url.path, success: true,
-                                details: "user granted via panel")
-                            completion(url)
-                        } else {
-                            // Failed to persist bookmark; stop access and report failure
-                            DiagnosticsLogger.shared.logError(
-                                "Failed to persist bookmark after user approved for \(url.path)")
-                            url.stopAccessingSecurityScopedResource()
-                            completion(nil)
-                        }
+            if response == .OK, let url = panel.url {
+                DiagnosticsLogger.shared.logPermissionEvent(
+                    "panel_accept", path: url.path, details: "user approved in NSOpenPanel")
+                // Start security-scoped access immediately (fail fast)
+                if url.startAccessingSecurityScopedResource() {
+                    // Persist bookmark using existing helper (keeps canonical keys)
+                    let created = self.createBookmark(for: url)
+                    if created {
+                        // Track the active resource so stopAccessing() can clean it up later
+                        self.activeResources[url] = true
+                        print("✅ Granted and stored security-scoped bookmark for: \(url.path)")
+                        DiagnosticsLogger.shared.logBookmarkEvent(
+                            "request_grant", key: url.path, success: true,
+                            details: "user granted via panel")
+                        completion(url)
                     } else {
-                        // Could not start security scope (user denied or OS blocked)
-                        DiagnosticsLogger.shared.logPermissionEvent(
-                            "start_access_failed", path: url.path,
-                            details: "startAccessingSecurityScopedResource failed")
+                        // Failed to persist bookmark; stop access and report failure
+                        DiagnosticsLogger.shared.logError(
+                            "Failed to persist bookmark after user approved for \(url.path)")
+                        url.stopAccessingSecurityScopedResource()
                         completion(nil)
                     }
                 } else {
+                    // Could not start security scope (user denied or OS blocked)
                     DiagnosticsLogger.shared.logPermissionEvent(
-                        "panel_cancel", details: "user cancelled NSOpenPanel or no url")
+                        "start_access_failed", path: url.path,
+                        details: "startAccessingSecurityScopedResource failed")
                     completion(nil)
                 }
-            }
-
-            if let window = presentingWindow {
-                panel.beginSheetModal(for: window, completionHandler: handler)
             } else {
-                panel.begin(completionHandler: handler)
+                DiagnosticsLogger.shared.logPermissionEvent(
+                    "panel_cancel", details: "user cancelled NSOpenPanel or no url")
+                completion(nil)
             }
-        #else
-            completion(nil, false)
-        #endif
+        }
+
+        if let window = presentingWindow {
+            panel.beginSheetModal(for: window, completionHandler: handler)
+        } else {
+            panel.begin(completionHandler: handler)
+        }
     }
+    #else
+    public func requestFolderAccess(
+        message: String = "Select a folder to grant Ferrufi access",
+        defaultDirectory: URL? = nil,
+        showHidden: Bool = false,
+        completion: @escaping (URL?) -> Void
+    ) {
+        // Basic implementation for Linux - might need to use a portal or similar
+        completion(defaultDirectory)
+    }
+    #endif
 
     /// Ensures access to a folder path, requesting if needed
     /// - Parameters:
@@ -403,6 +431,7 @@ public class SecurityScopedBookmarkManager: ObservableObject {
 
         // If no bookmark and we should request, show folder picker
         if requestIfNeeded {
+            #if os(macOS)
             requestFolderAccess(
                 message:
                     "Ferrufi needs access to: \(path)\n\nPlease select this folder to grant access.",
@@ -416,6 +445,9 @@ public class SecurityScopedBookmarkManager: ObservableObject {
                     completion(nil)
                 }
             }
+            #else
+            completion(URL(fileURLWithPath: path))
+            #endif
         } else {
             completion(nil)
         }
@@ -498,3 +530,4 @@ extension SecurityScopedBookmarkManager {
         return try await operation(url)
     }
 }
+
