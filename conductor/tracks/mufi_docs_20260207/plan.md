@@ -1,10 +1,10 @@
 # Plan: In-App Mufi Documentation Browser
 
 ## Phase 1: Infrastructure & Data Setup
-- [ ] Task: Create Documentation Storage Structure
-    - [ ] Create `Resources/Documentation` directory.
-    - [ ] Populate `Resources/Documentation/Syntax` with initial Markdown files (e.g., `keywords.md`, `control_flow.md`).
-    - [ ] Populate `Resources/Documentation/StdLib` with initial Markdown files for core functions.
+- [x] Task: Create Documentation Storage Structure 0e1ada7
+    - [x] Create `Resources/Documentation` directory.
+    - [x] Populate `Resources/Documentation/Syntax` with initial Markdown files (e.g., `keywords.md`, `control_flow.md`).
+    - [x] Populate `Resources/Documentation/StdLib` with initial Markdown files for core functions.
 - [ ] Task: Implement Documentation Provider Service
     - [ ] Create `DocumentationService` to index and search local Markdown files.
     - [ ] Implement search logic with category filtering.
