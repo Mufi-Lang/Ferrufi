@@ -10,6 +10,6 @@ The `print` function outputs text to the standard output (usually the REPL or co
 
 ## Examples
 ```mufi
-print("Hello, Mufi!")
-print(42)
+print("Hello, Mufi!");
+print(42);
 ```

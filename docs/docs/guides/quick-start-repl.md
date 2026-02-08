@@ -28,10 +28,10 @@ When you open any note, look at the toolbar above the editor:
 ### Steps:
 1. Write Mufi code in your note:
    ```mufi
-   var name = "Alice"
-   var age = 30
-   print("Hello, " + name + "!")
-   print("Age: " + str(age))
+   var name = "Alice";
+   var age = 30;
+   print("Hello, " + name + "!");
+   print("Age: " + str(age));
    ```
 
 2. Click the **▶️ Play Button** in the toolbar
@@ -96,9 +96,9 @@ When you open any note, look at the toolbar above the editor:
 ```mufi
 fun fibonacci(n) {
     if n <= 1 {
-        return n
+        return n;
     }
-    return fibonacci(n - 1) + fibonacci(n - 2)
+    return fibonacci(n - 1) + fibonacci(n - 2);
 }
 ```
 
@@ -122,45 +122,45 @@ fun fibonacci(n) {
 
 ### Print Output
 ```mufi
-print("Hello, World!")
+print("Hello, World!");
 ```
 
 ### Variables
 ```mufi
-var name = "Bob"
-var age = 25
-var active = true
+var name = "Bob";
+var age = 25;
+var active = true;
 ```
 
 ### Functions
 ```mufi
 fun add(a, b) {
-    return a + b
+    return a + b;
 }
-print(add(10, 20))  // Output: 30
+print(add(10, 20));  // Output: 30
 ```
 
 ### Conditionals
 ```mufi
-var x = 10
+var x = 10;
 if x > 5 {
-    print("x is greater than 5")
+    print("x is greater than 5");
 }
 ```
 
 ### Loops
 ```mufi
-var i = 0
+var i = 0;
 while i < 5 {
-    print("Count: " + str(i))
-    i = i + 1
+    print("Count: " + str(i));
+    i = i + 1;
 }
 ```
 
 ### Arrays
 ```mufi
-var numbers = [1, 2, 3, 4, 5]
-print(numbers[0])  // Output: 1
+var numbers = [1, 2, 3, 4, 5];
+print(numbers[0]);  // Output: 1
 ```
 
 ---

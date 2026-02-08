@@ -41,43 +41,43 @@ Mufi is a programming language with a syntax similar to Swift/Rust. The REPL con
 ### 1. Variables
 
 ```mufi
-var x = 42
-var name = "Alice"
-var pi = 3.14159
-var isActive = true
+var x = 42;
+var name = "Alice";
+var pi = 3.14159;
+var isActive = true;
 ```
 
 ### 2. Printing Output
 
 ```mufi
-print("Hello, World!")
-print("The value is: " + str(42))
+print("Hello, World!");
+print("The value is: " + str(42));
 ```
 
 ### 3. Functions
 
 ```mufi
 fun add(a, b) {
-    return a + b
+    return a + b;
 }
 
 fun greet(name) {
-    return "Hello, " + name + "!"
+    return "Hello, " + name + "!";
 }
 
-print(add(5, 10))        // Output: 15
-print(greet("Mufi"))     // Output: Hello, Mufi!
+print(add(5, 10));        // Output: 15
+print(greet("Mufi"));     // Output: Hello, Mufi!
 ```
 
 ### 4. Conditionals
 
 ```mufi
-var age = 25
+var age = 25;
 
 if age >= 18 {
-    print("Adult")
+    print("Adult");
 } else {
-    print("Minor")
+    print("Minor");
 }
 ```
 
@@ -85,36 +85,36 @@ if age >= 18 {
 
 ```mufi
 // While loop
-var i = 0
+var i = 0;
 while i < 5 {
-    print("Count: " + str(i))
-    i = i + 1
+    print("Count: " + str(i));
+    i = i + 1;
 }
 
 // For-style iteration (if supported)
-var j = 0
+var j = 0;
 while j < 3 {
-    print("Iteration " + str(j))
-    j = j + 1
+    print("Iteration " + str(j));
+    j = j + 1;
 }
 ```
 
 ### 6. Arrays
 
 ```mufi
-var numbers = [1, 2, 3, 4, 5]
-var fruits = ["apple", "banana", "orange"]
+var numbers = [1, 2, 3, 4, 5];
+var fruits = ["apple", "banana", "orange"];
 
-print("First number: " + str(numbers[0]))
-print("Second fruit: " + fruits[1])
+print("First number: " + str(numbers[0]));
+print("Second fruit: " + fruits[1]);
 ```
 
 ### 7. String Interpolation
 
 ```mufi
-var name = "Bob"
-var age = 30
-print("My name is " + name + " and I am " + str(age) + " years old")
+var name = "Bob";
+var age = 30;
+print("My name is " + name + " and I am " + str(age) + " years old");
 ```
 
 ## Using the REPL in Ferrufi
@@ -128,12 +128,12 @@ print("My name is " + name + " and I am " + str(age) + " years old")
 
 **Example Session:**
 ```
-> var x = 10
-> var y = 20
-> print(x + y)
+> var x = 10;
+> var y = 20;
+> print(x + y);
 30
-> fun double(n) { return n * 2 }
-> print(double(21))
+> fun double(n) { return n * 2; }
+> print(double(21));
 42
 ```
 
@@ -167,17 +167,17 @@ print("My name is " + name + " and I am " + str(age) + " years old")
 ```mufi
 fun fibonacci(n) {
     if n <= 1 {
-        return n
+        return n;
     }
-    return fibonacci(n - 1) + fibonacci(n - 2)
+    return fibonacci(n - 1) + fibonacci(n - 2);
 }
 ```
 
 **In REPL:**
 ```
-> fibonacci(5)
+> fibonacci(5);
 5
-> fibonacci(10)
+> fibonacci(10);
 55
 ```
 
@@ -185,19 +185,19 @@ fun fibonacci(n) {
 
 **In Editor:**
 ```mufi
-fun add(a, b) { return a + b }
-fun subtract(a, b) { return a - b }
-fun multiply(a, b) { return a * b }
-fun divide(a, b) { return a / b }
+fun add(a, b) { return a + b; }
+fun subtract(a, b) { return a - b; }
+fun multiply(a, b) { return a * b; }
+fun divide(a, b) { return a / b; }
 ```
 
 **In REPL:**
 ```
-> add(10, 5)
+> add(10, 5);
 15
-> multiply(4, 7)
+> multiply(4, 7);
 28
-> divide(100, 4)
+> divide(100, 4);
 25
 ```
 
@@ -205,22 +205,22 @@ fun divide(a, b) { return a / b }
 
 **In Editor:**
 ```mufi
-var scores = [85, 92, 78, 95, 88]
+var scores = [85, 92, 78, 95, 88];
 
 fun average(arr) {
-    var sum = 0
-    var i = 0
+    var sum = 0;
+    var i = 0;
     while i < len(arr) {
-        sum = sum + arr[i]
-        i = i + 1
+        sum = sum + arr[i];
+        i = i + 1;
     }
-    return sum / len(arr)
+    return sum / len(arr);
 }
 ```
 
 **In REPL:**
 ```
-> print("Average score: " + str(average(scores)))
+> print("Average score: " + str(average(scores)));
 Average score: 87.6
 ```
 
@@ -307,12 +307,12 @@ swift build
 The REPL maintains state between commands:
 
 ```
-> var counter = 0
-> counter = counter + 1
-> print(counter)
+> var counter = 0;
+> counter = counter + 1;
+> print(counter);
 1
-> counter = counter + 1
-> print(counter)
+> counter = counter + 1;
+> print(counter);
 2
 ```
 
@@ -324,13 +324,13 @@ For complex code, write in the editor and send to REPL:
 ```mufi
 fun factorial(n) {
     if n <= 1 {
-        return 1
+        return 1;
     }
-    return n * factorial(n - 1)
+    return n * factorial(n - 1);
 }
 
-var result = factorial(5)
-print("5! = " + str(result))
+var result = factorial(5);
+print("5! = " + str(result));
 ```
 
 Click the arrow button → Executes in REPL → Shows output
@@ -374,9 +374,9 @@ Write Mufi tutorials with executable examples:
 In Mufi, you can declare variables like this:
 
 ```mufi
-var name = "Student"
-var age = 20
-print(name + " is " + str(age) + " years old")
+var name = "Student";
+var age = 20;
+print(name + " is " + str(age) + " years old");
 ```
 
 Try this in the REPL!
@@ -388,19 +388,19 @@ Create a note with useful Mufi functions:
 
 ```mufi
 // Math utilities
-fun abs(n) { if n < 0 { return -n } else { return n } }
-fun max(a, b) { if a > b { return a } else { return b } }
-fun min(a, b) { if a < b { return a } else { return b } }
+fun abs(n) { if n < 0 { return -n; } else { return n; } }
+fun max(a, b) { if a > b { return a; } else { return b; } }
+fun min(a, b) { if a < b { return a; } else { return b; } }
 
 // String utilities
 fun repeat(str, n) {
-    var result = ""
-    var i = 0
+    var result = "";
+    var i = 0;
     while i < n {
-        result = result + str
-        i = i + 1
+        result = result + str;
+        i = i + 1;
     }
-    return result
+    return result;
 }
 ```
 
