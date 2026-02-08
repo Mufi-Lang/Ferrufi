@@ -13,11 +13,7 @@ import Foundation
 /// Manages security-scoped bookmarks for persistent file access across app launches
 /// This is crucial for apps installed in /Applications to access user-selected folders
 @MainActor
-#if os(macOS)
-public class SecurityScopedBookmarkManager: ObservableObject {
-#else
 public class SecurityScopedBookmarkManager {
-#endif
 
     /// Shared singleton instance for app-wide access
     public static let shared = SecurityScopedBookmarkManager()
@@ -530,4 +526,8 @@ extension SecurityScopedBookmarkManager {
         return try await operation(url)
     }
 }
+
+#if os(macOS)
+extension SecurityScopedBookmarkManager: ObservableObject {}
+#endif
 

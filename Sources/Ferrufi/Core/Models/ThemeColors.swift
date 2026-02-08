@@ -23,7 +23,7 @@ public struct Color: Codable, Sendable, Hashable {
 #endif
 
 /// A platform-agnostic representation of theme colors
-public struct ThemeColors: Codable, Sendable {
+public struct ThemeColors: Sendable {
     public let background: Color
     public let backgroundSecondary: Color
     public let backgroundTertiary: Color
@@ -38,7 +38,6 @@ public struct ThemeColors: Codable, Sendable {
     public let border: Color
     public let shadow: Color
     
-    #if os(macOS)
     public init(
         background: Color,
         backgroundSecondary: Color,
@@ -68,5 +67,4 @@ public struct ThemeColors: Codable, Sendable {
         self.border = border
         self.shadow = shadow
     }
-    #endif
 }

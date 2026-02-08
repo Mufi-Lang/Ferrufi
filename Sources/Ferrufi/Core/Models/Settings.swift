@@ -15,11 +15,7 @@ import Combine
 /// A global, centralized settings object that provides a unified API for all user preferences.
 /// It acts as a facade over `ConfigurationManager` and `ThemeManager`.
 @MainActor
-#if os(macOS)
-public final class Settings: ObservableObject {
-#else
 public final class Settings {
-#endif
     /// The shared singleton instance
     public static let shared = Settings()
     
@@ -216,3 +212,7 @@ public final class Settings {
         configManager.resetToDefaults()
     }
 }
+
+#if os(macOS)
+extension Settings: ObservableObject {}
+#endif

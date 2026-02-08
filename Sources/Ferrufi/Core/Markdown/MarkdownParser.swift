@@ -104,6 +104,20 @@ public final class MarkdownParser {
             return String(format: "#%02X%02X%02X", r, g, b)
         }
     }
+    #else
+    private func hexString(from color: Color) -> String {
+        let r = Int(color.red * 255)
+        let g = Int(color.green * 255)
+        let b = Int(color.blue * 255)
+        let a = Int(color.opacity * 255)
+        
+        if a < 255 {
+            return String(format: "#%02X%02X%02X%02X", r, g, b, a)
+        } else {
+            return String(format: "#%02X%02X%02X", r, g, b)
+        }
+    }
+    #endif
     
     private func wrapInHTML(_ body: String, theme: ThemeColors) -> String {
         let bgColor = hexString(from: theme.background)
@@ -111,6 +125,15 @@ public final class MarkdownParser {
         let accentColor = hexString(from: theme.accent)
         let borderColor = hexString(from: theme.border)
         let codeBgColor = hexString(from: theme.backgroundSecondary)
+        
+        #if os(macOS)
+        let syntaxBgColor = hexString(from: theme.backgroundSecondary.opacity(0.5))
+        #else
+        let syntaxBgColor = hexString(from: Color(red: theme.backgroundSecondary.red, 
+                                                 green: theme.backgroundSecondary.green, 
+                                                 blue: theme.backgroundSecondary.blue, 
+                                                 opacity: 0.5))
+        #endif
         
         let htmlHead = """
         <!DOCTYPE html>
@@ -125,8 +148,8 @@ public final class MarkdownParser {
                     --accent: \(accentColor);
                     --code-bg: \(codeBgColor);
                     --border: \(borderColor);
-                    --syntax-bg: \(hexString(from: theme.backgroundSecondary.opacity(0.5)));
-                    --header-bg: \(hexString(from: theme.backgroundSecondary));
+                    --syntax-bg: \(syntaxBgColor);
+                    --header-bg: \(codeBgColor);
                 }
                 
                 body {
@@ -326,10 +349,12 @@ public final class MarkdownParser {
                     textDiv.innerHTML = '<span style="color: #858585;">Running...</span>';
                     
                     // Communicate with Swift
+                    #if os(macOS)
                     window.webkit.messageHandlers.ferrufiRunCode.postMessage({
                         id: id,
                         code: code
                     });
+                    #endif
                 }
                 
                 function clearMufi(id) {
@@ -356,10 +381,4 @@ public final class MarkdownParser {
         
         return htmlHead + body + htmlFoot
     }
-    #else
-    private func wrapInHTML(_ body: String, theme: ThemeColors) -> String {
-        // Basic implementation for Linux until we have a proper renderer
-        return body
-    }
-    #endif
 }

@@ -15,7 +15,7 @@ public struct ContentView: View {
 
     // Trust selection is now applied immediately when the user selects a folder.
 
-    @StateObject private var bookmarkManager = SecurityScopedBookmarkManager()
+    private let bookmarkManager = SecurityScopedBookmarkManager.shared
 
     public init() {}
 
