@@ -125,6 +125,7 @@ name = "ferrufi-linux"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "glib",
  "gtk4",
  "libadwaita",
  "libc",

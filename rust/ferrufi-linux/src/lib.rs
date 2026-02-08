@@ -8,6 +8,7 @@ use std::os::unix::io::FromRawFd;
 
 pub mod models;
 pub mod workspace;
+pub mod ui;
 
 // --- Mufiz ABI Types ---
 
@@ -135,39 +136,4 @@ impl MufiBridge {
             }
         }
     }
-}
-
-pub fn run_ui() {
-    use adw::prelude::*;
-    use adw::Application;
-    use gtk4::{ApplicationWindow, Label};
-
-    let app = Application::builder()
-        .application_id("com.mustafif.ferrufi")
-        .build();
-
-    app.connect_activate(|app| {
-        let content = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
-        
-        content.append(&adw::HeaderBar::new());
-        
-        let label = Label::builder()
-            .label("Ferrufi Linux (Rust + GTK4)")
-            .margin_top(20)
-            .margin_bottom(20)
-            .build();
-        content.append(&label);
-
-        let window = ApplicationWindow::builder()
-            .application(app)
-            .title("Ferrufi")
-            .default_width(800)
-            .default_height(600)
-            .child(&content)
-            .build();
-
-        window.present();
-    });
-
-    app.run();
 }

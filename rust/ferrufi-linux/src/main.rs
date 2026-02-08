@@ -1,6 +1,7 @@
-use ferrufi_linux::run_ui;
+use ferrufi_linux::ui::run_ui;
 
 fn main() {
     println!("🚀 Starting Ferrufi Linux...");
-    run_ui();
+    // In a real app, this would come from args or config
+    run_ui(".".to_string());
 }
