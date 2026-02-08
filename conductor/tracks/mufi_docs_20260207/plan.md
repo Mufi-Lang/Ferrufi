@@ -1,6 +1,6 @@
 # Plan: In-App Mufi Documentation Browser
 
-## Phase 1: Infrastructure & Data Setup
+## Phase 1: Infrastructure & Data Setup [checkpoint: cab5912]
 - [x] Task: Create Documentation Storage Structure 0e1ada7
     - [x] Create `Resources/Documentation` directory.
     - [x] Populate `Resources/Documentation/Syntax` with initial Markdown files (e.g., `keywords.md`, `control_flow.md`).
@@ -9,7 +9,7 @@
     - [x] Create `DocumentationService` to index and search local Markdown files.
     - [x] Implement search logic with category filtering.
     - [x] Write Unit Tests for `DocumentationService`.
-- [ ] Task: Conductor - User Manual Verification 'Phase 1: Infrastructure & Data Setup' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Phase 1: Infrastructure & Data Setup' (Protocol in workflow.md) cab5912
 
 ## Phase 2: UI Implementation
 - [ ] Task: Create Documentation Browser View
