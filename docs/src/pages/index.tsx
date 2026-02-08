@@ -1,4 +1,5 @@
 import type {ReactNode} from 'react';
+import React, {useState} from 'react';
 import clsx from 'clsx';
 import Link from '@docusaurus/Link';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
@@ -7,37 +8,53 @@ import Heading from '@theme/Heading';
 
 import styles from './index.module.css';
 
+function InstallPill() {
+  const [copied, setCopied] = useState(false);
+  const command = 'curl -sSL https://raw.githubusercontent.com/Mufi-Lang/Ferrufi/main/scripts/install.sh | bash';
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(command);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="installPill" onClick={handleCopy}>
+      <span className="installPillCode">curl -sSL ... | bash</span>
+      <span className={clsx('installPillButton', copied && 'copied')}>
+        {copied ? 'Copied!' : 'Copy'}
+      </span>
+    </div>
+  );
+}
+
 function HomepageHeader() {
   const {siteConfig} = useDocusaurusContext();
   return (
     <header className={clsx('hero hero--primary', styles.heroBanner)}>
       <div className="container">
-        <div className="row">
+        <div className="row" style={{ alignItems: 'center' }}>
           <div className="col col--7">
             <Heading as="h1" className="hero__title" style={{ textAlign: 'left' }}>
               {siteConfig.title}
             </Heading>
             <p className="hero__subtitle" style={{ textAlign: 'left', marginBottom: '2rem' }}>
-              The high-performance, Metal-accelerated IDE for the Mufi programming language.
+              High-performance, Metal-accelerated IDE for the Mufi programming language.
             </p>
             <div className={styles.buttons} style={{ justifyContent: 'flex-start', gap: '1rem' }}>
               <Link
                 className="button button--secondary button--lg"
                 to="/docs/installation">
-                Install Now 🚀
+                Get Started 🚀
               </Link>
               <Link
                 className="button button--outline button--lg"
                 to="/docs/intro"
                 style={{ color: 'white', borderColor: 'white' }}>
-                Learn More
+                View Docs
               </Link>
             </div>
-            <div className="install-wrapper" style={{ marginTop: '2rem', textAlign: 'left' }}>
-              <code style={{ background: 'rgba(0,0,0,0.3)', padding: '0.5rem 1rem', borderRadius: '4px', color: '#fff', fontSize: '0.9rem' }}>
-                curl -sSL install.ferrufi.dev | bash
-              </code>
-            </div>
+            <InstallPill />
           </div>
           <div className="col col--5">
             <div style={{ 
@@ -153,11 +170,10 @@ export default function Home(): ReactNode {
         <section style={{ padding: '5rem 0', textAlign: 'center', borderTop: '1px solid var(--ifm-border-color)' }}>
           <div className="container">
             <Heading as="h2">Ready to build with Mufi?</Heading>
-            <p style={{ fontSize: '1.2rem', marginBottom: '2rem' }}>Experience the fastest code editor on macOS today.</p>
             <Link
               className="button button--primary button--lg"
               to="/docs/installation">
-              Get Started for Free
+              Install Ferrufi for macOS
             </Link>
           </div>
         </section>

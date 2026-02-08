@@ -73,11 +73,94 @@
   text-align: left;
 }
 
-.installCommand {
-  display: inline-block;
-  background: rgba(255,255,255,0.1);
-  padding: 0.5rem 1rem;
-  border-radius: 4px;
-  margin-top: 1.5rem;
-  border: 1px solid rgba(255,255,255,0.2);
+.installPill {
+
+  display: flex;
+
+  align-items: center;
+
+  background: rgba(0, 0, 0, 0.2);
+
+  border: 1px solid rgba(255, 255, 255, 0.1);
+
+  border-radius: 100px;
+
+  padding: 0.4rem 0.6rem 0.4rem 1.2rem;
+
+  margin-top: 2rem;
+
+  width: fit-content;
+
+  cursor: pointer;
+
+  transition: all 0.2s ease;
+
+  user-select: none;
+
+}
+
+
+
+.installPill:hover {
+
+  background: rgba(0, 0, 0, 0.4);
+
+  border-color: #007aff;
+
+  transform: translateY(-1px);
+
+}
+
+
+
+
+
+.installPill:active {
+
+  transform: translateY(0);
+
+}
+
+
+
+.installPillCode {
+
+  font-family: var(--ifm-font-family-monospace);
+
+  color: #e0e0e0;
+
+  font-size: 0.85rem;
+
+  margin-right: 1.5rem;
+
+}
+
+
+
+.installPillButton {
+
+  background: var(--ifm-color-primary);
+
+  color: white;
+
+  border-radius: 100px;
+
+  padding: 0.3rem 1rem;
+
+  font-size: 0.75rem;
+
+  font-weight: 600;
+
+  text-transform: uppercase;
+
+  letter-spacing: 0.05em;
+
+}
+
+
+
+.installPillButton.copied {
+
+  background: #27c93f;
+
 }
