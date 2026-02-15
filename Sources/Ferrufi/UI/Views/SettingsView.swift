@@ -511,6 +511,8 @@ struct EditorSettingsContent: View {
                     get: { settings.config.editor.autoComplete },
                     set: { val in settings.update { $0.editor.autoComplete = val } }
                 ))
+                Divider().padding(.leading, 16)
+                SettingsToggleRow("Format on Save", subtitle: "Automatically format Mufi scripts when saving", isOn: $settings.formatOnSave)
             }
         }
     }

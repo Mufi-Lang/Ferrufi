@@ -247,7 +247,8 @@ public struct EditorCoreView: View {
 
     public var body: some View {
         // Determine file type from document
-        let fileType: EditorFileType = (core.document?.fileExtension.lowercased() == "md") ? .markdown : .mufi
+        let fileExtension = core.document?.fileExtension.lowercased()
+        let fileType: EditorFileType = (fileExtension == "md") ? .markdown : (fileExtension == "zon" ? .zon : .mufi)
 
         // UnifiedEditor is the existing SwiftUI wrapper around the NSTextView implementation.
         UnifiedEditor(

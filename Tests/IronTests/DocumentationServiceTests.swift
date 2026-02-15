@@ -5,8 +5,8 @@ import XCTest
 final class DocumentationServiceTests: XCTestCase {
     var service: DocumentationService!
 
-    override func setUp() {
-        super.setUp()
+    override func setUp() async throws {
+        try await super.setUp()
         service = DocumentationService()
     }
 

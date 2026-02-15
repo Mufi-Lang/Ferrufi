@@ -62,6 +62,9 @@ public class NavigationModel: ObservableObject {
     /// Whether to show folder creation sheet
     @Published public var showingFolderCreation: Bool = false
 
+    /// Whether to show project creation wizard
+    @Published public var showingProjectWizard: Bool = false
+
     /// Whether to show settings
     @Published public var showingSettings: Bool = false
 

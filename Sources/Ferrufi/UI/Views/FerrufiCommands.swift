@@ -34,6 +34,22 @@ public struct FerrufiCommands: Commands {
                 shortcuts.keyboardShortcut(for: "newFolder")
                     ?? KeyboardShortcut(KeyEquivalent("n"), modifiers: [.command, .shift]))
 
+            Button("New Project...") {
+                newProjectAction()
+            }
+            .keyboardShortcut(
+                shortcuts.keyboardShortcut(for: "newProject")
+                    ?? KeyboardShortcut(KeyEquivalent("n"), modifiers: [.command, .option]))
+
+            Divider()
+
+            Button("Save Script") {
+                saveAction()
+            }
+            .keyboardShortcut(
+                shortcuts.keyboardShortcut(for: "save")
+                    ?? KeyboardShortcut(KeyEquivalent("s"), modifiers: [.command]))
+
             Divider()
 
             Button("Import Scripts...") {
@@ -76,6 +92,15 @@ public struct FerrufiCommands: Commands {
             .keyboardShortcut(
                 shortcuts.keyboardShortcut(for: "findAndReplace")
                     ?? KeyboardShortcut(KeyEquivalent("f"), modifiers: [.command, .option]))
+
+            Divider()
+
+            Button("Format Document") {
+                formatDocumentAction()
+            }
+            .keyboardShortcut(
+                shortcuts.keyboardShortcut(for: "formatDocument")
+                    ?? KeyboardShortcut(KeyEquivalent("f"), modifiers: [.command, .shift]))
         }
 
         // View Menu
@@ -200,6 +225,18 @@ public struct FerrufiCommands: Commands {
             .keyboardShortcut(
                 shortcuts.keyboardShortcut(for: "runScript")
                     ?? KeyboardShortcut(KeyEquivalent("r"), modifiers: [.command]))
+
+            Divider()
+
+            Button("Install Dependencies") {
+                installDependenciesAction()
+            }
+
+            Button("Generate Project Docs") {
+                generateProjectDocsAction()
+            }
+
+            Divider()
 
             Button("Mufi Documentation") {
                 showDocumentation()
@@ -330,6 +367,10 @@ public struct FerrufiCommands: Commands {
 
     private func newFolderAction() {
         nav?.showingFolderCreation = true
+    }
+
+    private func newProjectAction() {
+        nav?.showingProjectWizard = true
     }
 
     private func importNotesAction() {
@@ -600,6 +641,79 @@ public struct FerrufiCommands: Commands {
         NotificationCenter.default.post(name: .runMufiScript, object: nil)
     }
 
+    private func installDependenciesAction() {
+        guard let app = ferrufiApp else { return }
+        let searchPath = nav?.selectedNote?.filePath ?? app.folderManager.selectedFolder?.path ?? app.folderManager.rootFolder.path
+        guard let projectRoot = app.folderManager.projectRoot(for: searchPath) else {
+            showAlert(title: "Project Not Found", message: "No mufi.zon found in current folder or parents.")
+            return
+        }
+        
+        ToastManager.shared.show(message: "Installing dependencies...", type: .info)
+        
+        Task {
+            do {
+                let (status, output) = try await MufiRuntimeService.shared.installDependencies(at: projectRoot)
+                await MainActor.run {
+                    if status == 0 {
+                        ToastManager.shared.show(message: "Dependencies installed", type: .success)
+                    } else {
+                        showAlert(title: "Install Failed", message: output)
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    showAlert(title: "Error", message: error.localizedDescription)
+                }
+            }
+        }
+    }
+
+    private func generateProjectDocsAction() {
+        guard let app = ferrufiApp else { return }
+        let searchPath = nav?.selectedNote?.filePath ?? app.folderManager.selectedFolder?.path ?? app.folderManager.rootFolder.path
+        guard let projectRoot = app.folderManager.projectRoot(for: searchPath) else {
+            showAlert(title: "Project Not Found", message: "No mufi.zon found in current folder or parents.")
+            return
+        }
+        
+        ToastManager.shared.show(message: "Generating documentation...", type: .info)
+        
+        Task {
+            do {
+                let (status, output) = try await MufiRuntimeService.shared.generateDocs(at: projectRoot)
+                await MainActor.run {
+                    if status == 0 {
+                        ToastManager.shared.show(message: "Docs generated", type: .success)
+                        // Assume docs are in <projectRoot>/docs/index.html
+                        let docsURL = URL(fileURLWithPath: projectRoot).appendingPathComponent("docs").appendingPathComponent("index.html")
+                        if FileManager.default.fileExists(atPath: docsURL.path) {
+                            ProjectDocsWindow.shared.show(docsURL: docsURL)
+                        } else {
+                            showAlert(title: "Docs Not Found", message: "Documentation was generated but index.html was not found at \(docsURL.path)")
+                        }
+                    } else {
+                        showAlert(title: "Generation Failed", message: output)
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    showAlert(title: "Error", message: error.localizedDescription)
+                }
+            }
+        }
+    }
+
+    private func formatDocumentAction() {
+        // Post notification to format Mufi document in the editor
+        NotificationCenter.default.post(name: .formatMufiDocument, object: nil)
+    }
+
+    private func saveAction() {
+        // Post notification to save current document
+        NotificationCenter.default.post(name: .saveMufiDocument, object: nil)
+    }
+
     private func showDocumentation() {
         DocumentationWindow.shared.show()
     }
@@ -617,6 +731,8 @@ public struct FerrufiCommands: Commands {
 extension Notification.Name {
     static let toggleMufiREPL = Notification.Name("toggleMufiREPL")
     static let runMufiScript = Notification.Name("runMufiScript")
+    static let formatMufiDocument = Notification.Name("formatMufiDocument")
+    static let saveMufiDocument = Notification.Name("saveMufiDocument")
     static let toggleMarkdownPreview = Notification.Name("toggleMarkdownPreview")
     static let runMufiInPreview = Notification.Name("runMufiInPreview")
 }

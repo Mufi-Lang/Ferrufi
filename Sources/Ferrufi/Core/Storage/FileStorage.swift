@@ -147,11 +147,8 @@ public final class FileStorage: NSObject, FileStorageProtocol, ObservableObject,
 
     public func saveNote(_ note: Note) async throws {
         // Use FileService to perform the content write and metadata write so security-scoped
-        // access is consistently handled in one place. Prefer a resolved workspace URL path
-        // when present so the stored configuration remains canonical.
-        let basePath = self.resolvedWorkspaceURL?.path ?? self.workspacePath
-        let notePath = URL(fileURLWithPath: basePath).appendingPathComponent("\(note.title).mufi")
-            .path
+        // access is consistently handled in one place. 
+        let notePath = note.filePath
 
         do {
             try await FileService.shared.writeTextFile(atPath: notePath, contents: note.content)

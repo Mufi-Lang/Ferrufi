@@ -359,7 +359,7 @@ struct EditorWithREPL: View {
 
     private func openWikiLink(_ noteName: String) {
         Task {
-            if let foundNote = await folderManager.findNoteByName(noteName) {
+            if let foundNote = folderManager.findNoteByName(noteName) {
                 await MainActor.run {
                     note = foundNote
                     NotificationCenter.default.post(name: .navigateToNote, object: foundNote)
@@ -372,7 +372,7 @@ struct EditorWithREPL: View {
 
     private func openFileLink(_ url: URL) {
         Task {
-            if let foundNote = await folderManager.findNoteByURL(url) {
+            if let foundNote = folderManager.findNoteByURL(url) {
                 await MainActor.run {
                     note = foundNote
                     NotificationCenter.default.post(name: .navigateToNote, object: foundNote)

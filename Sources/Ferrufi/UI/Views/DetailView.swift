@@ -16,6 +16,7 @@ struct DetailView: View {
     @StateObject private var editorHost = EditorContainerHost()
 
     @State private var editingText = ""
+    @State private var activeTextView: NSTextView?
     @State private var isEditorFocused = false
     @State private var showingThemeSelector = false
     @State private var showingExportSheet = false
@@ -90,6 +91,15 @@ struct DetailView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .runMufiScript)) { _ in
             runMufiScript()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .formatMufiDocument)) { _ in
+            formatDocument()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .saveMufiDocument)) { _ in
+            saveNote()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .unifiedEditorTextViewChanged)) { notification in
+            self.activeTextView = notification.object as? NSTextView
         }
         .sheet(isPresented: $showingExportSheet) {
             ExportSheet(note: navigationModel.selectedNote!)
@@ -560,16 +570,41 @@ struct DetailView: View {
         }
 
         let startTime = Date()
+        
+        // Project-aware execution: find project root from current note or folder
+        let searchPath = navigationModel.selectedNote?.filePath ?? ferrufiApp.folderManager.selectedFolder?.path ?? ferrufiApp.folderManager.rootFolder.path
+        let projectRoot = ferrufiApp.folderManager.projectRoot(for: searchPath)
+        let useProjectRun = projectRoot != nil
+        let runPath = projectRoot ?? ferrufiApp.folderManager.rootFolder.path
+        
         Task {
             do {
-                let (status, output) = try await MufiBridge.shared.interpret(editingText)
+                let status: Int32
+                let output: String
+                
+                if useProjectRun {
+                    // Run the whole project from detected root
+                    let result = try await MufiRuntimeService.shared.runProject(at: runPath)
+                    status = result.0
+                    output = result.1.isEmpty ? "[Project execution completed with status \(status)]" : result.1
+                } else {
+                    // Run current script only
+                    let result = try await MufiBridge.shared.interpret(editingText)
+                    status = Int32(result.0)
+                    output = result.1
+                }
+                
                 let duration = Date().timeIntervalSince(startTime)
                 
                 await MainActor.run {
                     editorHost.mufiOutput = output
-                    editorHost.mufiExitStatus = status
+                    editorHost.mufiExitStatus = UInt8(status) // TODO: update host to use Int32
                     editorHost.mufiExecutionTime = duration
                     isRunningScript = false
+                    
+                    if useProjectRun {
+                        ToastManager.shared.show(message: "Project execution complete", type: status == 0 ? .success : .error)
+                    }
                 }
             } catch {
                 let duration = Date().timeIntervalSince(startTime)
@@ -583,19 +618,55 @@ struct DetailView: View {
         }
     }
 
+    private func formatDocument() {
+        let currentText = activeTextView?.string ?? editingText
+        guard let note = navigationModel.selectedNote,
+              (note.filePath.hasSuffix(".mufi") || note.filePath.hasSuffix(".zon")) else { return }
+        
+        Task {
+            do {
+                if let formatted = try await MufiRuntimeService.shared.formatSource(currentText) {
+                    await MainActor.run {
+                        if currentText != formatted {
+                            if let tv = activeTextView {
+                                tv.string = formatted
+                            }
+                            editingText = formatted
+                            saveNote()
+                            ToastManager.shared.show(message: "Document formatted", type: .success)
+                        } else {
+                            ToastManager.shared.show(message: "Already formatted", type: .info)
+                        }
+                    }
+                } else {
+                    await MainActor.run {
+                        ToastManager.shared.show(message: "Formatting failed", type: .error)
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    ToastManager.shared.show(message: "Formatting error: \(error.localizedDescription)", type: .error)
+                }
+            }
+        }
+    }
+
     private func saveNote() {
         guard let note = navigationModel.selectedNote else { return }
+        let currentText = activeTextView?.string ?? editingText
 
         Task {
             do {
                 var updatedNote = note
-                updatedNote.content = editingText
+                updatedNote.content = currentText
                 updatedNote.modifiedAt = Date()
 
                 try await ferrufiApp.updateNote(updatedNote)
 
                 await MainActor.run {
                     navigationModel.selectedNote = updatedNote
+                    editingText = currentText
+                    ToastManager.shared.show(message: "Saved", type: .success, duration: 1.0)
                 }
             } catch {
                 print("Save error: \(error)")

@@ -23,6 +23,7 @@ import SwiftUI
 public enum EditorFileType {
     case mufi
     case markdown
+    case zon
 }
 
 // Fonts are provided at runtime via ThemeManager. Avoid global NSFont constants so font sizing
@@ -90,7 +91,7 @@ public struct UnifiedEditor: View {
                     onSave: onSave
                 )
                 .id(
-                    "\(settings.showLineNumbers)-\(settings.wordWrap)-\(settings.fontFamily)-\(settings.fontSize)-\(settings.lineHeight)"
+                    "\(settings.showLineNumbers)-\(settings.wordWrap)-\(settings.fontFamily)-\(settings.fontSize)-\(settings.lineHeight)-\(themeManager.currentTheme.rawValue)"
                 )
             }
         }
@@ -180,6 +181,14 @@ private struct EditorContainerView: NSViewRepresentable {
         unifiedTextView.delegate = context.coordinator
         unifiedTextView.coordinator = context.coordinator
         unifiedTextView.setupForMode(fileType)
+        
+        // Ensure the text view can grow to fit its content and supports scrolling
+        unifiedTextView.minSize = NSSize(width: 0, height: 0)
+        unifiedTextView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+        unifiedTextView.isVerticallyResizable = true
+        unifiedTextView.isHorizontallyResizable = false
+        unifiedTextView.autoresizingMask = [.width]
+        
         // Propagate highlighting preference from the SwiftUI wrapper to the NSTextView subclass
         unifiedTextView.highlightingEnabled = highlightingEnabled
 
@@ -280,6 +289,9 @@ private struct EditorContainerView: NSViewRepresentable {
 
         // Update mode if it changed
         textView.setupForMode(fileType)
+
+        // Apply theme colors
+        updateTheme(textView: textView)
 
         // External text changes: preserve cursor where possible
         if textView.string != text {
@@ -587,8 +599,27 @@ private struct EditorContainerView: NSViewRepresentable {
 
         func textDidEndEditing(_ notification: Notification) {
             isEditingBinding.wrappedValue = false
-            onSave?()
-            // Legacy persistent output queue removed; nothing to flush here.
+            
+            // Format on save if enabled and it's a mufi or zon file
+            let currentText = textBinding.wrappedValue
+            if (textView?.mode == .mufi || textView?.mode == .zon) && Settings.shared.formatOnSave {
+                Task { @MainActor in
+                    do {
+                        if let formatted = try await MufiRuntimeService.shared.formatSource(currentText) {
+                            if currentText != formatted {
+                                textBinding.wrappedValue = formatted
+                                textView?.string = formatted
+                                ToastManager.shared.show(message: "Auto-formatted", type: .success)
+                            }
+                        }
+                    } catch {
+                        print("Auto-format error: \(error)")
+                    }
+                    onSave?()
+                }
+            } else {
+                onSave?()
+            }
         }
 
         // MARK: - Formatting handlers
@@ -814,7 +845,7 @@ private struct EditorContainerView: NSViewRepresentable {
 
 // MARK: - UnifiedTextView: single NSTextView subclass that supports multiple modes
 
-private class UnifiedTextView: NSTextView {
+fileprivate class UnifiedTextView: NSTextView {
     weak var coordinator: EditorContainerView.Coordinator?
     var mode: EditorFileType = .mufi
     // When false, skip incremental highlighting (useful for performance-sensitive cases)
@@ -822,6 +853,7 @@ private class UnifiedTextView: NSTextView {
     private var highlighter: MufiHighlighter?  // Placeholder for future use
     private var mufiHighlighter: MufiHighlighter?
     private var markdownHighlighter: MarkdownHighlighter?
+    private var zonHighlighter: ZonHighlighter?
     private var computeHighlighter: MufiComputeHighlighter?
     private var shouldHighlightWhole: Bool = true
 
@@ -1001,7 +1033,7 @@ private class UnifiedTextView: NSTextView {
         self.mode = fileType
 
         switch fileType {
-        case .mufi:
+        case .mufi, .zon:
             // All modes use script/plain editing behavior; preview/highlighting features removed.
             isAutomaticQuoteSubstitutionEnabled = false
             isAutomaticDashSubstitutionEnabled = false
@@ -1207,6 +1239,8 @@ private class UnifiedTextView: NSTextView {
             mufiHighlighter?.highlight(in: ts)
         case .markdown:
             markdownHighlighter?.highlight(in: ts)
+        case .zon:
+            zonHighlighter?.highlight(in: ts)
         }
 
         // Re-apply diagnostics AFTER highlighting to ensure underlines stay visible
@@ -1253,6 +1287,14 @@ private class UnifiedTextView: NSTextView {
                 markdownHighlighter = MarkdownHighlighter(
                     theme: theme, baseFontName: baseFontName, baseSize: baseSize)
             }
+        case .zon:
+            if let highlighter = zonHighlighter {
+                highlighter.updateConfig(
+                    theme: theme, baseFontName: baseFontName, baseSize: baseSize)
+            } else {
+                zonHighlighter = ZonHighlighter(
+                    theme: theme, baseFontName: baseFontName, baseSize: baseSize)
+            }
         }
 
         if highlightingEnabled {
@@ -1296,6 +1338,8 @@ private class UnifiedTextView: NSTextView {
             mufiHighlighter?.highlight(in: ts, range: lineRange)
         case .markdown:
             markdownHighlighter?.highlight(in: ts, range: lineRange)
+        case .zon:
+            zonHighlighter?.highlight(in: ts, range: lineRange)
         }
 
         // Re-apply diagnostics AFTER incremental highlighting

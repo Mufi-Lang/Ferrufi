@@ -136,6 +136,11 @@ public final class Settings {
         get { config.editor.autoComplete }
         set { update { $0.editor.autoComplete = newValue } }
     }
+
+    public var formatOnSave: Bool {
+        get { config.editor.formatOnSave }
+        set { update { $0.editor.formatOnSave = newValue } }
+    }
     
     // MARK: - Search
 

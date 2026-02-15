@@ -256,7 +256,7 @@ struct EnhancedEditorView: View {
     private func openWikiLink(_ noteName: String) {
         Task {
             // Try to find the note by name
-            if let foundNote = await folderManager.findNoteByName(noteName) {
+            if let foundNote = folderManager.findNoteByName(noteName) {
                 await MainActor.run {
                     note = foundNote
                     // This should trigger navigation in the parent view
@@ -271,7 +271,7 @@ struct EnhancedEditorView: View {
 
     private func openFileLink(_ url: URL) {
         Task {
-            if let foundNote = await folderManager.findNoteByURL(url) {
+            if let foundNote = folderManager.findNoteByURL(url) {
                 await MainActor.run {
                     note = foundNote
                     NotificationCenter.default.post(name: .navigateToNote, object: foundNote)
@@ -321,49 +321,6 @@ struct EnhancedEditorView: View {
 
 // Notification names for editor actions are centralized in
 // `Ferrufi/Sources/Ferrufi/Features/Editor/EditorNotifications.swift`.
-
-// MARK: - FolderManager Extensions
-
-extension FolderManager {
-    func findNoteByName(_ name: String) async -> Note? {
-        return await MainActor.run {
-            notes.first { note in
-                note.title.lowercased() == name.lowercased()
-                    || note.url?.deletingPathExtension().lastPathComponent.lowercased()
-                        == name.lowercased()
-            }
-        }
-    }
-
-    func findNoteByURL(_ url: URL) async -> Note? {
-        return await MainActor.run {
-            notes.first { $0.url == url }
-        }
-    }
-
-    public func updateNoteContent(_ note: Note, content: String) async throws {
-        guard let url = note.url else {
-            throw FerrufiError.fileSystem(.invalidPath("Note has no URL"))
-        }
-
-        try content.write(to: url, atomically: true, encoding: .utf8)
-
-        await MainActor.run {
-            // Update the note's content and metadata
-            if let index = notes.firstIndex(where: { $0.id == note.id }) {
-                var updatedNote = note
-                updatedNote.content = content
-                updatedNote.metadata.modifiedAt = Date()
-                updatedNote.metadata.wordCount =
-                    content.components(separatedBy: .whitespacesAndNewlines)
-                    .filter { !$0.isEmpty }.count
-                var mutableNotes = notes
-                mutableNotes[index] = updatedNote
-                notes = mutableNotes
-            }
-        }
-    }
-}
 
 // MARK: - SwiftUI Samples
 

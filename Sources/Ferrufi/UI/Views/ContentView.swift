@@ -34,6 +34,7 @@ public struct ContentView: View {
         .themedAccent(themeManager)
         .themedBackground(themeManager)
         .preferredColorScheme(themeManager.currentTheme.isDark ? .dark : .light)
+        .toastOverlay()
         .onAppear {
             navigationModel.ferrufiApp = ferrufiApp
             FerrufiApp.registerNavigationModel(navigationModel)
@@ -161,6 +162,13 @@ public struct ContentView: View {
 
         .sheet(isPresented: $navigationModel.showingFolderCreation) {
             FolderCreationView()
+                .environmentObject(ferrufiApp)
+                .environmentObject(navigationModel)
+                .environmentObject(themeManager)
+                .environmentObject(Settings.shared)
+        }
+        .sheet(isPresented: $navigationModel.showingProjectWizard) {
+            NewProjectWizardView()
                 .environmentObject(ferrufiApp)
                 .environmentObject(navigationModel)
                 .environmentObject(themeManager)

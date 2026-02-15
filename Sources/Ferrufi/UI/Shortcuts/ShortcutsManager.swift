@@ -20,6 +20,8 @@ public final class ShortcutsManager: ObservableObject {
     public let actionLabels: [String: String] = [
         "newNote": "New Note",
         "newFolder": "New Folder",
+        "newProject": "New Mufi Project",
+        "save": "Save Document",
         "importNotes": "Import Notes",
         "exportVault": "Export Workspace",
         "changeWorkspace": "Change Workspace Folder",

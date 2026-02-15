@@ -109,6 +109,34 @@ public class FolderManager: ObservableObject {
         return _rootFolder ?? rootFolders.first ?? Folder(name: "Root", path: "/")
     }
 
+    /// Whether the current workspace is a Mufi project (contains mufi.zon)
+    public var isActiveProject: Bool {
+        return projectRoot(for: selectedFolder?.path ?? _rootFolder?.path ?? "/") != nil
+    }
+
+    /// Finds the project root (directory containing mufi.zon) by searching upwards from the given path.
+    public func projectRoot(for path: String) -> String? {
+        let fm = FileManager.default
+        var currentURL = URL(fileURLWithPath: path)
+        let rootPath = _rootFolder?.path ?? "/"
+        
+        while true {
+            let zonURL = currentURL.appendingPathComponent("mufi.zon")
+            if fm.fileExists(atPath: zonURL.path) {
+                return currentURL.path
+            }
+            
+            // Stop if we reach the workspace root or filesystem root
+            if currentURL.path == rootPath || currentURL.path == "/" {
+                break
+            }
+            
+            currentURL = currentURL.deletingLastPathComponent()
+        }
+        
+        return nil
+    }
+
     /// Returns all folders sorted alphabetically
     public var allFolders: [Folder] {
         return Array(folders.values).sorted {
@@ -398,9 +426,41 @@ extension FolderManager {
         }
     }
 
+    /// Updates the content of a note on disk
+    public func updateNoteContent(_ note: Note, content: String) async throws {
+        try await FileService.shared.writeTextFile(atPath: note.filePath, contents: content)
+        
+        await MainActor.run {
+            // Update the note's content and metadata
+            if let index = notes.firstIndex(where: { $0.id == note.id }) {
+                var updatedNote = note
+                updatedNote.content = content
+                updatedNote.metadata.modifiedAt = Date()
+                updatedNote.metadata.wordCount = 
+                    content.components(separatedBy: .whitespacesAndNewlines)
+                    .filter { !$0.isEmpty }.count
+                notes[index] = updatedNote
+            }
+        }
+    }
+
     /// Finds a note by ID
     public func findNote(by id: UUID) -> Note? {
         return notes.first { $0.id == id }
+    }
+
+    /// Finds a note by title or filename
+    public func findNoteByName(_ name: String) -> Note? {
+        return notes.first { note in
+            note.title.lowercased() == name.lowercased()
+                || note.url?.deletingPathExtension().lastPathComponent.lowercased()
+                    == name.lowercased()
+        }
+    }
+
+    /// Finds a note by URL
+    public func findNoteByURL(_ url: URL) -> Note? {
+        return notes.first { $0.url == url }
     }
 
     /// Refreshes the notes list by scanning the filesystem
@@ -431,7 +491,7 @@ extension FolderManager {
             options: [.skipsHiddenFiles, .skipsPackageDescendants]
         ) {
             for case let fileURL as URL in enumerator {
-                if ["md", "mufi"].contains(fileURL.pathExtension.lowercased()) {
+                if ["md", "mufi", "zon"].contains(fileURL.pathExtension.lowercased()) {
                     loadNoteFromFile(at: fileURL)
                 }
             }

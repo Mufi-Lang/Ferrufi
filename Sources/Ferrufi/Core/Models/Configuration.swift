@@ -239,6 +239,7 @@ public struct EditorConfiguration: Codable, Sendable {
     public var autoComplete: Bool
     public var livePreview: Bool
     public var spellCheck: Bool
+    public var formatOnSave: Bool
 
     public init(
         fontSize: Double = 14.0,
@@ -250,7 +251,8 @@ public struct EditorConfiguration: Codable, Sendable {
         syntaxHighlighting: Bool = true,
         autoComplete: Bool = true,
         livePreview: Bool = true,
-        spellCheck: Bool = true
+        spellCheck: Bool = true,
+        formatOnSave: Bool = true
     ) {
         self.fontSize = fontSize
         self.fontFamily = fontFamily
@@ -262,6 +264,7 @@ public struct EditorConfiguration: Codable, Sendable {
         self.autoComplete = autoComplete
         self.livePreview = livePreview
         self.spellCheck = spellCheck
+        self.formatOnSave = formatOnSave
     }
 }
 
@@ -430,6 +433,8 @@ public struct ShortcutsConfiguration: Codable, Sendable {
         return [
             "newNote": KeyBinding(key: "n", modifiers: ["cmd"]),
             "newFolder": KeyBinding(key: "n", modifiers: ["cmd", "shift"]),
+            "newProject": KeyBinding(key: "n", modifiers: ["cmd", "option"]),
+            "save": KeyBinding(key: "s", modifiers: ["cmd"]),
             "importNotes": KeyBinding(key: "i", modifiers: ["cmd"]),
             "exportVault": KeyBinding(key: "e", modifiers: ["cmd", "shift"]),
             "changeWorkspace": KeyBinding(key: "v", modifiers: ["cmd", "shift"]),

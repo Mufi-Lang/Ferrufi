@@ -21,7 +21,6 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/JohnSundell/Files.git", from: "4.0.0"),
         .package(url: "https://github.com/kylef/PathKit.git", from: "1.0.0"),
-        .package(url: "https://github.com/AparokshaUI/adwaita-swift.git", from: "0.2.0"),
     ],
     targets: [
         .systemLibrary(
@@ -34,7 +33,6 @@ let package = Package(
                 "CMufi",
                 .product(name: "Files", package: "Files"),
                 .product(name: "PathKit", package: "PathKit"),
-                .product(name: "Adwaita", package: "adwaita-swift", condition: .when(platforms: [.linux])),
             ],
             resources: [
                 .process("UI/Metal/Shaders.metal"),
