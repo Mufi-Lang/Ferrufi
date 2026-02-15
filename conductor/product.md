@@ -5,7 +5,8 @@ this goal is to allow for an ide experience of the mufi programming language and
 Ferrufi is a next-generation, native macOS IDE specifically tailored for the Mufi programming language. It serves as both a high-performance development environment and a laboratory for cutting-edge editor technologies. By leveraging Metal-accelerated rendering and modern Swift concurrency, Ferrufi aims to provide a fluid, near-instantaneous user interface that remains responsive even under heavy workloads.
 
 ## Key Goals
-- **Mufi First:** Provide a first-class IDE experience for the Mufi language, including syntax highlighting, REPL integration, and integrated LSP support (diagnostics, hover, navigation).
+- **Mufi First:** Provide a first-class IDE experience for the Mufi language, including syntax highlighting, automatic code formatting, REPL integration, and integrated LSP support (diagnostics, hover, navigation).
+- **Package Management:** Integrated project wizard for creating standard Mufi packages and project-aware execution.
 - **Comprehensive Documentation:** A centralized, professional documentation hub built with Docusaurus, highlighting features, architecture, and easy installation.
 - **Extreme Performance:** A modular, GPU-accelerated rendering pipeline using Metal for text, cursor, and selection, ensuring 60+ FPS interactions even under heavy load.
 - **Modern Architecture:** Experiment with new IDE techniques such as security-scoped resource management, advanced search indexing, and unified storage.
